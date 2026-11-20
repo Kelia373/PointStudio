@@ -15,6 +15,14 @@ export default defineConfig({
     resolve: {
       alias: { '@renderer': resolve('src/renderer/src') }
     },
-    plugins: [react()]
+    plugins: [react()],
+    server: {
+      // 本仓库所在的目录收不到 Windows 原生文件通知，热更新因此不触发。
+      // 改用轮询：代价是轻微 CPU，换来「保存即生效」。
+      watch: {
+        usePolling: true,
+        interval: 300
+      }
+    }
   }
 })
