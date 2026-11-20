@@ -2,7 +2,7 @@
 
 AI 工作台项目。区分**个人版**与**企业版**，共享同一套任务规划内核。
 
-> 当前阶段：规范建设，尚无业务代码。
+> 当前阶段：M0 完成——桌面壳可构建、可启动，**尚无业务代码**（`packages/*` 仍是空壳）。
 
 ## 文档
 
@@ -32,6 +32,8 @@ packages/          与外壳无关的能力，禁止依赖 UI
   remote/          远端协议与传输（企业版用，接口先定）
   ui/              共享 UI 组件（仅桌面端依赖）
 docs/              规范与决策
+scripts/           构建与检查脚本（dev / build / check / clean）
+dev.cmd            双击启动开发模式的入口（转调 scripts/dev.ps1）
 resources/         参考资料（非项目内容，受体积规则约束）
 ref/               外部参考代码，只读，永不提交（已 gitignore）
 ```
@@ -50,3 +52,16 @@ ref/               外部参考代码，只读，永不提交（已 gitignore）
 git clone https://github.com/Kelia373/PointStudio.git
 cd PointStudio
 ```
+
+## 启动与构建
+
+| 做什么 | 怎么用 |
+| --- | --- |
+| **启动开发**（热更新） | 双击根目录 `dev.cmd`，或 `powershell -File scripts\dev.ps1` |
+| 一次性构建 | `powershell -File scripts\build.ps1` → 产物在 `apps/desktop/out` |
+| 跑检查（类型 + 门禁） | `powershell -File scripts\check.ps1` |
+| 清理构建产物 | `powershell -File scripts\clean.ps1` |
+
+启动后**终端别关**：改 React 界面会热更新，改主进程会自动重启 app，都不需要重跑。
+
+> ⚠️ 本机依赖不在仓库内：`node_modules` 是指向 `D:\deveTools\ps-node` 的目录链接，因为 DSH 工作区目录会阻止 exe 执行。改完 `package.json` 的依赖要先同步过去再安装，详见 [AGENTS.md](AGENTS.md) 的「本机环境事实 · 坑 0」。
