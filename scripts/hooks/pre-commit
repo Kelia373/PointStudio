@@ -1,0 +1,5 @@
+#!/bin/sh
+# 提交前：内容层检查（改断言、跳过标记、吞异常）
+# 规则来源：docs/01-开发工作规则.md 第 2 节
+# 安装：bash scripts/install-hooks.sh
+exec "$(dirname "$0")/_run.sh" --check

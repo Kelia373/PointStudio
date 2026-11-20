@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  gate:
+    name: TDD 门禁
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要历史才能算 diff
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 内容层：在 PR 上检查改动本身（新增测试是否带 TDD-Red 由提交信息体现，
+      # 这里只做「不引入假绿手段」的静态检查，避免误伤正常重构）
+      - name: 门禁自测
+        run: python -m unittest discover -s tests -t . -v
+
+      # 测试层：真正的关卡。钩子能用 --no-verify 绕，这里绕不过。
+      - name: 运行测试
+        run: python scripts/tdd_gate.py --test

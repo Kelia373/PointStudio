@@ -31,6 +31,17 @@ tmp/
 Thumbs.db
 desktop.ini
 
+# 外部参考代码（只读，永不入库）
+ai-workstation/ref/
+ref/
+
+# 参考资料暂存区（未整理的不入库）
+resources/inbox/
+
+# 参考资料中的大文件与临时产物
+resources/**/*.tmp
+resources/**/*.zip
+
 # Python
 __pycache__/
 *.py[cod]
@@ -38,3 +49,6 @@ __pycache__/
 venv/
 *.egg-info/
 .pytest_cache/
+
+# dsh-memoir 生成的项目记忆投影（工具维护，不入库）
+PROJECT_MEMORY.md
