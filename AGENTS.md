@@ -2,121 +2,88 @@
 
 PointStudio 是一个 AI 工作台，个人版与企业版共用同一内核。
 
-本文件只放两样东西：**每次都必须遵守的规范**，以及 **AI 自己查不到的信息**（命令、路径、边界）。
-不放任务、不放项目进展、不放阶段性说明——那些属于看板、提交信息或 `docs/`。细节规则在 `docs/`，与本文件冲突时以本文件为准。
+本文件只写**可判定的短规则**和**AI 自己查不到的事实**（命令、路径、边界）。每条一句话，细节一律在 `docs/`，读哪份见文末索引。不放任务、进展、阶段性说明。
 
 ## 硬约束
 
-1. **先定级再动手**。按 `docs/02` 的 L0–L4 给任务定级，L2 及以上必须先出书面计划（改什么 / 不改什么 / 验收方式），人确认后再写码。
-2. **契约优先**。触及 auth、金额、权限、审计、数据库迁移，先写测试并**看到它红**，再写实现。
-3. **不许改断言迁就实现**。要改，单独一次提交并说明原断言为什么错。
-4. **`ref/` 只读**。参考代码在 `D:\Project\NewGame\ai-workstation\ref\`，不属于本仓库；不读不改不提交，不把其中代码复制进 `apps/` `packages/`（抄结构可以，抄代码不行）。
-5. **不新增运行时依赖**。除非先写 ADR 并由人确认。
-6. **不绕钩子**。禁止 `git commit --no-verify`；pre-commit 已挂 `scripts/tdd_gate.py`。
-7. **卡住就停**。同一测试改三次不绿、或实现开始加特判/兼容分支/吞异常，停止实现，回到计划。
-8. **不许不问就开始干**。判定见下节「何时问，何时干」；L2 及以上遵守「开场协议」。
-9. **`docs/` 编号文档上限 5 个**。写满即停止新增，要加内容改进现有文档，不新开编号。
+1. **先定级再动手**：按 `docs/02` 定 L0–L4，L2 以上先出书面计划（改什么 / 不改什么 / 怎么验收），人确认后再写码。
+2. **契约优先**：动 auth、金额、权限、审计、数据库迁移，先写测试并**看到它红**。
+3. **不改断言迁就实现**：要改就单独一次提交，并说明原断言为什么错。
+4. **`ref/` 只读**：`D:\Project\NewGame\ai-workstation\ref\` 不属于本仓库，不读不改不提交；抄结构可以，抄代码不行。
+5. **不新增运行时依赖**：先写 ADR 并由人确认。
+6. **不绕钩子**：禁止 `git commit --no-verify`。
+7. **卡住就停**：同一测试三次不绿，或实现开始加特判/兼容分支/吞异常 → 回到计划。
+8. **不问就开始干算违规**：判据见下一节。
+9. **`docs/` 编号文档上限 5 个**：写满就改进现有文档，不新开编号。
+10. **不直接提交 `master`**：走分支 + PR，CI「TDD 门禁」绿灯才可 squash 合并；`master` 受保护。详见 `docs/01` §3。
 
-## 何时问，何时干
+## 何时问
 
-判据只有一条——**信息价值（VoI）**：先自问「这个答案会不会改变我接下来怎么做」。不会 → 别问，直接做并标注假设；会 → 必须问，且一次只问一个维度。
+**判据只有一条：这个答案会不会改变我接下来怎么做。** 会 → 问；不会 → 直接做并标注假设。
 
-**必须问**（不问就动手视为违规）：
-
-- 有两种以上合理解释，且选择会实质改变产出；
-- 触碰承重契约：对外接口、数据结构、迁移路径、权限、审计、计费；
-- 你字面上的要求和你说的目标相互冲突；
-- 需要凭据、生产资源、或会产生花钱/对外发送的副作用。
-
-**不必问**（问了是浪费你时间）：
-
-- 可逆小事：改文案、重命名局部变量、加一行日志；
-- 读代码、读文档、跑一条命令就能消歧；
-- 你在本会话里已经答过一次的问题；
-- 答案不改变任何决定——那只是我在求安心。
-
-被问到时若答「你看着办」，按我给出的推荐项执行，并在交付时写明这条假设。
+- **必问**：两种以上合理解释且影响产出 / 触碰承重契约 / 字面要求与目标冲突 / 需要凭据或会产生花钱、外发。
+- **不必问**：可逆小事 / 读代码或跑一条命令就能消歧 / 本会话已答过 / 答案不改变任何决定。
+- 答「你看着办」→ 按推荐项执行，并在交付时写明这条假设。
 
 ## 开场协议（L2 及以上）
 
-L2 及以上任务的**第一条回复只能是计划**，固定五段，一段不少：
+第一条回复**只能是计划**，五段不缺：目标复述 / 我的假设 / 分步计划（每步带判据）/ 要动的文件 / 待确认问题（≤2 个，带推荐项）。
 
-1. **目标复述**：我理解你要什么，以及怎样算做完（可验收）；
-2. **我的假设**：所有不确定处，明写成假设；
-3. **分步计划**：每步带一个「怎么判断这步成了」；
-4. **要动的文件**：列出来，含新增；
-5. **待确认问题**：最多 2 个，每个给选项和推荐项。
-
-该回复内**不得调用任何写文件或改动型命令**，发完就停，等人放行。放行后才开工；中途计划失效，回到第 1 步重出计划，不硬推。
-
-区别对待：L0/L1 不必走满这套，但仍要说一句「我打算怎么做」。
+该回复内不调用任何写文件或改动型命令，发完就停。中途计划失效，回第 1 步重出，不硬推。L0/L1 说一句「我打算怎么做」即可。
 
 ## 命令
 
 ```bash
-bash scripts/install-hooks.sh          # 每个 clone 跑一次，装 git 钩子
-python scripts/tdd_gate.py --check     # 检查暂存区（改断言 / 豁免标记 / 吞异常）
-python scripts/tdd_gate.py --test      # 跑全部测试（stdlib unittest，无第三方依赖）
-python scripts/tdd_gate.py --all       # 内容 + 测试，CI 跑的就是这个
+bash scripts/install-hooks.sh          # 每个 clone 跑一次
+python scripts/tdd_gate.py --check     # 只查暂存区
+python scripts/tdd_gate.py --all       # 内容检查 + 全部测试（CI 跑这个）
 ```
 
-本机没有 `python3`（是 Windows 商店的假壳），用这个解释器：
+```powershell
+powershell -File scripts\dev.ps1       # 开发模式（或双击 dev.cmd）
+powershell -File scripts\build.ps1     # 构建，产物在 apps\desktop\out
+powershell -File scripts\check.ps1     # tsc + 门禁
+```
+
+本机解释器（没有 `python3`，那是商店假壳）：
 `C:\Users\Administrator\.dsh\dsh-runtimes\dsh-next-primary-runtime\dependencies\python\python.exe`
 
-pnpm 不在 PATH，用：
+本机 pnpm（不在 PATH）：
 `node C:\Users\Administrator\.dsh\dsh-runtimes\dsh-next-primary-runtime\dependencies\pnpm\bin\pnpm.mjs`
 
-## 本机环境事实（查不到，别硬猜）
+## 本机环境事实
 
-**依赖与机器状态位置**：pnpm 内容仓库在 `D:\deveTools\pnpm-store`（由 `pnpm-workspace.yaml` 的 `storeDir` 指定，pnpm 11 不认 `.npmrc` 里的 `store-dir`），electron 二进制缓存在 `D:\deveTools\electron-cache`。
-仓库里只放源码；`node_modules` 是模块解析硬要求，无法外置，已被 `.gitignore` 忽略。
-**新增依赖时要提权**（要写 `D:` 盘外的 store）；纯 `install` 复用已有 store 时不需要：
-
-```bash
-node <pnpm.mjs> install
-```
-
-**五个坑，不知道会白折腾一轮**：
-
-0. **工作区目录会阻止程序执行（本项目最大环境坑）**。DSH 给每个 session workspace 目录加了 ACL 加固，**工作区内的 exe 在用户普通 PowerShell 里会静默失败**——无输出、退出码 0、不执行、事件日志无记录。实测：同一个 electron.exe 在 `D:\etest`、`D:\Project\etest2`（工作区外）正常，在 `D:\Project\PointStudio`（工作区）内连 `--version` 都无输出；`NewGame` / `PointStudio` / `PointStudio-Enterprise` 三个工作区都带同样加固，非工作区目录没有。
-   **解法（已实施）：依赖装在工作区外，用目录 junction 链进工作区。**
-   - 依赖实体在 `D:\deveTools\ps-node`（内含 `package.json` / `pnpm-workspace.yaml` / `.npmrc` / `apps/desktop/package.json` 的副本）
-   - `D:\Project\PointStudio\node_modules` 与 `apps/desktop/node_modules` 都是指向它的 junction（`New-Item -ItemType Junction`）
-   - 源码仍留工作区；**改完 `package.json` 依赖后要同步到 `ps-node` 再 install**
-   - 判断某目录是否被加固：`icacls <目录>` 看有没有 `S-1-4-` 与 `Everyone:(CI)(DENY)`
-   - **Low 完整性级别不是障碍**（AI 复制出的文件也能被用户执行），不要拿它解释失败
-1. DSH 会话会给子进程注入 `ELECTRON_RUN_AS_NODE=1`，electron 因此被当成纯 Node 跑，报 `app.whenReady` undefined。跑 electron 前必须 `unset ELECTRON_RUN_AS_NODE`。
-2. electron 二进制在本机需要手动补：在 electron 包目录内执行
-   `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js`
-   （pnpm 会跳过 postinstall；直连 GitHub HTTPS 被阻断）。
-3. **AI 无法在会话内启动 Electron 窗口**（提权后仍以 `0xC0000005` 崩溃）。窗口只能由人开终端确认，**不要声称"已验证窗口能开"**；AI 能验证的边界是构建产物与 `tsc --noEmit`。
-4. **PowerShell 执行策略拦 `.ps1`**：`.\node_modules\.bin\xxx` 会报「未对文件进行数字签名」。绕法是显式带扩展名 `.\node_modules\.bin\electron-vite.CMD dev`（或用 `bash`、`cmd /c`）。长期方案 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`，**改系统设置须人自己执行，AI 不动**。
-
-**typescript 7 移除了 `baseUrl`**，`paths` 必须写相对路径（`./src/...`）。
+- **依赖在工作区外**：实体在 `D:\deveTools\ps-node`，工作区里的 `node_modules` 是指向它的 junction。**改完 `package.json` 的依赖要同步过去再 install。**
+- **工作区目录会让其中的 exe 静默失败**（无输出、退出码 0、不执行）。判断：`icacls <目录>` 有没有 `S-1-4-`。别再用"文件损坏/签名/环境变量"解释它。
+- 跑 electron 前清 `ELECTRON_RUN_AS_NODE`（DSH 会注入），否则报 `whenReady` undefined。
+- electron 二进制可能缺失，需在包目录 `node install.js`，带 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
+- **AI 无法启动 Electron 窗口**，只能验证构建产物与 `tsc --noEmit`；窗口必须人开终端确认。
+- PowerShell 拦 `.ps1`：用 `.CMD` 后缀或 `bash`；改执行策略由人做。
+- TS 7 移除了 `baseUrl`，`paths` 写相对路径。
+- 改主进程要手动重启 dev；改界面热更新可用。这些细节见 `docs/03` §6。
 
 ## 目录与边界
 
-| 路径 | 作用 | 权限 |
-| --- | --- | --- |
-| `apps/` | 可运行产物：`desktop`（个人版）、`server`（企业版） | 可改 |
-| `packages/` | 内核与工具，禁止依赖 UI：`core` `agent` `providers` `tools` `policy` `storage` `remote` `ui` | 可改 |
-| `docs/` | 规则、ADR、能力盘点（编号文档上限 5 个） | 可改 |
-| `resources/` | 参考资料（papers / guides / screenshots / notes） | 可改 |
-| `D:\Project\NewGame\ai-workstation\ref\` | 外部参考源码（cherry-studio 等） | **只读，不入库** |
+| 路径 | 作用 |
+| --- | --- |
+| `apps/` | 可运行产物：`desktop`（个人版） |
+| `packages/` | 内核，禁依赖 UI：`core` `agent` `providers` `tools` `policy` `storage` `remote` `ui` |
+| `docs/` | 规则、ADR、盘点（编号上限 5 个） |
+| `scripts/` | 构建与检查脚本；根目录 `dev.cmd` 是双击启动入口 |
+| `D:\Project\NewGame\ai-workstation\ref\` | 外部参考源码，**只读** |
 
 ## 交付格式
 
-每次交付必须写清四件事：改了哪些文件 / 跑了哪些检查及结果 / 没跑什么 / 剩余风险。
-不写「应该没问题」。
+改了哪些文件 / 跑了哪些检查及结果 / 没跑什么 / 剩余风险。不写「应该没问题」。
 
-## 规则索引
+## 索引
 
 | 场景 | 读 |
 | --- | --- |
-| 任务分级、计划六问、澄清预算、执行循环、收尾、阶段出口 | `docs/02-任务规划能力.md`、`docs/01-开发工作规则.md` |
-| 改动生命周期、测试契约、提交规范、依赖选型、自检、停止条件 | `docs/01-开发工作规则.md` |
-| 个人版 / 企业版边界与不做清单 | `docs/00-项目定位与边界.md` |
-| 本机能力、环境坑、能力缺口 | `docs/03-能力与工具链盘点.md` |
-| 技术栈与双版本架构 | `docs/adr/0002-技术栈选型与双版本架构.md` |
+| 分支合并、提交流程、测试契约、自检、停止条件 | `docs/01` |
+| 任务分级、计划六问、澄清预算、阶段出口 | `docs/02` |
+| 个人版 / 企业版边界与不做清单 | `docs/00` |
+| 环境坑、能力盘点、能力缺口 | `docs/03` |
+| 技术栈与双版本架构 | `docs/adr/0002` |
 
 优先级：本文件 > `docs/` > 现存同类代码 > 问人。
