@@ -1,0 +1,14 @@
+{
+  "name": "pointstudio",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PointStudio - AI workstation kernel and personal edition shell",
+  "scripts": {
+    "dev": "pnpm --filter @pointstudio/desktop dev",
+    "build": "pnpm --filter @pointstudio/desktop build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

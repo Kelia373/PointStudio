@@ -63,6 +63,29 @@ python scripts/tdd_gate.py --all       # 内容 + 测试，CI 跑的就是这个
 本机没有 `python3`（是 Windows 商店的假壳），用这个解释器：
 `C:\Users\Administrator\.dsh\dsh-runtimes\dsh-next-primary-runtime\dependencies\python\python.exe`
 
+pnpm 不在 PATH，用：
+`node C:\Users\Administrator\.dsh\dsh-runtimes\dsh-next-primary-runtime\dependencies\pnpm\bin\pnpm.mjs`
+
+## 本机环境事实（查不到，别硬猜）
+
+**依赖与机器状态位置**：pnpm 内容仓库在 `D:\deveTools\pnpm-store`（由 `pnpm-workspace.yaml` 的 `storeDir` 指定，pnpm 11 不认 `.npmrc` 里的 `store-dir`），electron 二进制缓存在 `D:\deveTools\electron-cache`。
+仓库里只放源码；`node_modules` 是模块解析硬要求，无法外置，已被 `.gitignore` 忽略。
+**新增依赖时要提权**（要写 `D:` 盘外的 store）；纯 `install` 复用已有 store 时不需要：
+
+```bash
+node <pnpm.mjs> install
+```
+
+**三个坑，不知道会白折腾一轮**：
+
+1. DSH 会话会给子进程注入 `ELECTRON_RUN_AS_NODE=1`，electron 因此被当成纯 Node 跑，报 `app.whenReady` undefined。跑 electron 前必须 `unset ELECTRON_RUN_AS_NODE`。
+2. electron 二进制在本机需要手动补：在 electron 包目录内执行
+   `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js`
+   （pnpm 会跳过 postinstall；直连 GitHub HTTPS 被阻断）。
+3. **AI 无法在会话内启动 Electron 窗口**（提权后仍以 `0xC0000005` 崩溃）。窗口只能由人开终端确认，**不要声称"已验证窗口能开"**；AI 能验证的边界是构建产物与 `tsc --noEmit`。
+
+**typescript 7 移除了 `baseUrl`**，`paths` 必须写相对路径（`./src/...`）。
+
 ## 目录与边界
 
 | 路径 | 作用 | 权限 |

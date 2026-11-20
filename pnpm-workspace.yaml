@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+# 机器状态外置：pnpm 11 的设置项从 .npmrc 移到了这里。
+# storeDir 指向仓库外，避免内容仓库落进项目目录。
+storeDir: D:/deveTools/pnpm-store
+
+# pnpm 10+ 默认不执行依赖的 postinstall 脚本。electron 靠 postinstall 下载平台二进制，
+# 不放行的话装完是个空壳，启动时报 "Electron failed to install correctly"。
+onlyBuiltDependencies:
+  - electron
+  - esbuild

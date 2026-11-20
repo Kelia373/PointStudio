@@ -6,6 +6,10 @@ out/
 bin/
 obj/
 
+# pnpm 内容仓库兜底（本机约定放 D:/deveTools，见 .npmrc）
+.pnpm-store/
+*.tsbuildinfo
+
 # 日志与缓存
 *.log
 npm-debug.log*
