@@ -62,6 +62,19 @@ cd PointStudio
 | 跑检查（类型 + 门禁） | `powershell -File scripts\check.ps1` |
 | 清理构建产物 | `powershell -File scripts\clean.ps1` |
 
-启动后**终端别关**：改 React 界面会热更新，改主进程会自动重启 app，都不需要重跑。
+启动后**终端别关**：改 React 界面会热更新（保存即变）；改主进程（`src/main`、`src/preload`）**需要手动重启 dev**。
 
-> ⚠️ 本机依赖不在仓库内：`node_modules` 是指向 `D:\deveTools\ps-node` 的目录链接，因为 DSH 工作区目录会阻止 exe 执行。改完 `package.json` 的依赖要先同步过去再安装，详见 [AGENTS.md](AGENTS.md) 的「本机环境事实 · 坑 0」。
+> ⚠️ 本机依赖不在仓库内：`node_modules` 是指向 `D:\deveTools\ps-node` 的目录链接，因为 DSH 工作区目录会阻止 exe 执行。改完 `package.json` 的依赖要先同步过去再安装，详见 [AGENTS.md](AGENTS.md) 的「本机环境事实」。
+
+## 分支与合并
+
+主干是 **`master`**，受分支保护：**不能直接推送**，改动必须走分支 + PR，且 CI「TDD 门禁」绿灯后才能 Squash 合并。
+
+```bash
+git switch master && git pull
+git switch -c feature/xxx        # 或 fix/、docs/、chore/
+# ...开发、提交...
+git push -u origin feature/xxx   # 然后在 GitHub 开 PR
+```
+
+完整规则见 [docs/01 第 3 节](docs/01-开发工作规则.md)。
