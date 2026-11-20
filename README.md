@@ -19,16 +19,30 @@ AI 工作台项目。区分**个人版**与**企业版**，共享同一套任务
 ## 仓库结构（约定）
 
 ```
-apps/       面向用户的壳：桌面端、服务端
-packages/   与外壳无关的能力：agent 内核、工具、策略
-docs/       规范与决策
-resources/  参考资料（非项目内容，受体积规则约束）
-ref/        外部参考代码，只读，永不提交（已 gitignore）
+apps/              面向用户的壳，只做装配
+  desktop/         个人版（Electron）
+  server/          企业版（占位，未实现）
+packages/          与外壳无关的能力，禁止依赖 UI
+  core/            领域模型与用例（纯逻辑，零 IO）
+  agent/           规划与执行循环
+  providers/       模型接入
+  tools/           工具协议与注册表
+  policy/          策略层：两版差异的唯一落点
+  storage/         存储接口与适配（SQLite / Postgres）
+  remote/          远端协议与传输（企业版用，接口先定）
+  ui/              共享 UI 组件（仅桌面端依赖）
+docs/              规范与决策
+resources/         参考资料（非项目内容，受体积规则约束）
+ref/               外部参考代码，只读，永不提交（已 gitignore）
 ```
+
+技术栈与双版本架构见 [ADR 0002](docs/adr/0002-技术栈选型与双版本架构.md)。
 
 ## 参考基线
 
-`ai-workstation/ref/cherry-studio` —— 只读参考，**尚未拉取**。不修改、不提交、不作为依赖。
+`D:\Project\NewGame\ai-workstation\ref\cherry-studio` —— Cherry Studio 2.2.3（AGPL-3.0），**只读**：不修改、不提交、不复制代码进 `apps/` `packages/`。当前为 partial clone（仅 tree，无工作树）。
+
+其架构约定见同目录 [cherry-CLAUDE.md](D:/Project/NewGame/ai-workstation/ref/cherry-CLAUDE.md)。
 
 ## 开始
 
