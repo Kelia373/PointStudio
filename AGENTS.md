@@ -76,13 +76,14 @@ pnpm 不在 PATH，用：
 node <pnpm.mjs> install
 ```
 
-**三个坑，不知道会白折腾一轮**：
+**四个坑，不知道会白折腾一轮**：
 
 1. DSH 会话会给子进程注入 `ELECTRON_RUN_AS_NODE=1`，electron 因此被当成纯 Node 跑，报 `app.whenReady` undefined。跑 electron 前必须 `unset ELECTRON_RUN_AS_NODE`。
 2. electron 二进制在本机需要手动补：在 electron 包目录内执行
    `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js`
    （pnpm 会跳过 postinstall；直连 GitHub HTTPS 被阻断）。
 3. **AI 无法在会话内启动 Electron 窗口**（提权后仍以 `0xC0000005` 崩溃）。窗口只能由人开终端确认，**不要声称"已验证窗口能开"**；AI 能验证的边界是构建产物与 `tsc --noEmit`。
+4. **PowerShell 执行策略拦 `.ps1`**：`.\node_modules\.bin\xxx` 会报「未对文件进行数字签名」。绕法是显式带扩展名 `.\node_modules\.bin\electron-vite.CMD dev`（或用 `bash`、`cmd /c`）。长期方案 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`，**改系统设置须人自己执行，AI 不动**。
 
 **typescript 7 移除了 `baseUrl`**，`paths` 必须写相对路径（`./src/...`）。
 
