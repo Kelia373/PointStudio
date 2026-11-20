@@ -76,8 +76,15 @@ pnpm 不在 PATH，用：
 node <pnpm.mjs> install
 ```
 
-**四个坑，不知道会白折腾一轮**：
+**五个坑，不知道会白折腾一轮**：
 
+0. **工作区目录会阻止程序执行（本项目最大环境坑）**。DSH 给每个 session workspace 目录加了 ACL 加固，**工作区内的 exe 在用户普通 PowerShell 里会静默失败**——无输出、退出码 0、不执行、事件日志无记录。实测：同一个 electron.exe 在 `D:\etest`、`D:\Project\etest2`（工作区外）正常，在 `D:\Project\PointStudio`（工作区）内连 `--version` 都无输出；`NewGame` / `PointStudio` / `PointStudio-Enterprise` 三个工作区都带同样加固，非工作区目录没有。
+   **解法（已实施）：依赖装在工作区外，用目录 junction 链进工作区。**
+   - 依赖实体在 `D:\deveTools\ps-node`（内含 `package.json` / `pnpm-workspace.yaml` / `.npmrc` / `apps/desktop/package.json` 的副本）
+   - `D:\Project\PointStudio\node_modules` 与 `apps/desktop/node_modules` 都是指向它的 junction（`New-Item -ItemType Junction`）
+   - 源码仍留工作区；**改完 `package.json` 依赖后要同步到 `ps-node` 再 install**
+   - 判断某目录是否被加固：`icacls <目录>` 看有没有 `S-1-4-` 与 `Everyone:(CI)(DENY)`
+   - **Low 完整性级别不是障碍**（AI 复制出的文件也能被用户执行），不要拿它解释失败
 1. DSH 会话会给子进程注入 `ELECTRON_RUN_AS_NODE=1`，electron 因此被当成纯 Node 跑，报 `app.whenReady` undefined。跑 electron 前必须 `unset ELECTRON_RUN_AS_NODE`。
 2. electron 二进制在本机需要手动补：在 electron 包目录内执行
    `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ node install.js`

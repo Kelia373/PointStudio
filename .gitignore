@@ -6,6 +6,14 @@ out/
 bin/
 obj/
 
+# 临时诊断产物（用完即删，一律不入库）
+run.log
+t.js
+t.txt
+SHASUMS256-*.txt
+apps/desktop/probe/
+jtest/
+
 # pnpm 内容仓库兜底（本机约定放 D:/deveTools，见 .npmrc）
 .pnpm-store/
 *.tsbuildinfo
