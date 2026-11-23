@@ -13,7 +13,7 @@ export const CHAT_CHANNELS = {
 } as const
 
 /** 错误码是稳定契约：渲染进程按码判断，不解析文案、不看堆栈。 */
-export type ChatErrorCode = 'E_BAD_INPUT' | 'E_INTERNAL'
+export type ChatErrorCode = 'E_BAD_INPUT' | 'E_INTERNAL' | 'E_UPSTREAM'
 
 /**
  * `chat:send` 的请求。
@@ -33,7 +33,10 @@ export interface ChatSendRequest {
  * 用「结果对象」而不是 throw：Electron 会把跨 IPC 抛出的 Error 改写成
  * "Error invoking remote method ..."，原始信息全丢。归一成错误码更好维护。
  */
-export type ChatSendResult = { ok: true } | { ok: false; code: ChatErrorCode }
+/** mode 告诉界面这次走的是真模型（live）还是本地假回复（local）。 */
+export type ChatMode = 'live' | 'local'
+
+export type ChatSendResult = { ok: true; mode: ChatMode } | { ok: false; code: ChatErrorCode }
 
 /** 一块增量文本。 */
 export interface ChatChunkEvent {

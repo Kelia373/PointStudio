@@ -13,7 +13,9 @@ import {
   type ChatSendRequest,
   type ChatSendResult
 } from '../../shared/types/ipc.ts'
-import { REPLY_CHUNK_DELAY_MS, buildReplyChunks } from '../services/chatReply.ts'
+import { ProviderError } from '../ai/providers/types.ts'
+import { REPLY_CHUNK_DELAY_MS } from '../services/chatReply.ts'
+import { resolveMode, streamReplyText, type ChatEngineDeps } from '../services/chatEngine.ts'
 
 /** 请求 id 的允许形态：渲染进程用 crypto.randomUUID() 生成。 */
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -38,38 +40,63 @@ function isChatSendRequest(value: unknown): value is ChatSendRequest {
   )
 }
 
+/** provider 的错误码 → 边界的错误码。原始码只进日志，不透给界面。 */
+function toChatErrorCode(error: unknown): 'E_UPSTREAM' | 'E_INTERNAL' {
+  return error instanceof ProviderError ? 'E_UPSTREAM' : 'E_INTERNAL'
+}
+
+export interface ChatIpcOptions {
+  engine: ChatEngineDeps
+}
+
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
-export function registerChatIpc(): void {
+export function registerChatIpc(options: ChatIpcOptions): void {
   ipcMain.handle(CHAT_CHANNELS.send, (event, request: unknown): ChatSendResult => {
     if (!isChatSendRequest(request)) {
       return { ok: false, code: 'E_BAD_INPUT' }
     }
 
     // 故意不 await：把流交给后台跑，handler 立刻返回，界面不用干等一整段回复。
-    void streamReply(event.sender, request)
-    return { ok: true }
+    void streamReply(event.sender, request, options.engine)
+    return { ok: true, mode: resolveMode(options.engine) }
   })
 }
 
 /** 把一块块内容推回渲染进程；发送方窗口已销毁就静默结束。 */
-async function streamReply(sender: WebContents, request: ChatSendRequest): Promise<void> {
+async function streamReply(
+  sender: WebContents,
+  request: ChatSendRequest,
+  engine: ChatEngineDeps
+): Promise<void> {
   const { id, text } = request
   try {
-    for (const chunk of buildReplyChunks(text)) {
+    for await (const chunk of streamReplyText(text, engine)) {
       if (sender.isDestroyed()) {
         return
       }
       sender.send(CHAT_CHANNELS.chunk, { id, chunk } satisfies ChatChunkEvent)
-      await delay(REPLY_CHUNK_DELAY_MS)
+      // 真模型的节奏由平台决定，不再人为加间隔；只有本地假流式需要模拟打字。
+      if (resolveMode(engine) === 'local') {
+        await delay(REPLY_CHUNK_DELAY_MS)
+      }
     }
     if (!sender.isDestroyed()) {
       sender.send(CHAT_CHANNELS.done, { id } satisfies ChatDoneEvent)
     }
   } catch (error) {
-    // 这里不吞异常：统一映射成稳定的错误码发给界面，堆栈只留在主进程日志里。
+    // 中断是用户行为，不算错误。
+    if (error instanceof ProviderError && error.code === 'E_ABORTED') {
+      if (!sender.isDestroyed()) {
+        sender.send(CHAT_CHANNELS.done, { id } satisfies ChatDoneEvent)
+      }
+      return
+    }
     console.error('[chat] 推流失败', error)
     if (!sender.isDestroyed()) {
-      sender.send(CHAT_CHANNELS.error, { id, code: 'E_INTERNAL' } satisfies ChatErrorEvent)
+      sender.send(CHAT_CHANNELS.error, {
+        id,
+        code: toChatErrorCode(error)
+      } satisfies ChatErrorEvent)
     }
   }
 }

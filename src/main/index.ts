@@ -1,6 +1,11 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 
+import {
+  DeepSeekProvider,
+  DEEPSEEK_DEFAULT_BASE_URL,
+  DEEPSEEK_DEFAULT_MODEL
+} from './ai/providers/deepseek.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
@@ -31,7 +36,16 @@ function createWindow(): void {
 
 void app.whenReady().then(() => {
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
-  registerChatIpc()
+  registerChatIpc({
+    engine: {
+      provider: new DeepSeekProvider(),
+      // 凭据只从进程环境读取：不落盘、不进仓库、不出现在任何提交里。
+      // 设置界面做好之后，这里改成从 settings 服务注入。
+      apiKey: process.env.DEEPSEEK_API_KEY ?? null,
+      baseUrl: process.env.DEEPSEEK_BASE_URL ?? DEEPSEEK_DEFAULT_BASE_URL,
+      model: process.env.DEEPSEEK_MODEL ?? DEEPSEEK_DEFAULT_MODEL
+    }
+  })
   createWindow()
 
   // macOS：点 dock 图标且没有窗口时重开一个。

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
+import type { ChatMode } from '../../../shared/types/ipc.ts'
 import MessageBubble, { type ChatMessage } from './MessageBubble'
 
 /**
@@ -12,6 +13,8 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  // 这次到底走了真模型还是本地假回复：由主进程随 send 的结果返回，不靠界面猜。
+  const [mode, setMode] = useState<ChatMode | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
   // 订阅主进程推回来的事件。返回的清理函数必须调用：
@@ -67,6 +70,9 @@ export default function ChatPanel() {
     setBusy(true)
 
     const result = await window.pointstudio.chat.send({ id, text })
+    if (result.ok) {
+      setMode(result.mode)
+    }
     if (!result.ok) {
       setMessages((prev) =>
         prev.map((m) => (m.id === id ? { ...m, text: `（出错了：${result.code}）`, streaming: false } : m))
@@ -80,14 +86,20 @@ export default function ChatPanel() {
       <header className="chat__header">
         <h1>PointStudio</h1>
         <span className="chat__hint">
-          {busy ? '正在回复…' : '本地假流式 · 未接模型'}
+          {busy
+            ? '正在回复…'
+            : mode === 'live'
+              ? 'DeepSeek · 真模型'
+              : mode === 'local'
+                ? '本地假流式 · 未配 Key'
+                : '按 Enter 发送'}
         </span>
       </header>
 
       <div className="chat__list" ref={listRef}>
         {messages.length === 0 ? (
           <p className="chat__empty">
-            说点什么。回复是本地生成的，用来验证 renderer → preload → main → 流式回推这条链路。
+            说点什么。配了 API Key 就直接问 DeepSeek；没配 Key 则走本地假流式，链路一样是通的。
           </p>
         ) : (
           messages.map((message) => <MessageBubble key={message.id} message={message} />)
