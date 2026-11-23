@@ -61,6 +61,34 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
     setMessage('已保存，下一条消息就会用新凭据')
   }
 
+  async function exportBackup(): Promise<void> {
+    const result = await window.pointstudio.backup.exportText()
+    if (!result.ok) {
+      setMessage(describeError(result.code))
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(result.value)
+      setMessage('备份已复制到剪贴板（建议粘贴保存为 .json）')
+    } catch {
+      setMessage('复制失败（剪贴板不可用）')
+    }
+  }
+
+  async function importBackup(mode: 'replace' | 'merge'): Promise<void> {
+    const result = await window.pointstudio.backup.importFile(mode)
+    if (!result.ok) {
+      setMessage(result.code === 'E_CANCELLED' ? '已取消' : describeError(result.code))
+      return
+    }
+    const counts = result.value
+    setMessage(
+      counts === true
+        ? '已整体恢复到备份的状态'
+        : `已合并：新增 ${counts.added} 条，跳过 ${counts.skipped} 条已存在的`
+    )
+  }
+
   async function clear(): Promise<void> {
     const cleared = await window.pointstudio.settings.clearProvider()
     if (!cleared.ok) {
@@ -184,6 +212,19 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           收起
         </button>
         {message ? <span className="settings__message">{message}</span> : null}
+      </div>
+
+      <div className="settings__row settings__row--backup">
+        <span className="settings__label">备份</span>
+        <button className="settings__save" type="button" onClick={() => void exportBackup()}>
+          导出（复制）
+        </button>
+        <button className="settings__clear" type="button" onClick={() => void importBackup('merge')}>
+          合并导入
+        </button>
+        <button className="settings__clear" type="button" onClick={() => void importBackup('replace')}>
+          整体恢复
+        </button>
       </div>
 
       <p className="settings__note">

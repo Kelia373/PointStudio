@@ -708,3 +708,12 @@ body {
   font-size: 12px;
   color: #b0b0b0;
 }
+
+.settings__row--backup {
+  padding-left: 0;
+  gap: 6px;
+}
+
+.settings__row--backup .settings__label {
+  flex: 0 0 64px;
+}

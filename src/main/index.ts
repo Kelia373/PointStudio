@@ -17,6 +17,8 @@ import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
 import { registerSettingsIpc } from './ipc/settings.ts'
 import { registerAgentIpc } from './ipc/agent.ts'
+import { registerBackupIpc } from './ipc/backup.ts'
+import { BackupService } from './services/backupService.ts'
 import { registerWorkspaceIpc } from './ipc/workspace.ts'
 import { ToolRegistry } from './ai/tools/registry.ts'
 import { createBuiltinTools } from './ai/tools/builtin/index.ts'
@@ -69,6 +71,7 @@ interface Services {
   workspace: WorkspaceService
   importer: WorkspaceImportService
   workspaceRoot: string
+  backup: BackupService
 }
 
 /** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
@@ -85,13 +88,16 @@ function buildServices(): Services {
     }
   })
 
+  const conversationStore = new JsonFileStore<Conversation>(paths.conversations)
+  const messageStore = new JsonFileStore<Message>(paths.messages)
+  const assistantStore = new JsonFileStore<Assistant>(paths.assistants)
+
   return {
-    conversations: new ConversationService(
-      new JsonFileStore<Conversation>(paths.conversations),
-      new JsonFileStore<Message>(paths.messages),
-      deps
-    ),
-    assistants: new AssistantService(new JsonFileStore<Assistant>(paths.assistants), deps),
+    backup: new BackupService(conversationStore, messageStore, assistantStore, {
+      now: () => new Date().toISOString()
+    }),
+    conversations: new ConversationService(conversationStore, messageStore, deps),
+    assistants: new AssistantService(assistantStore, deps),
     settings: new ProviderSettingsService(new JsonFileStore<ProviderSettings>(paths.providerSettings), {
       now: () => new Date().toISOString()
     }),
@@ -171,6 +177,7 @@ void app.whenReady().then(async () => {
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
   registerConversationIpc({ conversations: services.conversations })
   registerWorkspaceIpc({ workspace: services.workspace, importer: services.importer })
+  registerBackupIpc({ backup: services.backup })
 
   // 工具注册表：内置只读工具 + 工作区读取。MCP 工具待传输层落地后再注册。
   const tools = new ToolRegistry()

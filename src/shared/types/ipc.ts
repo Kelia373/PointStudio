@@ -176,6 +176,27 @@ export interface AssistantBridge {
   remove(id: string): Promise<IpcResult<true>>
 }
 
+// ---------------------------------------------------------------- 备份
+
+export const BACKUP_CHANNELS = {
+  exportText: 'backup:export-text',
+  importFile: 'backup:import-file'
+} as const
+
+export type RestoreModeDto = 'replace' | 'merge'
+
+export interface RestoreCountsDto {
+  added: number
+  skipped: number
+}
+
+export interface BackupBridge {
+  /** 整库导出为 JSON 文本（界面负责保存或复制）。 */
+  exportText(): Promise<IpcResult<string>>
+  /** 弹文件选择框读取备份并恢复；replace 清空后写入，merge 只补新的。 */
+  importFile(mode: RestoreModeDto): Promise<IpcResult<RestoreCountsDto | true>>
+}
+
 // ---------------------------------------------------------------- 计划 / 过程
 
 export const AGENT_CHANNELS = {
@@ -260,6 +281,7 @@ export interface PointStudioApi {
   settings: SettingsBridge
   workspace: WorkspaceBridge
   agent: AgentBridge
+  backup: BackupBridge
 }
 
 

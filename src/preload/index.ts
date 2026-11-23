@@ -29,6 +29,10 @@ import {
   SETTINGS_CHANNELS,
   WORKSPACE_CHANNELS,
   AGENT_CHANNELS,
+  BACKUP_CHANNELS,
+  type BackupBridge,
+  type RestoreCountsDto,
+  type RestoreModeDto,
   type AgentBridge,
   type AgentEventDto,
   type AgentRunRequest,
@@ -138,6 +142,15 @@ const agent: AgentBridge = {
     subscribe(AGENT_CHANNELS.event, listener)
 }
 
+const backup: BackupBridge = {
+  exportText: (): Promise<IpcResult<string>> =>
+    ipcRenderer.invoke(BACKUP_CHANNELS.exportText) as Promise<IpcResult<string>>,
+  importFile: (mode: RestoreModeDto): Promise<IpcResult<RestoreCountsDto | true>> =>
+    ipcRenderer.invoke(BACKUP_CHANNELS.importFile, mode) as Promise<
+      IpcResult<RestoreCountsDto | true>
+    >
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
@@ -145,7 +158,8 @@ const api: PointStudioApi = {
   assistants,
   settings,
   workspace,
-  agent
+  agent,
+  backup
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)
