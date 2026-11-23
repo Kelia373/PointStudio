@@ -11,6 +11,7 @@ import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatS
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
+import AssistantPanel from './AssistantPanel'
 import PlanPanel from './PlanPanel'
 import WorkspacePanel from './WorkspacePanel'
 import MessageBubble from './MessageBubble'
@@ -36,6 +37,7 @@ export default function ChatPanel() {
   const [drafting, setDrafting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [assistantPanelOpen, setAssistantPanelOpen] = useState(false)
   const [planRun, setPlanRun] = useState<{
     id: string
     plan: PlanViewDto | null
@@ -52,6 +54,10 @@ export default function ChatPanel() {
     const items = await window.pointstudio.conversations.list()
     setConversations(items)
     return items
+  }, [])
+
+  const refreshAssistants = useCallback(async (): Promise<void> => {
+    setAssistants(await window.pointstudio.assistants.list())
   }, [])
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
@@ -125,7 +131,7 @@ export default function ChatPanel() {
   // 首次进入：有会话就用最近一个，没有就建一个。
   useEffect(() => {
     void (async () => {
-      setAssistants(await window.pointstudio.assistants.list())
+      await refreshAssistants()
       const items = await reloadConversations()
       if (items.length > 0) {
         setActiveId(items[0].id)
@@ -139,7 +145,7 @@ export default function ChatPanel() {
         setError(describeError(created.code))
       }
     })()
-  }, [reloadConversations])
+  }, [refreshAssistants, reloadConversations])
 
   // 切换会话就重新读消息——界面不缓存历史，避免分叉。
   useEffect(() => {
@@ -279,7 +285,7 @@ export default function ChatPanel() {
     setAssistantPrompt('')
     setDrafting(false)
     setError(null)
-    setAssistants(await window.pointstudio.assistants.list())
+    await refreshAssistants()
     if (activeId) {
       await bindAssistant(created.value.id)
     }
@@ -359,6 +365,13 @@ export default function ChatPanel() {
           <button
             className="chat__assistant-new"
             type="button"
+            onClick={() => setAssistantPanelOpen((value) => !value)}
+          >
+            👤 助手管理
+          </button>
+          <button
+            className="chat__assistant-new"
+            type="button"
             onClick={() => setWorkspaceOpen((value) => !value)}
           >
             📁 工作区
@@ -389,6 +402,13 @@ export default function ChatPanel() {
             status={planRun.status}
             onClose={() => setPlanRun(null)}
             onConfirm={planRun.status === 'stopped' ? () => void confirmAndResume() : undefined}
+          />
+        ) : null}
+
+        {assistantPanelOpen ? (
+          <AssistantPanel
+            onClose={() => setAssistantPanelOpen(false)}
+            onChanged={() => void refreshAssistants()}
           />
         ) : null}
 
