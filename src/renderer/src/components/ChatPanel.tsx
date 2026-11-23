@@ -164,8 +164,8 @@ export default function ChatPanel() {
     }
   }, [messages])
 
-  async function submit(): Promise<void> {
-    const text = draft.trim()
+  async function submit(textOverride?: string): Promise<void> {
+    const text = (textOverride ?? draft).trim()
     const conversationId = activeId
     if (text === '' || busy || !conversationId) {
       return
@@ -178,7 +178,9 @@ export default function ChatPanel() {
       { id: `local-${requestId}`, role: 'user', content: text, status: 'complete' },
       { id: requestId, role: 'assistant', content: '', status: 'streaming' }
     ])
-    setDraft('')
+    if (textOverride === undefined) {
+      setDraft('')
+    }
     setBusy(true)
 
     const result = await window.pointstudio.chat.send({ id: requestId, conversationId, text })
@@ -222,6 +224,27 @@ export default function ChatPanel() {
     if (!result.ok) {
       setPlanRun({ id, plan: null, status: 'failed' })
     }
+  }
+
+  async function copyText(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      setError('复制失败（剪贴板不可用）')
+    }
+  }
+
+  async function removeTurn(messageId: string): Promise<void> {
+    if (!activeId) {
+      return
+    }
+    const result = await window.pointstudio.conversations.deleteTurn(activeId, messageId)
+    if (!result.ok) {
+      setError(result.code)
+      return
+    }
+    setError(null)
+    await loadMessages(activeId)
   }
 
   async function createAssistant(): Promise<void> {
@@ -382,6 +405,11 @@ export default function ChatPanel() {
                 streaming={message.status === 'streaming'}
                 failed={message.status === 'error'}
                 references={message.references}
+                onCopy={() => void copyText(message.content)}
+                onDelete={() => void removeTurn(message.id)}
+                {...(message.role === 'user'
+                  ? { onResend: () => void submit(message.content) }
+                  : {})}
               />
             ))
           )}

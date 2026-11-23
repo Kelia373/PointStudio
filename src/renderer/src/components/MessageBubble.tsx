@@ -7,13 +7,20 @@ export default function MessageBubble({
   content,
   streaming = false,
   failed = false,
-  references = []
+  references = [],
+  onCopy,
+  onDelete,
+  onResend
 }: {
   role: BubbleRole
   content: string
   streaming?: boolean
   failed?: boolean
   references?: Array<{ chunkId: string; source: string }>
+  onCopy?: () => void
+  onDelete?: () => void
+  /** 只有用户消息能「重发」。 */
+  onResend?: () => void
 }) {
   return (
     <div className={`bubble bubble--${role}${failed ? ' bubble--failed' : ''}`}>
@@ -22,6 +29,24 @@ export default function MessageBubble({
         {content}
         {streaming ? <span className="bubble__caret" /> : null}
       </div>
+      <div className="bubble__actions">
+        {onCopy ? (
+          <button className="bubble__action" type="button" onClick={onCopy}>
+            复制
+          </button>
+        ) : null}
+        {onResend ? (
+          <button className="bubble__action" type="button" onClick={onResend}>
+            重发
+          </button>
+        ) : null}
+        {onDelete ? (
+          <button className="bubble__action" type="button" onClick={onDelete}>
+            删除
+          </button>
+        ) : null}
+      </div>
+
       {references.length > 0 ? (
         <div className="bubble__refs">
           引用：{references.map((item) => item.source).join('、')}

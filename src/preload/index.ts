@@ -82,7 +82,14 @@ const conversations: ConversationBridge = {
       CONVERSATION_CHANNELS.setAssistant,
       id,
       assistantId
-    ) as Promise<IpcResult<ConversationDto>>
+    ) as Promise<IpcResult<ConversationDto>>,
+  deleteTurn: (
+    conversationId: string,
+    messageId: string
+  ): Promise<IpcResult<{ removed: number }>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.deleteTurn, conversationId, messageId) as Promise<
+      IpcResult<{ removed: number }>
+    >
 }
 
 const assistants: AssistantBridge = {

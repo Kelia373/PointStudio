@@ -83,7 +83,8 @@ export const CONVERSATION_CHANNELS = {
   rename: 'conversation:rename',
   remove: 'conversation:remove',
   messages: 'conversation:messages',
-  setAssistant: 'conversation:set-assistant'
+  setAssistant: 'conversation:set-assistant',
+  deleteTurn: 'conversation:delete-turn'
 } as const
 
 /** 跨进程传输用的会话形态：只放界面需要显示的字段。 */
@@ -129,6 +130,8 @@ export interface ConversationBridge {
   messages(id: string): Promise<MessageDto[]>
   /** 绑定 / 解绑助手；null 表示退回裸对话。 */
   setAssistant(id: string, assistantId: string | null): Promise<IpcResult<ConversationDto>>
+  /** 删除「这一轮」：用户消息连同其后的助手回复。 */
+  deleteTurn(conversationId: string, messageId: string): Promise<IpcResult<{ removed: number }>>
 }
 
 

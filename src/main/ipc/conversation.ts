@@ -13,6 +13,7 @@ import {
 } from '../../shared/types/ipc.ts'
 import type { Conversation, Message } from '../ai/domain/conversation.ts'
 import type { ConversationService } from '../services/conversationService.ts'
+import { deleteTurn } from '../services/turnService.ts'
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -110,6 +111,28 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
       const result = await service.setAssistant(id, assistantId)
       return result.ok
         ? { ok: true, value: toConversationDto(result.value) }
+        : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
+  ipcMain.handle(
+    CONVERSATION_CHANNELS.deleteTurn,
+    async (
+      _event,
+      conversationId: unknown,
+      messageId: unknown
+    ): Promise<IpcResult<{ removed: number }>> => {
+      if (
+        typeof conversationId !== 'string' ||
+        !ID_PATTERN.test(conversationId) ||
+        typeof messageId !== 'string' ||
+        !ID_PATTERN.test(messageId)
+      ) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      const result = await deleteTurn(service, conversationId, messageId)
+      return result.ok
+        ? { ok: true, value: result.value }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
     }
   )

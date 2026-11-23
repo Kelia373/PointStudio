@@ -569,3 +569,27 @@ body {
 .plan__note {
   color: #d9534f;
 }
+
+.bubble__actions {
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.bubble:hover .bubble__actions {
+  opacity: 1;
+}
+
+.bubble__action {
+  border: none;
+  background: transparent;
+  color: #9a9a9a;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.bubble__action:hover {
+  color: #2f6feb;
+}
