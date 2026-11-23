@@ -5,8 +5,8 @@ import assert from 'node:assert/strict'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
-import { DeepSeekProvider, parseOpenAiSseStream } from '../../src/main/ai/providers/deepseek.ts'
-import { ProviderError } from '../../src/main/ai/providers/types.ts'
+import { DeepSeekProvider, parseOpenAiSseStream } from '../deepseek.ts'
+import { ProviderError } from '../types.ts'
 
 async function* fromChunks(chunks: Array<string | Uint8Array>): AsyncGenerator<Uint8Array> {
   for (const chunk of chunks) {

@@ -7,7 +7,7 @@ import {
   REPLY_CHUNK_SIZE,
   buildReplyChunks,
   buildReplyText
-} from '../../src/main/services/chatReply.ts'
+} from '../chatReply.ts'
 
 test('回复文本回显用户输入', () => {
   assert.match(buildReplyText('你好'), /你好/)

@@ -3,9 +3,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { resolveMode, streamReplyText } from '../../src/main/services/chatEngine.ts'
-import { buildReplyChunks } from '../../src/main/services/chatReply.ts'
-import { type ChatProvider, type ChatStreamRequest } from '../../src/main/ai/providers/types.ts'
+import { resolveMode, streamReplyText } from '../chatEngine.ts'
+import { buildReplyChunks } from '../chatReply.ts'
+import { type ChatProvider, type ChatStreamRequest } from '../../ai/providers/types.ts'
 
 function makeProvider(chunks: string[], spy?: { request?: ChatStreamRequest }): ChatProvider {
   return {

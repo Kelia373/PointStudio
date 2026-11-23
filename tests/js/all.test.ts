@@ -1,6 +1,16 @@
-import './chat.test.ts'
-import './chatReply.test.ts'
-import './chatEngine.test.ts'
-import './assistant.test.ts'
-import './assistantRepository.test.ts'
-import './provider.test.ts'
+// JS 测试总入口：每加一个测试文件就在这里挂一行 import。
+//
+// 两句约定：
+// 1. 测试文件与实现**同目录**放在 `__tests__/` 下（参考 Cherry Studio 的组织方式），
+//    好处是改一个模块时测试就在旁边，不会出现「测试目录和源码各长各的」。
+// 2. 不用 `node --test`：本仓库所在目录被 ACL 加固，node 测试运行器要为每个文件
+//    spawn 子进程，会直接 EPERM（见 AGENTS.md「本机环境事实」）。直跑单文件是
+//    单进程执行，不 spawn。
+//
+// 跑法：node tests/js/all.test.ts
+import '../../src/main/ai/domain/__tests__/chat.test.ts'
+import '../../src/main/ai/domain/__tests__/assistant.test.ts'
+import '../../src/main/ai/providers/__tests__/deepseek.test.ts'
+import '../../src/main/services/__tests__/chatReply.test.ts'
+import '../../src/main/services/__tests__/chatEngine.test.ts'
+import '../../src/main/services/__tests__/assistantService.test.ts'

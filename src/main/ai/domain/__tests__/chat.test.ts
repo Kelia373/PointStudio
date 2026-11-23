@@ -4,7 +4,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { splitIntoChunks } from '../../src/main/ai/domain/chat.ts'
+import { splitIntoChunks } from '../chat.ts'
 
 test('空串切出空数组', () => {
   assert.deepEqual(splitIntoChunks('', 3), [])

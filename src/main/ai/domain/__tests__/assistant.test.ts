@@ -7,7 +7,7 @@ import {
   DEFAULT_PARAMS,
   buildAssistant,
   validateAssistantDraft
-} from '../../src/main/ai/domain/assistant.ts'
+} from '../assistant.ts'
 
 test('名称去首尾空白后入库', () => {
   const result = validateAssistantDraft({ name: '  代码审查员  ' })

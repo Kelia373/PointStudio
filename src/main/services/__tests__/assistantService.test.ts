@@ -6,9 +6,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { JsonFileStore } from '../../src/main/data/fileStore.ts'
-import { AssistantService } from '../../src/main/services/assistantService.ts'
-import type { Assistant } from '../../src/main/ai/domain/assistant.ts'
+import { JsonFileStore } from '../../data/fileStore.ts'
+import { AssistantService } from '../assistantService.ts'
+import type { Assistant } from '../../ai/domain/assistant.ts'
 
 async function withTempService(
   run: (ctx: { service: AssistantService; filePath: string; reopen: () => AssistantService }) => Promise<void>
