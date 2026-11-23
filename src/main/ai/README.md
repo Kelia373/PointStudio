@@ -35,7 +35,7 @@
 | `providers/` | DeepSeek（OpenAI 兼容 SSE）、Ollama（本地、免 Key、NDJSON） |
 | `tools/` | 协议 + 注册表 + 三个只读内置工具（now / calc / read_text_file） |
 | `agent/` | Plan 协议（校验、状态推进、进度汇总）、执行循环（确认门、失败即停）、计划提示词与响应解析 |
-| `mcp/` | 客户端内核：JSON-RPC 请求关联 / 超时 / 错误、`tools/list` → 工具描述符、`toToolDefinition` 工厂（传输层由外壳注入） |
+| `mcp/` | 客户端内核（JSON-RPC 关联 / 超时 / 错误、`tools/list` 映射、`toToolDefinition`）+ `httpTransport`（JSON 与 SSE 两种响应）；stdio 传输未做 |
 
 未做：`providers/` 的平台选择界面、`agent/` 的失败重规划界面与人工确认交互。
 
