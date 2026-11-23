@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type {
-  AgentStepDetailDto,
   AssistantDto,
   ChatMode,
   ConversationDto,
-  PlanViewDto
 } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
+import { reduceAgentEvent, type PlanRunState } from '../lib/planRunState'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
 import AssistantPanel from './AssistantPanel'
@@ -44,12 +43,7 @@ export default function ChatPanel() {
     index: number
     text: string
   } | null>(null)
-  const [planRun, setPlanRun] = useState<{
-    id: string
-    plan: PlanViewDto | null
-    status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
-    details?: AgentStepDetailDto[]
-  } | null>(null)
+  const [planRun, setPlanRun] = useState<PlanRunState | null>(null)
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
 
@@ -99,21 +93,7 @@ export default function ChatPanel() {
     })
 
     const offAgent = window.pointstudio.agent.onEvent((event) => {
-      setPlanRun((current) => {
-        if (!current) {
-          return current
-        }
-        if (event.type === 'plan' || event.type === 'step') {
-          return { ...current, plan: event.plan, status: 'running' }
-        }
-        if (event.type === 'done') {
-          return { ...current, plan: event.plan, status: event.status, details: event.details }
-        }
-        if (event.type === 'error') {
-          return { ...current, status: 'failed' }
-        }
-        return current
-      })
+      setPlanRun((current) => reduceAgentEvent(current, event))
     })
 
     const offNotice = window.pointstudio.chat.onNotice(({ droppedCount }) => {
