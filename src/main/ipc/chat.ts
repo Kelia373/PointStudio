@@ -1,7 +1,7 @@
 // ipc/chat —— 聊天域的跨进程边界。
 //
 // 这一层只做三件事：校验参数 → 委托业务 → 映射错误。不放业务判断。
-// 注意推流模型：`invoke` 是「一问一答」，返回不了流。所以 send 立刻返回，
+// 推流模型：`invoke` 是「一问一答」，返回不了流。所以 send 立刻返回，
 // 后续内容用 webContents.send 一块块推回去，渲染进程按 id 归并。
 import { ipcMain, type WebContents } from 'electron'
 
@@ -15,9 +15,10 @@ import {
 } from '../../shared/types/ipc.ts'
 import { ProviderError } from '../ai/providers/types.ts'
 import { REPLY_CHUNK_DELAY_MS } from '../services/chatReply.ts'
-import { resolveMode, streamReplyText, type ChatEngineDeps } from '../services/chatEngine.ts'
+import { resolveMode, type ChatEngineDeps } from '../services/chatEngine.ts'
+import { streamAssistantReply } from '../services/chatFlow.ts'
+import type { ConversationService } from '../services/conversationService.ts'
 
-/** 请求 id 的允许形态：渲染进程用 crypto.randomUUID() 生成。 */
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_TEXT_LENGTH = 8_000
 
@@ -35,18 +36,20 @@ function isChatSendRequest(value: unknown): value is ChatSendRequest {
   return (
     typeof candidate.id === 'string' &&
     ID_PATTERN.test(candidate.id) &&
+    typeof candidate.conversationId === 'string' &&
+    ID_PATTERN.test(candidate.conversationId) &&
     typeof candidate.text === 'string' &&
     candidate.text.length <= MAX_TEXT_LENGTH
   )
 }
 
-/** provider 的错误码 → 边界的错误码。原始码只进日志，不透给界面。 */
 function toChatErrorCode(error: unknown): 'E_UPSTREAM' | 'E_INTERNAL' {
   return error instanceof ProviderError ? 'E_UPSTREAM' : 'E_INTERNAL'
 }
 
 export interface ChatIpcOptions {
   engine: ChatEngineDeps
+  conversations: ConversationService
 }
 
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
@@ -56,8 +59,7 @@ export function registerChatIpc(options: ChatIpcOptions): void {
       return { ok: false, code: 'E_BAD_INPUT' }
     }
 
-    // 故意不 await：把流交给后台跑，handler 立刻返回，界面不用干等一整段回复。
-    void streamReply(event.sender, request, options.engine)
+    void streamReply(event.sender, request, options)
     return { ok: true, mode: resolveMode(options.engine) }
   })
 }
@@ -66,17 +68,19 @@ export function registerChatIpc(options: ChatIpcOptions): void {
 async function streamReply(
   sender: WebContents,
   request: ChatSendRequest,
-  engine: ChatEngineDeps
+  options: ChatIpcOptions
 ): Promise<void> {
-  const { id, text } = request
+  const { id, conversationId, text } = request
   try {
-    for await (const chunk of streamReplyText(text, engine)) {
+    for await (const chunk of streamAssistantReply(conversationId, text, {
+      conversations: options.conversations,
+      engine: options.engine
+    })) {
       if (sender.isDestroyed()) {
         return
       }
       sender.send(CHAT_CHANNELS.chunk, { id, chunk } satisfies ChatChunkEvent)
-      // 真模型的节奏由平台决定，不再人为加间隔；只有本地假流式需要模拟打字。
-      if (resolveMode(engine) === 'local') {
+      if (resolveMode(options.engine) === 'local') {
         await delay(REPLY_CHUNK_DELAY_MS)
       }
     }
@@ -84,7 +88,7 @@ async function streamReply(
       sender.send(CHAT_CHANNELS.done, { id } satisfies ChatDoneEvent)
     }
   } catch (error) {
-    // 中断是用户行为，不算错误。
+    // 中断是用户行为，不算错误；已产出的部分和状态由 chatFlow 负责落库。
     if (error instanceof ProviderError && error.code === 'E_ABORTED') {
       if (!sender.isDestroyed()) {
         sender.send(CHAT_CHANNELS.done, { id } satisfies ChatDoneEvent)

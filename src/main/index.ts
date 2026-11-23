@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
 import {
@@ -6,10 +7,14 @@ import {
   DEEPSEEK_DEFAULT_BASE_URL,
   DEEPSEEK_DEFAULT_MODEL
 } from './ai/providers/deepseek.ts'
+import type { Conversation, Message } from './ai/domain/conversation.ts'
+import { JsonFileStore } from './data/fileStore.ts'
 import { registerChatIpc } from './ipc/chat.ts'
+import { registerConversationIpc } from './ipc/conversation.ts'
+import { ConversationService } from './services/conversationService.ts'
 
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
-// 它是组合根：负责把内核目录接起来（比如注册 IPC 通道），但自己不含业务逻辑。
+// 它是组合根：负责把内核目录接起来（注册通道、注入存储与凭据），但自己不含业务逻辑。
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -34,9 +39,23 @@ function createWindow(): void {
   }
 }
 
+/** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
+function buildConversationService(): ConversationService {
+  const dataDir = app.getPath('userData')
+  return new ConversationService(
+    new JsonFileStore<Conversation>(join(dataDir, 'conversations.json')),
+    new JsonFileStore<Message>(join(dataDir, 'messages.json')),
+    { newId: () => randomUUID(), now: () => new Date().toISOString() }
+  )
+}
+
 void app.whenReady().then(() => {
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
+  const conversations = buildConversationService()
+
+  registerConversationIpc({ conversations })
   registerChatIpc({
+    conversations,
     engine: {
       provider: new DeepSeekProvider(),
       // 凭据只从进程环境读取：不落盘、不进仓库、不出现在任何提交里。

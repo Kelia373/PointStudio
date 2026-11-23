@@ -8,12 +8,18 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import {
   CHAT_CHANNELS,
+  CONVERSATION_CHANNELS,
   type ChatBridge,
   type ChatChunkEvent,
   type ChatDoneEvent,
   type ChatErrorEvent,
   type ChatSendRequest,
   type ChatSendResult,
+  type ConversationBridge,
+  type ConversationDto,
+  type CreateConversationRequest,
+  type IpcResult,
+  type MessageDto,
   type PointStudioApi
 } from '../shared/types/ipc.ts'
 
@@ -42,9 +48,23 @@ const chat: ChatBridge = {
     subscribe(CHAT_CHANNELS.error, listener)
 }
 
+const conversations: ConversationBridge = {
+  list: (): Promise<ConversationDto[]> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.list) as Promise<ConversationDto[]>,
+  create: (request?: CreateConversationRequest): Promise<IpcResult<ConversationDto>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.create, request) as Promise<IpcResult<ConversationDto>>,
+  rename: (id: string, title: string): Promise<IpcResult<ConversationDto>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.rename, id, title) as Promise<IpcResult<ConversationDto>>,
+  remove: (id: string): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.remove, id) as Promise<IpcResult<true>>,
+  messages: (id: string): Promise<MessageDto[]> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.messages, id) as Promise<MessageDto[]>
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
-  chat
+  chat,
+  conversations
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)

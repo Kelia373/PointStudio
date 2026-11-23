@@ -158,3 +158,103 @@ body {
   background: #c9d4ea;
   cursor: not-allowed;
 }
+
+/* 两栏布局：左侧会话列表，右侧对话。样式是最小可用版，等设计稿再换皮。 */
+.layout {
+  display: flex;
+  height: 100%;
+}
+
+.sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  border-right: 1px solid #ececec;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 8px;
+}
+
+.sidebar__title {
+  font-size: 12px;
+  color: #8a8a8a;
+  letter-spacing: 0.04em;
+}
+
+.sidebar__new {
+  border: none;
+  background: transparent;
+  color: #2f6feb;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0 8px 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.sidebar__item--active {
+  background: #e8eefc;
+}
+
+.sidebar__item-main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 8px 6px;
+  font-size: 13px;
+  color: #333;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__item-remove {
+  border: none;
+  background: transparent;
+  color: #b0b0b0;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 6px;
+}
+
+.sidebar__item-remove:hover {
+  color: #d9534f;
+}
+
+.sidebar__empty {
+  padding: 8px 6px;
+  font-size: 12px;
+  color: #b0b0b0;
+}
+
+.chat__error {
+  margin-left: auto;
+  font-size: 12px;
+  color: #d9534f;
+}
+
+.bubble--failed .bubble__text {
+  border: 1px solid #f0c0c0;
+  color: #a33;
+}

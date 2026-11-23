@@ -24,6 +24,7 @@ export type ChatErrorCode = 'E_BAD_INPUT' | 'E_INTERNAL' | 'E_UPSTREAM'
  */
 export interface ChatSendRequest {
   id: string
+  conversationId: string
   text: string
 }
 
@@ -68,4 +69,52 @@ export interface ChatBridge {
 export interface PointStudioApi {
   electronVersion: string
   chat: ChatBridge
+  conversations: ConversationBridge
+}
+
+
+// ---------------------------------------------------------------- 会话与消息
+
+export const CONVERSATION_CHANNELS = {
+  list: 'conversation:list',
+  create: 'conversation:create',
+  rename: 'conversation:rename',
+  remove: 'conversation:remove',
+  messages: 'conversation:messages'
+} as const
+
+/** 跨进程传输用的会话形态：只放界面需要显示的字段。 */
+export interface ConversationDto {
+  id: string
+  title: string
+  assistantId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface MessageDto {
+  id: string
+  conversationId: string
+  role: 'user' | 'assistant'
+  content: string
+  status: 'complete' | 'error'
+  createdAt: string
+}
+
+/**
+ * 统一的结果形态。code 直接用领域错误码（E_NOT_FOUND / E_TITLE_TOO_LONG …），
+ * 界面按码判断，不解析人读文案。
+ */
+export type IpcResult<T> = { ok: true; value: T } | { ok: false; code: string }
+
+export interface CreateConversationRequest {
+  title?: string
+}
+
+export interface ConversationBridge {
+  list(): Promise<ConversationDto[]>
+  create(request?: CreateConversationRequest): Promise<IpcResult<ConversationDto>>
+  rename(id: string, title: string): Promise<IpcResult<ConversationDto>>
+  remove(id: string): Promise<IpcResult<true>>
+  messages(id: string): Promise<MessageDto[]>
 }
