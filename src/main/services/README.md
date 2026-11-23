@@ -35,4 +35,6 @@
 
 ## 现状
 
-已有 `chatReply.ts`（假流式回复，接真模型时替换的就是它）与 `assistantService.ts`（助手增删改查：校验 → 构造 → 落盘，依赖注入仓储与时钟，因此可脱离 Electron 单测）。
+已有：`chatReply.ts`（假流式回复）、`chatEngine.ts`（有 Key 走真模型、无 Key 降级）、`chatFlow.ts`（一次问答的落库编排：先存用户消息 → 流式产出 → 存助手消息，失败时保留已产出部分并标记 error）、`assistantService.ts`（助手增删改查）、`conversationService.ts`（会话与消息：建/改名/删（级联删消息）、追加/编辑/删除消息、按最近活动排序）。
+
+约定：服务层只依赖注入进来的存储对象与时钟，不 import electron，因此可脱离运行环境单测。

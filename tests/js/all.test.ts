@@ -10,7 +10,10 @@
 // 跑法：node tests/js/all.test.ts
 import '../../src/main/ai/domain/__tests__/chat.test.ts'
 import '../../src/main/ai/domain/__tests__/assistant.test.ts'
+import '../../src/main/ai/domain/__tests__/conversation.test.ts'
 import '../../src/main/ai/providers/__tests__/deepseek.test.ts'
 import '../../src/main/services/__tests__/chatReply.test.ts'
 import '../../src/main/services/__tests__/chatEngine.test.ts'
 import '../../src/main/services/__tests__/assistantService.test.ts'
+import '../../src/main/services/__tests__/conversationService.test.ts'
+import '../../src/main/services/__tests__/chatFlow.test.ts'

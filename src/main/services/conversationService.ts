@@ -1,0 +1,204 @@
+// services/conversationService —— 会话与消息的用例。
+//
+// 两个集合（会话、消息）分开存：消息会长得很快，混在一个文件里每次写都要
+// 重写全部消息。级联关系（删会话连消息）由本层负责，存储层只管整存整取。
+import {
+  DEFAULT_CONVERSATION_TITLE,
+  deriveTitle,
+  isMessageRole,
+  validateMessageContent,
+  validateTitle,
+  type Conversation,
+  type Message,
+  type MessageRole,
+  type MessageStatus
+} from '../ai/domain/conversation.ts'
+import type { JsonFileStore } from '../data/fileStore.ts'
+
+export type ServiceResult<T> = { ok: true; value: T } | { ok: false; errors: string[] }
+
+export interface ConversationServiceDeps {
+  newId: () => string
+  now: () => string
+}
+
+export interface CreateConversationInput {
+  title?: string
+  assistantId?: string | null
+}
+
+export interface AppendMessageInput {
+  role: MessageRole
+  content: string
+  status?: MessageStatus
+}
+
+export class ConversationService {
+  private readonly conversations: JsonFileStore<Conversation>
+  private readonly messages: JsonFileStore<Message>
+  private readonly deps: ConversationServiceDeps
+
+  constructor(
+    conversations: JsonFileStore<Conversation>,
+    messages: JsonFileStore<Message>,
+    deps: ConversationServiceDeps
+  ) {
+    this.conversations = conversations
+    this.messages = messages
+    this.deps = deps
+  }
+
+  /** 按最近活动倒序——界面左栏的顺序就是它。 */
+  async list(): Promise<Conversation[]> {
+    const items = await this.conversations.readAll()
+    return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  async create(input: CreateConversationInput = {}): Promise<ServiceResult<Conversation>> {
+    let title = DEFAULT_CONVERSATION_TITLE
+    if (input.title !== undefined) {
+      const checked = validateTitle(input.title)
+      if (!checked.ok) {
+        return { ok: false, errors: checked.errors }
+      }
+      title = checked.value
+    }
+
+    const now = this.deps.now()
+    const conversation: Conversation = {
+      id: this.deps.newId(),
+      title,
+      assistantId: input.assistantId ?? null,
+      createdAt: now,
+      updatedAt: now
+    }
+
+    const items = await this.conversations.readAll()
+    items.push(conversation)
+    await this.conversations.writeAll(items)
+    return { ok: true, value: conversation }
+  }
+
+  async rename(id: string, title: string): Promise<ServiceResult<Conversation>> {
+    const checked = validateTitle(title)
+    if (!checked.ok) {
+      return { ok: false, errors: checked.errors }
+    }
+
+    const items = await this.conversations.readAll()
+    const index = items.findIndex((item) => item.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    const updated: Conversation = {
+      ...items[index],
+      title: checked.value,
+      updatedAt: this.deps.now()
+    }
+    items[index] = updated
+    await this.conversations.writeAll(items)
+    return { ok: true, value: updated }
+  }
+
+  /** 删会话必须连它的消息一起删，否则会留下永远读不到的孤儿数据。 */
+  async remove(id: string): Promise<ServiceResult<true>> {
+    const items = await this.conversations.readAll()
+    const index = items.findIndex((item) => item.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    items.splice(index, 1)
+    await this.conversations.writeAll(items)
+
+    const messages = await this.messages.readAll()
+    await this.messages.writeAll(messages.filter((message) => message.conversationId !== id))
+    return { ok: true, value: true }
+  }
+
+  async listMessages(conversationId: string): Promise<Message[]> {
+    const messages = await this.messages.readAll()
+    return messages.filter((message) => message.conversationId === conversationId)
+  }
+
+  async appendMessage(
+    conversationId: string,
+    input: AppendMessageInput
+  ): Promise<ServiceResult<Message>> {
+    if (!isMessageRole(input.role)) {
+      return { ok: false, errors: ['E_BAD_ROLE'] }
+    }
+    const checked = validateMessageContent(input.content)
+    if (!checked.ok) {
+      return { ok: false, errors: checked.errors }
+    }
+
+    const conversations = await this.conversations.readAll()
+    const index = conversations.findIndex((item) => item.id === conversationId)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    const now = this.deps.now()
+    const message: Message = {
+      id: this.deps.newId(),
+      conversationId,
+      role: input.role,
+      content: checked.value,
+      status: input.status ?? 'complete',
+      createdAt: now,
+      updatedAt: now
+    }
+
+    const messages = await this.messages.readAll()
+    messages.push(message)
+    await this.messages.writeAll(messages)
+
+    // 标题只在「还是默认标题」且收到用户第一句话时生成，之后不再动它。
+    const shouldDeriveTitle =
+      conversations[index].title === DEFAULT_CONVERSATION_TITLE && input.role === 'user'
+    conversations[index] = {
+      ...conversations[index],
+      title: shouldDeriveTitle ? deriveTitle(checked.value) : conversations[index].title,
+      updatedAt: now
+    }
+    await this.conversations.writeAll(conversations)
+
+    return { ok: true, value: message }
+  }
+
+  async updateMessage(id: string, content: string): Promise<ServiceResult<Message>> {
+    const checked = validateMessageContent(content)
+    if (!checked.ok) {
+      return { ok: false, errors: checked.errors }
+    }
+
+    const messages = await this.messages.readAll()
+    const index = messages.findIndex((message) => message.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    const updated: Message = {
+      ...messages[index],
+      content: checked.value,
+      updatedAt: this.deps.now()
+    }
+    messages[index] = updated
+    await this.messages.writeAll(messages)
+    return { ok: true, value: updated }
+  }
+
+  async removeMessage(id: string): Promise<ServiceResult<true>> {
+    const messages = await this.messages.readAll()
+    const index = messages.findIndex((message) => message.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    messages.splice(index, 1)
+    await this.messages.writeAll(messages)
+    return { ok: true, value: true }
+  }
+}

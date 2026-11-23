@@ -29,4 +29,4 @@
 
 ## 现状
 
-已落地 `domain/chat.ts` 与 `domain/assistant.ts`（`splitIntoChunks`，把文本按码点切成流式块，契约测试在 `tests/js/chat.test.ts`）。`providers` / `tools` / `agent` 仍是空壳。
+已落地 `domain/chat.ts`、`domain/assistant.ts`、`domain/conversation.ts`（会话与消息模型、标题派生与校验）（`splitIntoChunks`，把文本按码点切成流式块，契约测试在 `tests/js/chat.test.ts`）。`providers` / `tools` / `agent` 仍是空壳。
