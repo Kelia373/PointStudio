@@ -63,6 +63,7 @@ cd PointStudio
 | **启动开发**（热更新） | 双击根目录 `dev.cmd`，或 `powershell -File scripts\dev.ps1` |
 | 一次性构建 | `powershell -File scripts\build.ps1` → 产物在 `out` |
 | 跑检查（类型 + 门禁） | `powershell -File scripts\check.ps1` |
+| 跑 JS 测试 | `node tests/js/all.test.ts` |
 | 清理构建产物 | `powershell -File scripts\clean.ps1` |
 
 启动后**终端别关**：改 React 界面会热更新（保存即变）；改主进程（`src/main`、`src/preload`）**需要手动重启 dev**。

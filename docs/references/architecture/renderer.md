@@ -5,7 +5,7 @@
 
 ## 现状
 
-骨架而已：`index.html` + `src/{main.tsx, App.tsx}`。没有组件库、没有路由、没有状态管理方案。
+已有一块可用的聊天面板：`components/ChatPanel.tsx`（状态 + 订阅主进程推流）、`components/MessageBubble.tsx`（纯展示，只有 props）、`styles/app.css`。仍然没有组件库、没有路由、没有状态管理方案——状态还在组件内部的 `useState`，够用就不引。
 
 ## 唯一一条硬规则
 
