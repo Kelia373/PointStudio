@@ -12,8 +12,7 @@ import {
 import type { WorkspaceFile } from '../ai/domain/workspace.ts'
 import type { WorkspaceImportService } from '../services/workspaceImportService.ts'
 import type { WorkspaceService } from '../services/workspaceService.ts'
-
-const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { isUuid, isWorkspaceImportPath } from './validators.ts'
 
 function toDto(file: WorkspaceFile): WorkspaceFileDto {
   return {
@@ -38,7 +37,7 @@ export function registerWorkspaceIpc(options: WorkspaceIpcOptions): void {
   ipcMain.handle(
     WORKSPACE_CHANNELS.import,
     async (_event, absolutePath: unknown): Promise<IpcResult<WorkspaceFileDto>> => {
-      if (typeof absolutePath !== 'string' || absolutePath.trim() === '') {
+      if (!isWorkspaceImportPath(absolutePath)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await options.importer.importFromPath(absolutePath)
@@ -69,7 +68,7 @@ export function registerWorkspaceIpc(options: WorkspaceIpcOptions): void {
   ipcMain.handle(
     WORKSPACE_CHANNELS.remove,
     async (_event, id: unknown): Promise<IpcResult<true>> => {
-      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+      if (typeof id !== 'string' || !isUuid(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await options.workspace.remove(id)

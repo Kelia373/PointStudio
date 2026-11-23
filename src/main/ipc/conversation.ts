@@ -7,7 +7,6 @@ import { ipcMain } from 'electron'
 import {
   CONVERSATION_CHANNELS,
   type ConversationDto,
-  type CreateConversationRequest,
   type IpcResult,
   type MessageDto
 } from '../../shared/types/ipc.ts'
@@ -15,8 +14,7 @@ import type { Conversation, Message } from '../ai/domain/conversation.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 import { renderConversationMarkdown } from '../services/exportService.ts'
 import { deleteTurn } from '../services/turnService.ts'
-
-const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { isCreateConversationRequest, isUuid } from './validators.ts'
 
 function toConversationDto(conversation: Conversation): ConversationDto {
   return {
@@ -40,16 +38,6 @@ function toMessageDto(message: Message): MessageDto {
   }
 }
 
-function isCreateRequest(value: unknown): value is CreateConversationRequest {
-  if (value === undefined) {
-    return true
-  }
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const title = (value as CreateConversationRequest).title
-  return title === undefined || typeof title === 'string'
-}
 
 export interface ConversationIpcOptions {
   conversations: ConversationService
@@ -66,7 +54,7 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   ipcMain.handle(
     CONVERSATION_CHANNELS.create,
     async (_event, request: unknown): Promise<IpcResult<ConversationDto>> => {
-      if (!isCreateRequest(request)) {
+      if (!isCreateConversationRequest(request)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await service.create(request ?? {})
@@ -79,7 +67,7 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   ipcMain.handle(
     CONVERSATION_CHANNELS.rename,
     async (_event, id: unknown, title: unknown): Promise<IpcResult<ConversationDto>> => {
-      if (typeof id !== 'string' || !ID_PATTERN.test(id) || typeof title !== 'string') {
+      if (typeof id !== 'string' || !isUuid(id) || typeof title !== 'string') {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await service.rename(id, title)
@@ -92,7 +80,7 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   ipcMain.handle(
     CONVERSATION_CHANNELS.remove,
     async (_event, id: unknown): Promise<IpcResult<true>> => {
-      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+      if (typeof id !== 'string' || !isUuid(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await service.remove(id)
@@ -103,10 +91,10 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   ipcMain.handle(
     CONVERSATION_CHANNELS.setAssistant,
     async (_event, id: unknown, assistantId: unknown): Promise<IpcResult<ConversationDto>> => {
-      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+      if (typeof id !== 'string' || !isUuid(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      if (assistantId !== null && (typeof assistantId !== 'string' || !ID_PATTERN.test(assistantId))) {
+      if (assistantId !== null && (typeof assistantId !== 'string' || !isUuid(assistantId))) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await service.setAssistant(id, assistantId)
@@ -125,9 +113,9 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
     ): Promise<IpcResult<{ removed: number }>> => {
       if (
         typeof conversationId !== 'string' ||
-        !ID_PATTERN.test(conversationId) ||
+        !isUuid(conversationId) ||
         typeof messageId !== 'string' ||
-        !ID_PATTERN.test(messageId)
+        !isUuid(messageId)
       ) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
@@ -141,7 +129,7 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   ipcMain.handle(
     CONVERSATION_CHANNELS.exportMarkdown,
     async (_event, id: unknown): Promise<IpcResult<string>> => {
-      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+      if (typeof id !== 'string' || !isUuid(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const conversation = await service.get(id)
@@ -156,7 +144,7 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   ipcMain.handle(
     CONVERSATION_CHANNELS.messages,
     async (_event, id: unknown): Promise<MessageDto[]> => {
-      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+      if (typeof id !== 'string' || !isUuid(id)) {
         return []
       }
       const items = await service.listMessages(id)

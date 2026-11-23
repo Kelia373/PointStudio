@@ -7,31 +7,12 @@ import { ipcMain } from 'electron'
 import {
   SETTINGS_CHANNELS,
   type IpcResult,
-  type ProviderSettingsDraftRequest,
   type ProviderSettingsViewDto
 } from '../../shared/types/ipc.ts'
 import type { ProviderSettings } from '../ai/domain/providerSettings.ts'
+import { isProviderSettingsDraft } from './validators.ts'
 import type { ProviderSettingsService } from '../services/providerSettingsService.ts'
 
-function isDraft(value: unknown): value is ProviderSettingsDraftRequest {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const input = value as Partial<ProviderSettingsDraftRequest>
-  return (
-    (input.apiKey === undefined || typeof input.apiKey === 'string') &&
-    (input.providerId === undefined || input.providerId === 'deepseek' || input.providerId === 'ollama') &&
-    (input.baseUrl === undefined || typeof input.baseUrl === 'string') &&
-    (input.model === undefined || typeof input.model === 'string') &&
-    (input.params === undefined ||
-      (typeof input.params === 'object' &&
-        input.params !== null &&
-        ['temperature', 'maxTokens', 'topP'].every((key) => {
-          const value = (input.params as Record<string, unknown>)[key]
-          return value === undefined || typeof value === 'number'
-        })))
-  )
-}
 
 export interface SettingsIpcOptions {
   settings: ProviderSettingsService
@@ -47,7 +28,7 @@ export function registerSettingsIpc(options: SettingsIpcOptions): void {
   ipcMain.handle(
     SETTINGS_CHANNELS.saveProvider,
     async (_event, request: unknown): Promise<IpcResult<ProviderSettingsViewDto>> => {
-      if (!isDraft(request)) {
+      if (!isProviderSettingsDraft(request)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await options.settings.save(request)

@@ -22,30 +22,9 @@ import type { SearchHit } from '../ai/domain/search.ts'
 import { streamAssistantReply, type AssistantLookup } from '../services/chatFlow.ts'
 import { StreamRegistry } from '../services/streamRegistry.ts'
 import type { ConversationService } from '../services/conversationService.ts'
-
-const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-const MAX_TEXT_LENGTH = 8_000
+import { isChatSendRequest, isUuid } from './validators.ts'
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
-
-/**
- * 运行时校验。TypeScript 的类型在进程边界上是**不存在**的，
- * 渲染进程传进来什么都有可能，所以必须真的验一遍。
- */
-function isChatSendRequest(value: unknown): value is ChatSendRequest {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  const candidate = value as Partial<ChatSendRequest>
-  return (
-    typeof candidate.id === 'string' &&
-    ID_PATTERN.test(candidate.id) &&
-    typeof candidate.conversationId === 'string' &&
-    ID_PATTERN.test(candidate.conversationId) &&
-    typeof candidate.text === 'string' &&
-    candidate.text.length <= MAX_TEXT_LENGTH
-  )
-}
 
 function toChatErrorCode(error: unknown): 'E_UPSTREAM' | 'E_INTERNAL' {
   return error instanceof ProviderError ? 'E_UPSTREAM' : 'E_INTERNAL'
@@ -75,7 +54,7 @@ export function registerChatIpc(options: ChatIpcOptions): void {
   })
 
   ipcMain.handle(CHAT_CHANNELS.cancel, (_event, id: unknown): IpcResult<true> => {
-    if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+    if (typeof id !== 'string' || !isUuid(id)) {
       return { ok: false, code: 'E_BAD_INPUT' }
     }
     // 命中与否都算成功：用户点停止时请求可能刚好结束。
