@@ -41,7 +41,7 @@ python scripts/tdd_gate.py --all       # 内容检查 + 全部测试（CI 跑这
 
 ```powershell
 powershell -File scripts\dev.ps1       # 开发模式（或双击 dev.cmd）
-powershell -File scripts\build.ps1     # 构建，产物在 apps\desktop\out
+powershell -File scripts\build.ps1     # 构建，产物在 out/
 powershell -File scripts\check.ps1     # tsc + 门禁
 ```
 
@@ -66,8 +66,7 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 
 | 路径 | 作用 |
 | --- | --- |
-| `apps/` | 可运行产物：`desktop`（个人版） |
-| `packages/` | 内核，禁依赖 UI：`core` `agent` `providers` `tools` `policy` `storage` `remote` `ui` |
+| `src/main/` | 主进程与内核目录：`core` `ipc` `data` `ai` `features` `services` `utils` `i18n` `policy` `remote` `ui`（内核禁依赖 UI） |
 | `docs/` | 规则、ADR、盘点（编号上限 5 个） |
 | `scripts/` | 构建与检查脚本；根目录 `dev.cmd` 是双击启动入口 |
 | `D:\Project\NewGame\ai-workstation\ref\` | 外部参考源码，**只读** |
@@ -84,6 +83,7 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 | 任务分级、计划六问、澄清预算、阶段出口 | `docs/02` |
 | 个人版 / 企业版边界与不做清单 | `docs/00` |
 | 环境坑、能力盘点、能力缺口 | `docs/03` |
+| 包分层、依赖方向、新能力归位 | `docs/references/architecture/main-architecture.md` |
 | 技术栈与双版本架构 | `docs/adr/0002` |
 
 优先级：本文件 > `docs/` > 现存同类代码 > 问人。
