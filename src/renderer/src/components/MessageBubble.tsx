@@ -6,12 +6,14 @@ export default function MessageBubble({
   role,
   content,
   streaming = false,
-  failed = false
+  failed = false,
+  references = []
 }: {
   role: BubbleRole
   content: string
   streaming?: boolean
   failed?: boolean
+  references?: Array<{ chunkId: string; source: string }>
 }) {
   return (
     <div className={`bubble bubble--${role}${failed ? ' bubble--failed' : ''}`}>
@@ -20,6 +22,11 @@ export default function MessageBubble({
         {content}
         {streaming ? <span className="bubble__caret" /> : null}
       </div>
+      {references.length > 0 ? (
+        <div className="bubble__refs">
+          引用：{references.map((item) => item.source).join('、')}
+        </div>
+      ) : null}
     </div>
   )
 }

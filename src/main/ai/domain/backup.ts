@@ -57,6 +57,12 @@ function isMessage(value: unknown): value is Message {
     (value.role === 'user' || value.role === 'assistant') &&
     typeof value.content === 'string' &&
     (value.status === 'complete' || value.status === 'error') &&
+    (value.references === undefined ||
+      (Array.isArray(value.references) &&
+        value.references.every(
+          (item) =>
+            isObject(item) && typeof item.chunkId === 'string' && typeof item.source === 'string'
+        ))) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
   )

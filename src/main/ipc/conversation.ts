@@ -33,6 +33,7 @@ function toMessageDto(message: Message): MessageDto {
     role: message.role,
     content: message.content,
     status: message.status,
+    ...(message.references ? { references: message.references } : {}),
     createdAt: message.createdAt
   }
 }

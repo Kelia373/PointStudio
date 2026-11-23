@@ -10,6 +10,7 @@ import {
   validateTitle,
   type Conversation,
   type Message,
+  type MessageReference,
   type MessageRole,
   type MessageStatus
 } from '../ai/domain/conversation.ts'
@@ -31,6 +32,8 @@ export interface AppendMessageInput {
   role: MessageRole
   content: string
   status?: MessageStatus
+  /** 可选：本次回答引用了哪些片段。 */
+  references?: MessageReference[]
 }
 
 export class ConversationService {
@@ -170,6 +173,10 @@ export class ConversationService {
       role: input.role,
       content: checked.value,
       status: input.status ?? 'complete',
+      // 空数组也存成 undefined：旧数据没有这个字段，保持形状一致才好比较与迁移。
+      ...(input.references && input.references.length > 0
+        ? { references: input.references.map((item) => ({ ...item })) }
+        : {}),
       createdAt: now,
       updatedAt: now
     }

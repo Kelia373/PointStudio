@@ -466,3 +466,9 @@ body {
   color: #b0b0b0;
   line-height: 1.6;
 }
+
+.bubble__refs {
+  font-size: 11px;
+  color: #9a9a9a;
+  padding-left: 2px;
+}

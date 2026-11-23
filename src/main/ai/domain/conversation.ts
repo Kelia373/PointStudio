@@ -16,12 +16,21 @@ export interface Conversation {
   updatedAt: string
 }
 
+/** 回答里引用过的检索片段。只存定位信息，不存正文——正文可能很大且会变。 */
+export interface MessageReference {
+  /** 形如 `path#3`，可回指到具体块。 */
+  chunkId: string
+  source: string
+}
+
 export interface Message {
   id: string
   conversationId: string
   role: MessageRole
   content: string
   status: MessageStatus
+  /** 可选：旧消息没有这个字段，读取时必须容忍缺失。 */
+  references?: MessageReference[]
   createdAt: string
   updatedAt: string
 }

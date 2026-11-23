@@ -230,3 +230,31 @@ test('绑定与解绑助手', async () => {
     assert.equal(missing.ok, false)
   })
 })
+
+test('消息可以携带引用来源，并能读回', async () => {
+  await withService(async ({ service }) => {
+    const created = await service.create({})
+    if (!created.ok) return
+
+    const added = await service.appendMessage(created.value.id, {
+      role: 'assistant',
+      content: '根据资料……',
+      references: [{ chunkId: 'notes/a.md#0', source: 'notes/a.md' }]
+    })
+    assert.equal(added.ok, true)
+
+    const messages = await service.listMessages(created.value.id)
+    assert.deepEqual(messages[0].references, [{ chunkId: 'notes/a.md#0', source: 'notes/a.md' }])
+  })
+})
+
+test('没有引用来源的消息保持 undefined，旧数据依然可读', async () => {
+  await withService(async ({ service }) => {
+    const created = await service.create({})
+    if (!created.ok) return
+    await service.appendMessage(created.value.id, { role: 'user', content: '普通消息' })
+
+    const messages = await service.listMessages(created.value.id)
+    assert.equal(messages[0].references, undefined)
+  })
+})

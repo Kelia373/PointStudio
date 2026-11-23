@@ -109,11 +109,13 @@ export async function* streamAssistantReply(
   }
   // 检索是「锦上添花」：失败不该让整轮对话失败，退化为无参考资料。
   let references = ''
+  let referenceItems: Array<{ chunkId: string; source: string }> = []
   if (deps.retrieval) {
     try {
       const hits = await deps.retrieval.search(prompt)
       if (hits.length > 0) {
         references = formatHitsForPrompt(hits)
+        referenceItems = hits.map((hit) => ({ chunkId: hit.chunk.id, source: hit.chunk.source }))
         deps.onReferences?.(hits)
       }
     } catch {
@@ -134,13 +136,15 @@ export async function* streamAssistantReply(
     await deps.conversations.appendMessage(conversationId, {
       role: 'assistant',
       content: accumulated === '' ? '（回复失败）' : accumulated,
-      status: 'error'
+      status: 'error',
+      references: referenceItems
     })
     throw error
   }
 
   await deps.conversations.appendMessage(conversationId, {
     role: 'assistant',
-    content: accumulated
+    content: accumulated,
+    references: referenceItems
   })
 }

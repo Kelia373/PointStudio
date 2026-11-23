@@ -95,12 +95,19 @@ export interface ConversationDto {
   updatedAt: string
 }
 
+export interface MessageReferenceDto {
+  chunkId: string
+  source: string
+}
+
 export interface MessageDto {
   id: string
   conversationId: string
   role: 'user' | 'assistant'
   content: string
   status: 'complete' | 'error'
+  /** 回答引用的检索片段；旧消息没有这个字段。 */
+  references?: MessageReferenceDto[]
   createdAt: string
 }
 

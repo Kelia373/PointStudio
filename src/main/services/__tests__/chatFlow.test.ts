@@ -323,3 +323,58 @@ test('检索失败不影响回答（降级为无参考资料）', async () => {
 
   assert.deepEqual(seen[0].messages.at(-1), { role: 'user', content: '问题' })
 })
+
+test('检索命中时，助手消息会记下引用来源', async () => {
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(): AsyncGenerator<string> {
+      yield '答'
+    }
+  }
+
+  await withFlow(async ({ conversations, conversationId, assistants }) => {
+    for await (const _chunk of streamAssistantReply(conversationId, '工作台是什么', {
+      conversations,
+      assistants,
+      engine: { provider, apiKey: 'k', baseUrl: 'b', model: 'm' },
+      retrieval: {
+        search: async () => [
+          { chunk: { id: 'a.md#0', text: '工作台', source: 'a.md' }, score: 3, matchedTerms: ['工作'] },
+          { chunk: { id: 'b.md#1', text: '工作台', source: 'b.md' }, score: 2, matchedTerms: ['工作'] }
+        ]
+      }
+    })) {
+      // 消费
+    }
+
+    const messages = await conversations.listMessages(conversationId)
+    const assistant = messages.find((message) => message.role === 'assistant')
+    assert.deepEqual(assistant?.references, [
+      { chunkId: 'a.md#0', source: 'a.md' },
+      { chunkId: 'b.md#1', source: 'b.md' }
+    ])
+  })
+})
+
+test('没有检索命中时，助手消息不带引用字段', async () => {
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(): AsyncGenerator<string> {
+      yield '答'
+    }
+  }
+
+  await withFlow(async ({ conversations, conversationId, assistants }) => {
+    for await (const _chunk of streamAssistantReply(conversationId, '问题', {
+      conversations,
+      assistants,
+      engine: { provider, apiKey: 'k', baseUrl: 'b', model: 'm' }
+    })) {
+      // 消费
+    }
+
+    const messages = await conversations.listMessages(conversationId)
+    const assistant = messages.find((message) => message.role === 'assistant')
+    assert.equal(assistant?.references, undefined)
+  })
+})

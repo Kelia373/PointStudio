@@ -12,6 +12,7 @@ interface UiMessage {
   role: BubbleRole
   content: string
   status: 'complete' | 'error' | 'streaming'
+  references?: Array<{ chunkId: string; source: string }>
 }
 
 /**
@@ -52,7 +53,8 @@ export default function ChatPanel() {
         id: message.id,
         role: message.role,
         content: message.content,
-        status: message.status
+        status: message.status,
+        references: message.references
       }))
     )
   }, [])
@@ -319,6 +321,7 @@ export default function ChatPanel() {
                 content={message.content}
                 streaming={message.status === 'streaming'}
                 failed={message.status === 'error'}
+                references={message.references}
               />
             ))
           )}
