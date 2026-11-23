@@ -167,6 +167,55 @@ export interface AssistantBridge {
   remove(id: string): Promise<IpcResult<true>>
 }
 
+// ---------------------------------------------------------------- 计划 / 过程
+
+export const AGENT_CHANNELS = {
+  run: 'agent:run',
+  event: 'agent:event'
+} as const
+
+export interface PlanStepViewDto {
+  id: string
+  action: string
+  tool: string | null
+  expect: string
+  risk: 'low' | 'mid' | 'high'
+  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped'
+  requiresConfirmation: boolean
+}
+
+export interface PlanViewDto {
+  goal: string
+  assumptions: string[]
+  stopConditions: string[]
+  steps: PlanStepViewDto[]
+  progress: {
+    total: number
+    pending: number
+    running: number
+    success: number
+    failed: number
+    skipped: number
+  }
+}
+
+export type AgentEventDto =
+  | { type: 'plan'; plan: PlanViewDto }
+  | { type: 'step'; plan: PlanViewDto }
+  | { type: 'replan'; failedStepId: string; errorCode: string }
+  | { type: 'done'; status: 'completed' | 'failed' | 'stopped'; plan: PlanViewDto; reason?: string }
+  | { type: 'error'; code: string }
+
+export interface AgentRunRequest {
+  id: string
+  goal: string
+}
+
+export interface AgentBridge {
+  run(request: AgentRunRequest): Promise<IpcResult<true>>
+  onEvent(listener: (event: AgentEventDto) => void): () => void
+}
+
 // ---------------------------------------------------------------- 工作区
 
 export const WORKSPACE_CHANNELS = {
@@ -199,6 +248,7 @@ export interface PointStudioApi {
   assistants: AssistantBridge
   settings: SettingsBridge
   workspace: WorkspaceBridge
+  agent: AgentBridge
 }
 
 

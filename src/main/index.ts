@@ -15,7 +15,10 @@ import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
 import { registerSettingsIpc } from './ipc/settings.ts'
+import { registerAgentIpc } from './ipc/agent.ts'
 import { registerWorkspaceIpc } from './ipc/workspace.ts'
+import { ToolRegistry } from './ai/tools/registry.ts'
+import { createBuiltinTools } from './ai/tools/builtin/index.ts'
 import { recordCrash } from './services/crashLogService.ts'
 import { WorkspaceImportService } from './services/workspaceImportService.ts'
 import { WorkspaceService } from './services/workspaceService.ts'
@@ -170,6 +173,15 @@ void app.whenReady().then(async () => {
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
   registerConversationIpc({ conversations: services.conversations })
   registerWorkspaceIpc({ workspace: services.workspace, importer: services.importer })
+
+  // 工具注册表：内置只读工具 + 工作区读取。MCP 工具待传输层落地后再注册。
+  const tools = new ToolRegistry()
+  for (const tool of createBuiltinTools({
+    readTextFile: (relativePath) => readFile(join(services.workspaceRoot, relativePath), 'utf8')
+  })) {
+    tools.register(tool)
+  }
+  registerAgentIpc({ engine, tools })
   registerAssistantIpc({ assistants: services.assistants })
   registerSettingsIpc({
     settings: services.settings,

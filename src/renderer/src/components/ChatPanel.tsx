@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { AssistantDto, ChatMode, ConversationDto } from '../../../shared/types/ipc.ts'
+import type {
+  AssistantDto,
+  ChatMode,
+  ConversationDto,
+  PlanViewDto
+} from '../../../shared/types/ipc.ts'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
+import PlanPanel from './PlanPanel'
 import WorkspacePanel from './WorkspacePanel'
 import MessageBubble, { type BubbleRole } from './MessageBubble'
 
@@ -33,6 +39,11 @@ export default function ChatPanel() {
   const [drafting, setDrafting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [planRun, setPlanRun] = useState<{
+    id: string
+    plan: PlanViewDto | null
+    status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
+  } | null>(null)
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
 
@@ -78,6 +89,24 @@ export default function ChatPanel() {
       }
     })
 
+    const offAgent = window.pointstudio.agent.onEvent((event) => {
+      setPlanRun((current) => {
+        if (!current) {
+          return current
+        }
+        if (event.type === 'plan' || event.type === 'step') {
+          return { ...current, plan: event.plan, status: 'running' }
+        }
+        if (event.type === 'done') {
+          return { ...current, plan: event.plan, status: event.status }
+        }
+        if (event.type === 'error') {
+          return { ...current, status: 'failed' }
+        }
+        return current
+      })
+    })
+
     const offNotice = window.pointstudio.chat.onNotice(({ droppedCount }) => {
       setError(`已省略较早的 ${droppedCount} 条消息（超出上下文窗口）`)
     })
@@ -96,6 +125,7 @@ export default function ChatPanel() {
       offDone()
       offNotice()
       offError()
+      offAgent()
     }
   }, [loadMessages, reloadConversations])
 
@@ -178,6 +208,20 @@ export default function ChatPanel() {
     }
     setError(null)
     await reloadConversations()
+  }
+
+  async function runPlan(): Promise<void> {
+    const goal = draft.trim()
+    if (goal === '' || planRun?.status === 'running') {
+      return
+    }
+    const id = crypto.randomUUID()
+    setPlanRun({ id, plan: null, status: 'running' })
+    setDraft('')
+    const result = await window.pointstudio.agent.run({ id, goal })
+    if (!result.ok) {
+      setPlanRun({ id, plan: null, status: 'failed' })
+    }
   }
 
   async function createAssistant(): Promise<void> {
@@ -269,6 +313,14 @@ export default function ChatPanel() {
           <button
             className="chat__assistant-new"
             type="button"
+            onClick={() => void runPlan()}
+            disabled={draft.trim() === '' || planRun?.status === 'running'}
+          >
+            🧭 计划
+          </button>
+          <button
+            className="chat__assistant-new"
+            type="button"
             onClick={() => setWorkspaceOpen((value) => !value)}
           >
             📁 工作区
@@ -283,6 +335,14 @@ export default function ChatPanel() {
           <span className="chat__hint">{hint}</span>
           {error ? <span className="chat__error">{error}</span> : null}
         </header>
+
+        {planRun?.plan ? (
+          <PlanPanel
+            plan={planRun.plan}
+            status={planRun.status}
+            onClose={() => setPlanRun(null)}
+          />
+        ) : null}
 
         {workspaceOpen ? <WorkspacePanel onClose={() => setWorkspaceOpen(false)} /> : null}
 

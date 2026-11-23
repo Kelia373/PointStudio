@@ -28,6 +28,10 @@ import {
   type PointStudioApi,
   SETTINGS_CHANNELS,
   WORKSPACE_CHANNELS,
+  AGENT_CHANNELS,
+  type AgentBridge,
+  type AgentEventDto,
+  type AgentRunRequest,
   type WorkspaceBridge,
   type WorkspaceFileDto,
   type ProviderSettingsDraftRequest,
@@ -114,13 +118,21 @@ const workspace: WorkspaceBridge = {
     ipcRenderer.invoke(WORKSPACE_CHANNELS.remove, id) as Promise<IpcResult<true>>
 }
 
+const agent: AgentBridge = {
+  run: (request: AgentRunRequest): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(AGENT_CHANNELS.run, request) as Promise<IpcResult<true>>,
+  onEvent: (listener: (event: AgentEventDto) => void): Unsubscribe =>
+    subscribe(AGENT_CHANNELS.event, listener)
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
   conversations,
   assistants,
   settings,
-  workspace
+  workspace,
+  agent
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)
