@@ -10,6 +10,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node tests/js/all.test.ts",
     "docs:index": "node scripts/gen-doc-index.mjs",
     "docs:index:check": "node scripts/gen-doc-index.mjs --check"
   },
