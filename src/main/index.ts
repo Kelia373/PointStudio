@@ -1,6 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { DeepSeekProvider } from './ai/providers/deepseek.ts'
@@ -13,6 +13,7 @@ import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
 import { registerSettingsIpc } from './ipc/settings.ts'
 import { registerWorkspaceIpc } from './ipc/workspace.ts'
+import { recordCrash } from './services/crashLogService.ts'
 import { WorkspaceImportService } from './services/workspaceImportService.ts'
 import { WorkspaceService } from './services/workspaceService.ts'
 import { searchWorkspaceFiles } from './services/retrievalService.ts'
@@ -94,8 +95,49 @@ function buildServices(): Services {
   }
 }
 
+/**
+ * 崩溃落盘：写 userData/crash/ 并轮转。
+ * 只在本机，不外传——个人版的红线。
+ */
+function installCrashRecorder(dataDir: string): (error: Error, context?: Record<string, unknown>) => void {
+  const crashDir = join(dataDir, 'crash')
+  const env = {
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    electronVersion: process.versions.electron
+  }
+
+  return (error, context = {}) => {
+    void (async () => {
+      try {
+        await mkdir(crashDir, { recursive: true })
+        await recordCrash(error, context, {
+          now: () => new Date().toISOString(),
+          env,
+          writeFile: (name, content) => writeFile(join(crashDir, name), content, 'utf8'),
+          listFiles: () => readdir(crashDir),
+          removeFile: (name) => rm(join(crashDir, name), { force: true })
+        })
+      } catch {
+        // 连崩溃日志都写不下去时，只能放弃——不能让它再抛一次。
+        console.error('[crash] 记录失败')
+      }
+    })()
+  }
+}
+
 void app.whenReady().then(async () => {
   const services = buildServices()
+
+  // 主进程未捕获异常落盘；宿主进程不可用时不阻断启动。
+  const recordCrashToDisk = installCrashRecorder(app.getPath('userData'))
+  process.on('uncaughtException', (error) => recordCrashToDisk(error, { source: 'main' }))
+  process.on('unhandledRejection', (reason) =>
+    recordCrashToDisk(reason instanceof Error ? reason : new Error(String(reason)), {
+      source: 'main'
+    })
+  )
 
   // 凭据优先级：设置界面保存过的 > 环境变量 > 默认（无 Key 时走本地假流式）。
   const savedSettings = await services.settings.read()
