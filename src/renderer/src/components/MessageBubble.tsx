@@ -10,7 +10,8 @@ export default function MessageBubble({
   references = [],
   onCopy,
   onDelete,
-  onResend
+  onResend,
+  onReference
 }: {
   role: BubbleRole
   content: string
@@ -21,6 +22,7 @@ export default function MessageBubble({
   onDelete?: () => void
   /** 只有用户消息能「重发」。 */
   onResend?: () => void
+  onReference?: (chunkId: string) => void
 }) {
   return (
     <div className={`bubble bubble--${role}${failed ? ' bubble--failed' : ''}`}>
@@ -49,7 +51,24 @@ export default function MessageBubble({
 
       {references.length > 0 ? (
         <div className="bubble__refs">
-          引用：{references.map((item) => item.source).join('、')}
+          引用：
+          {references.map((item, index) => (
+            <span key={`${item.chunkId}-${index}`}>
+              {index > 0 ? '、' : ''}
+              {onReference ? (
+                <button
+                  className="bubble__ref-link"
+                  type="button"
+                  title={`查看 ${item.source} 的原文片段`}
+                  onClick={() => onReference(item.chunkId)}
+                >
+                  {item.source}
+                </button>
+              ) : (
+                item.source
+              )}
+            </span>
+          ))}
         </div>
       ) : null}
     </div>

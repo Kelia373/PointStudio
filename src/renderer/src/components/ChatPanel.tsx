@@ -38,6 +38,11 @@ export default function ChatPanel() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [assistantPanelOpen, setAssistantPanelOpen] = useState(false)
+  const [chunkPreview, setChunkPreview] = useState<{
+    path: string
+    index: number
+    text: string
+  } | null>(null)
   const [planRun, setPlanRun] = useState<{
     id: string
     plan: PlanViewDto | null
@@ -247,6 +252,16 @@ export default function ChatPanel() {
     setInfo('已复制 Markdown 到剪贴板')
   }
 
+  async function openReference(chunkId: string): Promise<void> {
+    const result = await window.pointstudio.workspace.readChunk(chunkId)
+    if (!result.ok) {
+      setError(describeError(result.code))
+      return
+    }
+    setError(null)
+    setChunkPreview(result.value)
+  }
+
   async function copyText(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text)
@@ -450,6 +465,7 @@ export default function ChatPanel() {
                 streaming={message.status === 'streaming'}
                 failed={message.status === 'error'}
                 references={message.references}
+                onReference={(chunkId) => void openReference(chunkId)}
                 onCopy={() => void copyText(message.content)}
                 onDelete={() => void removeTurn(message.id)}
                 {...(message.role === 'user'
@@ -459,6 +475,24 @@ export default function ChatPanel() {
             ))
           )}
         </div>
+
+        {chunkPreview ? (
+          <div className="chunk-preview">
+            <div className="chunk-preview__head">
+              <span className="chunk-preview__path">
+                {chunkPreview.path} · 第 {chunkPreview.index + 1} 段
+              </span>
+              <button
+                className="chunk-preview__close"
+                type="button"
+                onClick={() => setChunkPreview(null)}
+              >
+                关闭
+              </button>
+            </div>
+            <pre className="chunk-preview__text">{chunkPreview.text}</pre>
+          </div>
+        ) : null}
 
         <form
           className="chat__composer"

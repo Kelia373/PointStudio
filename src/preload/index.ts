@@ -132,7 +132,13 @@ const workspace: WorkspaceBridge = {
   pickAndImport: (): Promise<IpcResult<WorkspaceFileDto>> =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.pickAndImport) as Promise<IpcResult<WorkspaceFileDto>>,
   remove: (id: string): Promise<IpcResult<true>> =>
-    ipcRenderer.invoke(WORKSPACE_CHANNELS.remove, id) as Promise<IpcResult<true>>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.remove, id) as Promise<IpcResult<true>>,
+  readChunk: (
+    chunkId: string
+  ): Promise<IpcResult<{ path: string; index: number; text: string }>> =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.readChunk, chunkId) as Promise<
+      IpcResult<{ path: string; index: number; text: string }>
+    >
 }
 
 const agent: AgentBridge = {

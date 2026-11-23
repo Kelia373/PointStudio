@@ -254,6 +254,7 @@ export const WORKSPACE_CHANNELS = {
   list: 'workspace:list',
   import: 'workspace:import',
   pickAndImport: 'workspace:pick-and-import',
+  readChunk: 'workspace:read-chunk',
   remove: 'workspace:remove'
 } as const
 
@@ -270,6 +271,8 @@ export interface WorkspaceBridge {
   importPath(absolutePath: string): Promise<IpcResult<WorkspaceFileDto>>
   /** 弹系统文件选择框并导入；用户取消返回 E_CANCELLED。 */
   pickAndImport(): Promise<IpcResult<WorkspaceFileDto>>
+  /** 按引用里的 `path#index` 取回原文片段（点击引用时用）。 */
+  readChunk(chunkId: string): Promise<IpcResult<{ path: string; index: number; text: string }>>
   remove(id: string): Promise<IpcResult<true>>
 }
 

@@ -176,7 +176,11 @@ void app.whenReady().then(async () => {
 
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
   registerConversationIpc({ conversations: services.conversations })
-  registerWorkspaceIpc({ workspace: services.workspace, importer: services.importer })
+  registerWorkspaceIpc({
+    workspace: services.workspace,
+    importer: services.importer,
+    readStoredFile: (relativePath) => readFile(join(services.workspaceRoot, relativePath), 'utf8')
+  })
   registerBackupIpc({ backup: services.backup })
 
   // 工具注册表：内置只读工具 + 工作区读取。MCP 工具待传输层落地后再注册。

@@ -717,3 +717,53 @@ body {
 .settings__row--backup .settings__label {
   flex: 0 0 64px;
 }
+
+.bubble__ref-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: #5b7bc0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.chunk-preview {
+  border-top: 1px solid #f0f0f0;
+  background: #fbfcfe;
+  padding: 10px 20px 12px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.chunk-preview__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.chunk-preview__path {
+  flex: 1;
+  font-size: 12px;
+  color: #8a8a8a;
+}
+
+.chunk-preview__close {
+  border: 1px solid #dcdcdc;
+  background: #fff;
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chunk-preview__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #333;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+}
