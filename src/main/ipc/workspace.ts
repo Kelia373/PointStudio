@@ -2,7 +2,7 @@
 //
 // 渲染进程只能给一个绝对路径（拖拽拿到的），读源、落盘、登记都在主进程做：
 // 界面永远不直接碰文件系统。
-import { ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain } from 'electron'
 
 import {
   WORKSPACE_CHANNELS,
@@ -42,6 +42,24 @@ export function registerWorkspaceIpc(options: WorkspaceIpcOptions): void {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await options.importer.importFromPath(absolutePath)
+      return result.ok
+        ? { ok: true, value: toDto(result.value) }
+        : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
+  ipcMain.handle(
+    WORKSPACE_CHANNELS.pickAndImport,
+    async (event): Promise<IpcResult<WorkspaceFileDto>> => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+      const options_ = { title: '导入到工作区', properties: ['openFile' as const] }
+      const picked = window
+        ? await dialog.showOpenDialog(window, options_)
+        : await dialog.showOpenDialog(options_)
+      if (picked.canceled || picked.filePaths.length === 0) {
+        return { ok: false, code: 'E_CANCELLED' }
+      }
+      const result = await options.importer.importFromPath(picked.filePaths[0])
       return result.ok
         ? { ok: true, value: toDto(result.value) }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AssistantDto, ChatMode, ConversationDto } from '../../../shared/types/ipc.ts'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
+import WorkspacePanel from './WorkspacePanel'
 import MessageBubble, { type BubbleRole } from './MessageBubble'
 
 /** 界面侧的消息形态：比持久化多一个「正在流式」的中间状态。 */
@@ -30,6 +31,7 @@ export default function ChatPanel() {
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
   const [drafting, setDrafting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
 
@@ -265,6 +267,13 @@ export default function ChatPanel() {
           <button
             className="chat__assistant-new"
             type="button"
+            onClick={() => setWorkspaceOpen((value) => !value)}
+          >
+            📁 工作区
+          </button>
+          <button
+            className="chat__assistant-new"
+            type="button"
             onClick={() => setSettingsOpen((value) => !value)}
           >
             ⚙ 设置
@@ -272,6 +281,8 @@ export default function ChatPanel() {
           <span className="chat__hint">{hint}</span>
           {error ? <span className="chat__error">{error}</span> : null}
         </header>
+
+        {workspaceOpen ? <WorkspacePanel onClose={() => setWorkspaceOpen(false)} /> : null}
 
         {settingsOpen ? <SettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
 

@@ -108,6 +108,8 @@ const workspace: WorkspaceBridge = {
     ipcRenderer.invoke(WORKSPACE_CHANNELS.list) as Promise<WorkspaceFileDto[]>,
   importPath: (absolutePath: string): Promise<IpcResult<WorkspaceFileDto>> =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.import, absolutePath) as Promise<IpcResult<WorkspaceFileDto>>,
+  pickAndImport: (): Promise<IpcResult<WorkspaceFileDto>> =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.pickAndImport) as Promise<IpcResult<WorkspaceFileDto>>,
   remove: (id: string): Promise<IpcResult<true>> =>
     ipcRenderer.invoke(WORKSPACE_CHANNELS.remove, id) as Promise<IpcResult<true>>
 }

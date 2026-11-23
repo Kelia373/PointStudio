@@ -165,6 +165,7 @@ export interface AssistantBridge {
 export const WORKSPACE_CHANNELS = {
   list: 'workspace:list',
   import: 'workspace:import',
+  pickAndImport: 'workspace:pick-and-import',
   remove: 'workspace:remove'
 } as const
 
@@ -179,6 +180,8 @@ export interface WorkspaceBridge {
   list(): Promise<WorkspaceFileDto[]>
   /** 传入从系统拿到的绝对路径；落盘与登记都在主进程完成。 */
   importPath(absolutePath: string): Promise<IpcResult<WorkspaceFileDto>>
+  /** 弹系统文件选择框并导入；用户取消返回 E_CANCELLED。 */
+  pickAndImport(): Promise<IpcResult<WorkspaceFileDto>>
   remove(id: string): Promise<IpcResult<true>>
 }
 
