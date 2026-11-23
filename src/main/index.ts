@@ -2,19 +2,19 @@ import { app, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 
-import {
-  DeepSeekProvider,
-  DEEPSEEK_DEFAULT_BASE_URL,
-  DEEPSEEK_DEFAULT_MODEL
-} from './ai/providers/deepseek.ts'
+import { DeepSeekProvider } from './ai/providers/deepseek.ts'
 import type { Assistant } from './ai/domain/assistant.ts'
 import type { Conversation, Message } from './ai/domain/conversation.ts'
+import { resolveProviderConfig, type ProviderSettings } from './ai/domain/providerSettings.ts'
 import { JsonFileStore } from './data/fileStore.ts'
 import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
+import { registerSettingsIpc } from './ipc/settings.ts'
 import { AssistantService } from './services/assistantService.ts'
+import type { ChatEngineDeps } from './services/chatEngine.ts'
 import { ConversationService } from './services/conversationService.ts'
+import { ProviderSettingsService } from './services/providerSettingsService.ts'
 
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
 // 它是组合根：负责把内核目录接起来（注册通道、注入存储与凭据），但自己不含业务逻辑。
@@ -42,45 +42,74 @@ function createWindow(): void {
   }
 }
 
+interface Services {
+  conversations: ConversationService
+  assistants: AssistantService
+  settings: ProviderSettingsService
+  settingsFilePath: string
+}
+
 /** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
-function buildServices(): { conversations: ConversationService; assistants: AssistantService } {
+function buildServices(): Services {
   const dataDir = app.getPath('userData')
   const deps = { newId: () => randomUUID(), now: () => new Date().toISOString() }
+  const settingsFilePath = join(dataDir, 'provider.json')
+
   return {
-    conversations: buildConversationService(dataDir),
-    assistants: new AssistantService(
-      new JsonFileStore<Assistant>(join(dataDir, 'assistants.json')),
+    conversations: new ConversationService(
+      new JsonFileStore<Conversation>(join(dataDir, 'conversations.json')),
+      new JsonFileStore<Message>(join(dataDir, 'messages.json')),
       deps
-    )
+    ),
+    assistants: new AssistantService(new JsonFileStore<Assistant>(join(dataDir, 'assistants.json')), deps),
+    settings: new ProviderSettingsService(new JsonFileStore<ProviderSettings>(settingsFilePath), {
+      now: () => new Date().toISOString()
+    }),
+    settingsFilePath
   }
 }
 
-function buildConversationService(dataDir: string): ConversationService {
-  return new ConversationService(
-    new JsonFileStore<Conversation>(join(dataDir, 'conversations.json')),
-    new JsonFileStore<Message>(join(dataDir, 'messages.json')),
-    { newId: () => randomUUID(), now: () => new Date().toISOString() }
-  )
-}
+void app.whenReady().then(async () => {
+  const services = buildServices()
 
-void app.whenReady().then(() => {
+  // 凭据优先级：设置界面保存过的 > 环境变量 > 默认（无 Key 时走本地假流式）。
+  const savedSettings = await services.settings.read()
+  const envConfig = {
+    apiKey: process.env.DEEPSEEK_API_KEY ?? null,
+    baseUrl: process.env.DEEPSEEK_BASE_URL ?? null,
+    model: process.env.DEEPSEEK_MODEL ?? null
+  }
+  const resolved = resolveProviderConfig(savedSettings, envConfig)
+  if (resolved.source === 'env') {
+    console.info('[settings] 未保存凭据，使用环境变量中的模型配置')
+  }
+
+  // 引擎依赖是可变对象：设置里保存新凭据后原地替换，用户不必重启应用。
+  const engine: ChatEngineDeps = {
+    provider: new DeepSeekProvider(),
+    apiKey: resolved.apiKey,
+    baseUrl: resolved.baseUrl,
+    model: resolved.model
+  }
+
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
-  const { conversations, assistants } = buildServices()
-
-  registerConversationIpc({ conversations })
-  registerAssistantIpc({ assistants })
-  registerChatIpc({
-    conversations,
-    assistants,
-    engine: {
-      provider: new DeepSeekProvider(),
-      // 凭据只从进程环境读取：不落盘、不进仓库、不出现在任何提交里。
-      // 设置界面做好之后，这里改成从 settings 服务注入。
-      apiKey: process.env.DEEPSEEK_API_KEY ?? null,
-      baseUrl: process.env.DEEPSEEK_BASE_URL ?? DEEPSEEK_DEFAULT_BASE_URL,
-      model: process.env.DEEPSEEK_MODEL ?? DEEPSEEK_DEFAULT_MODEL
+  registerConversationIpc({ conversations: services.conversations })
+  registerAssistantIpc({ assistants: services.assistants })
+  registerSettingsIpc({
+    settings: services.settings,
+    onChange: (next) => {
+      const applied = resolveProviderConfig(next, envConfig)
+      engine.apiKey = applied.apiKey
+      engine.baseUrl = applied.baseUrl
+      engine.model = applied.model
     }
   })
+  registerChatIpc({
+    conversations: services.conversations,
+    assistants: services.assistants,
+    engine
+  })
+
   createWindow()
 
   // macOS：点 dock 图标且没有窗口时重开一个。

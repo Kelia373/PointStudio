@@ -157,4 +157,35 @@ export interface PointStudioApi {
   chat: ChatBridge
   conversations: ConversationBridge
   assistants: AssistantBridge
+  settings: SettingsBridge
+}
+
+
+// ---------------------------------------------------------------- 设置
+
+export const SETTINGS_CHANNELS = {
+  readProvider: 'settings:read-provider',
+  saveProvider: 'settings:save-provider',
+  clearProvider: 'settings:clear-provider'
+} as const
+
+/** 跨进程视图：只有脱敏 Key，明文永不出主进程。 */
+export interface ProviderSettingsViewDto {
+  hasKey: boolean
+  maskedKey: string
+  baseUrl: string
+  model: string
+  updatedAt: string | null
+}
+
+export interface ProviderSettingsDraftRequest {
+  apiKey: string
+  baseUrl?: string
+  model?: string
+}
+
+export interface SettingsBridge {
+  readProvider(): Promise<ProviderSettingsViewDto>
+  saveProvider(request: ProviderSettingsDraftRequest): Promise<IpcResult<ProviderSettingsViewDto>>
+  clearProvider(): Promise<IpcResult<true>>
 }

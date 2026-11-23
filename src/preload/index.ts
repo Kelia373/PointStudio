@@ -24,7 +24,11 @@ import {
   type CreateConversationRequest,
   type IpcResult,
   type MessageDto,
-  type PointStudioApi
+  type PointStudioApi,
+  SETTINGS_CHANNELS,
+  type ProviderSettingsDraftRequest,
+  type ProviderSettingsViewDto,
+  type SettingsBridge
 } from '../shared/types/ipc.ts'
 
 type Unsubscribe = () => void
@@ -82,11 +86,23 @@ const assistants: AssistantBridge = {
     ipcRenderer.invoke(ASSISTANT_CHANNELS.remove, id) as Promise<IpcResult<true>>
 }
 
+const settings: SettingsBridge = {
+  readProvider: (): Promise<ProviderSettingsViewDto> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.readProvider) as Promise<ProviderSettingsViewDto>,
+  saveProvider: (request: ProviderSettingsDraftRequest): Promise<IpcResult<ProviderSettingsViewDto>> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.saveProvider, request) as Promise<
+      IpcResult<ProviderSettingsViewDto>
+    >,
+  clearProvider: (): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(SETTINGS_CHANNELS.clearProvider) as Promise<IpcResult<true>>
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
   conversations,
-  assistants
+  assistants,
+  settings
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)
