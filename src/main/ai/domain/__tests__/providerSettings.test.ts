@@ -137,3 +137,44 @@ test('resolveProviderConfig 带出平台，且设置优先于环境变量', () =
   assert.equal(fallback.providerId, 'deepseek')
   assert.equal(fallback.source, 'env')
 })
+
+test('采样参数可保存并带回；缺省则不出现', () => {
+  const withParams = validateSettings({ apiKey: 'k', params: { temperature: 0.2, maxTokens: 512 } })
+  assert.equal(withParams.ok, true)
+  if (withParams.ok) {
+    assert.equal(withParams.value.params?.temperature, 0.2)
+    assert.equal(withParams.value.params?.maxTokens, 512)
+    assert.equal(withParams.value.params?.topP, undefined)
+  }
+
+  const without = validateSettings({ apiKey: 'k' })
+  assert.equal(without.ok, true)
+  if (without.ok) {
+    assert.equal(without.value.params, undefined, '没填就不该凭空造一份默认值')
+  }
+})
+
+test('采样参数越界被拒绝', () => {
+  for (const params of [
+    { temperature: 3 },
+    { temperature: -1 },
+    { topP: 1.5 },
+    { maxTokens: 0 },
+    { maxTokens: 12.5 },
+    { maxTokens: 999999 }
+  ]) {
+    const result = validateSettings({ apiKey: 'k', params })
+    assert.equal(result.ok, false, JSON.stringify(params))
+    if (!result.ok) {
+      assert.ok(result.errors.includes('E_PARAM_RANGE'))
+    }
+  }
+})
+
+test('resolveProviderConfig 带出采样参数', () => {
+  const resolved = resolveProviderConfig(
+    { id: 'deepseek', apiKey: 'k', baseUrl: 'https://x.example', model: 'm', params: { temperature: 0.3 } },
+    {}
+  )
+  assert.equal(resolved.params?.temperature, 0.3)
+})

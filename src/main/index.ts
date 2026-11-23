@@ -165,6 +165,7 @@ void app.whenReady().then(async () => {
   // 引擎依赖是可变对象：设置里保存新凭据后原地替换，用户不必重启应用。
   const engine: ChatEngineDeps = {
     provider: createProvider(resolved.providerId),
+    params: resolved.params,
     apiKey: resolved.apiKey,
     baseUrl: resolved.baseUrl,
     model: resolved.model
@@ -188,6 +189,7 @@ void app.whenReady().then(async () => {
     onChange: (next) => {
       const applied = resolveProviderConfig(next, envConfig)
       engine.provider = createProvider(applied.providerId)
+      engine.params = applied.params
       engine.apiKey = applied.apiKey
       engine.baseUrl = applied.baseUrl
       engine.model = applied.model

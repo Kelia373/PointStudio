@@ -263,8 +263,15 @@ export const SETTINGS_CHANNELS = {
 /** 跨进程视图：只有脱敏 Key，明文永不出主进程。 */
 export type ProviderIdDto = 'deepseek' | 'ollama'
 
+export interface ProviderParamsDto {
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+}
+
 export interface ProviderSettingsViewDto {
   providerId: ProviderIdDto
+  params: ProviderParamsDto
   hasKey: boolean
   maskedKey: string
   baseUrl: string
@@ -274,6 +281,7 @@ export interface ProviderSettingsViewDto {
 
 export interface ProviderSettingsDraftRequest {
   providerId?: ProviderIdDto
+  params?: ProviderParamsDto
   apiKey?: string
   baseUrl?: string
   model?: string

@@ -32,7 +32,50 @@ export interface ProviderSettings {
   apiKey: string
   baseUrl: string
   model: string
+  /** 采样参数；没填过就是 undefined，不凭空造默认值。 */
+  params?: ProviderParams
   updatedAt: string
+}
+
+/** 与助手的 ModelParams 同区间，避免两套规则打架。 */
+export interface ProviderParams {
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+}
+
+const PARAM_LIMITS = {
+  temperature: { min: 0, max: 2 },
+  topP: { min: 0, max: 1 },
+  maxTokens: { min: 1, max: 32_000 }
+} as const
+
+function validateParams(raw: ProviderParams | undefined): string[] {
+  if (!raw) {
+    return []
+  }
+  const errors: string[] = []
+  const { temperature, topP, maxTokens } = raw
+
+  if (temperature !== undefined) {
+    const { min, max } = PARAM_LIMITS.temperature
+    if (!Number.isFinite(temperature) || temperature < min || temperature > max) {
+      errors.push('E_PARAM_RANGE')
+    }
+  }
+  if (topP !== undefined) {
+    const { min, max } = PARAM_LIMITS.topP
+    if (!Number.isFinite(topP) || topP < min || topP > max) {
+      errors.push('E_PARAM_RANGE')
+    }
+  }
+  if (maxTokens !== undefined) {
+    const { min, max } = PARAM_LIMITS.maxTokens
+    if (!Number.isInteger(maxTokens) || maxTokens < min || maxTokens > max) {
+      errors.push('E_PARAM_RANGE')
+    }
+  }
+  return errors
 }
 
 /** 用户输入形态，允许只改其中几项。 */
@@ -41,11 +84,13 @@ export interface ProviderSettingsDraft {
   apiKey?: string
   baseUrl?: string
   model?: string
+  params?: ProviderParams
 }
 
 /** 对外视图：绝不含明文 Key。 */
 export interface ProviderSettingsView {
   providerId: ProviderId
+  params: ProviderParams
   hasKey: boolean
   maskedKey: string
   baseUrl: string
@@ -55,6 +100,7 @@ export interface ProviderSettingsView {
 
 export interface ResolvedProviderConfig {
   providerId: ProviderId
+  params?: ProviderParams
   apiKey: string | null
   baseUrl: string
   model: string
@@ -90,6 +136,7 @@ export function validateSettings(
   apiKey: string
   baseUrl: string
   model: string
+  params?: ProviderParams
 }> {
   const errors: string[] = []
   const providerId = (draft.providerId ?? DEFAULT_PROVIDER_ID) as ProviderId
@@ -110,10 +157,22 @@ export function validateSettings(
 
   const model = (draft.model ?? '').trim() || defaults.model
 
+  const paramErrors = validateParams(draft.params)
+  errors.push(...paramErrors)
+
   if (errors.length > 0) {
     return { ok: false, errors }
   }
-  return { ok: true, value: { providerId, apiKey, baseUrl, model } }
+  return {
+    ok: true,
+    value: {
+      providerId,
+      apiKey,
+      baseUrl,
+      model,
+      ...(draft.params ? { params: { ...draft.params } } : {})
+    }
+  }
 }
 
 /**
@@ -137,7 +196,13 @@ export function maskApiKey(apiKey: string): string {
  * （既能免去每次手填，也保证「没配任何东西」时仍然能跑通本地假流式）。
  */
 export function resolveProviderConfig(
-  settings: { id: ProviderId; apiKey: string; baseUrl: string; model: string } | null,
+  settings: {
+    id: ProviderId
+    apiKey: string
+    baseUrl: string
+    model: string
+    params?: ProviderParams
+  } | null,
   env: { apiKey?: string | null; baseUrl?: string | null; model?: string | null }
 ): ResolvedProviderConfig {
   if (settings) {
@@ -148,6 +213,7 @@ export function resolveProviderConfig(
       const defaults = PROVIDER_DEFAULTS[settings.id]
       return {
         providerId: settings.id,
+        ...(settings.params ? { params: settings.params } : {}),
         apiKey: settings.apiKey,
         baseUrl: settings.baseUrl || defaults.baseUrl,
         model: settings.model || defaults.model,

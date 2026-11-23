@@ -41,6 +41,7 @@ export class ProviderSettingsService {
     if (!current) {
       return {
         providerId: DEFAULT_PROVIDER_ID,
+        params: {},
         hasKey: false,
         maskedKey: '',
         baseUrl: DEFAULT_BASE_URL,
@@ -50,6 +51,7 @@ export class ProviderSettingsService {
     }
     return {
       providerId: current.id,
+      params: { ...(current.params ?? {}) },
       hasKey: current.apiKey !== '',
       maskedKey: maskApiKey(current.apiKey),
       baseUrl: current.baseUrl,

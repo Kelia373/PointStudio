@@ -3,12 +3,15 @@
 // 放在 services 而不是 ipc：这是业务选择（有凭据就真的调模型，没有就降级），
 // 不是协议细节。ipc 层只负责把它接到通道上。
 import type { ChatProvider, ChatStreamParams } from '../ai/providers/types.ts'
+import type { ProviderParams } from '../ai/domain/providerSettings.ts'
 import type { ContextMessage } from '../ai/domain/context.ts'
 import type { ChatMode } from '../../shared/types/ipc.ts'
 import { buildReplyChunks } from './chatReply.ts'
 
 export interface ChatEngineDeps {
   provider: ChatProvider
+  /** 平台默认采样参数；单次调用可用 ReplyOptions.params 覆盖。 */
+  params?: ProviderParams
   /** null / 空串表示没有可用凭据，走本地假回复。 */
   apiKey: string | null
   baseUrl: string
@@ -78,6 +81,7 @@ export async function* streamReplyText(
     baseUrl: deps.baseUrl,
     model: options.model?.trim() ? options.model : deps.model,
     messages,
-    params: options.params
+    // 单次覆盖优先，其次平台默认。params 里的 undefined 不影响对方默认值。
+    params: options.params ?? deps.params
   })
 }

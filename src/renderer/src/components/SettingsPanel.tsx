@@ -12,6 +12,9 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
+  const [temperature, setTemperature] = useState('')
+  const [maxTokens, setMaxTokens] = useState('')
+  const [topP, setTopP] = useState('')
   const [message, setMessage] = useState<string | null>(null)
 
   useEffect(() => {
@@ -21,15 +24,32 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
       setProviderId(current.providerId)
       setModel(current.model)
       setBaseUrl(current.baseUrl)
+      setTemperature(current.params.temperature === undefined ? '' : String(current.params.temperature))
+      setMaxTokens(current.params.maxTokens === undefined ? '' : String(current.params.maxTokens))
+      setTopP(current.params.topP === undefined ? '' : String(current.params.topP))
     })()
   }, [])
 
   async function save(): Promise<void> {
+    // 空输入表示「不设置」，不要变成 0（0 会被判成越界）。
+    const toNumber = (text: string): number | undefined => {
+      const trimmed = text.trim()
+      if (trimmed === '') {
+        return undefined
+      }
+      const value = Number(trimmed)
+      return Number.isFinite(value) ? value : undefined
+    }
     const saved = await window.pointstudio.settings.saveProvider({
       providerId,
       apiKey,
       model: model.trim() === '' ? undefined : model.trim(),
-      baseUrl: baseUrl.trim() === '' ? undefined : baseUrl.trim()
+      baseUrl: baseUrl.trim() === '' ? undefined : baseUrl.trim(),
+      params: {
+        temperature: toNumber(temperature),
+        maxTokens: toNumber(maxTokens),
+        topP: toNumber(topP)
+      }
     })
     if (!saved.ok) {
       setMessage(saved.code)
@@ -110,6 +130,45 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           value={baseUrl}
           placeholder="https://api.deepseek.com"
           onChange={(event) => setBaseUrl(event.target.value)}
+        />
+      </div>
+
+      <div className="settings__row">
+        <label className="settings__label" htmlFor="settings-temp">
+          温度
+        </label>
+        <input
+          id="settings-temp"
+          className="settings__input"
+          value={temperature}
+          placeholder="0 ~ 2，留空用平台默认"
+          onChange={(event) => setTemperature(event.target.value)}
+        />
+      </div>
+
+      <div className="settings__row">
+        <label className="settings__label" htmlFor="settings-max">
+          最大 token
+        </label>
+        <input
+          id="settings-max"
+          className="settings__input"
+          value={maxTokens}
+          placeholder="1 ~ 32000，留空用平台默认"
+          onChange={(event) => setMaxTokens(event.target.value)}
+        />
+      </div>
+
+      <div className="settings__row">
+        <label className="settings__label" htmlFor="settings-topp">
+          top_p
+        </label>
+        <input
+          id="settings-topp"
+          className="settings__input"
+          value={topP}
+          placeholder="0 ~ 1，留空用平台默认"
+          onChange={(event) => setTopP(event.target.value)}
         />
       </div>
 

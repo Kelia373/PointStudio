@@ -22,7 +22,14 @@ function isDraft(value: unknown): value is ProviderSettingsDraftRequest {
     (input.apiKey === undefined || typeof input.apiKey === 'string') &&
     (input.providerId === undefined || input.providerId === 'deepseek' || input.providerId === 'ollama') &&
     (input.baseUrl === undefined || typeof input.baseUrl === 'string') &&
-    (input.model === undefined || typeof input.model === 'string')
+    (input.model === undefined || typeof input.model === 'string') &&
+    (input.params === undefined ||
+      (typeof input.params === 'object' &&
+        input.params !== null &&
+        ['temperature', 'maxTokens', 'topP'].every((key) => {
+          const value = (input.params as Record<string, unknown>)[key]
+          return value === undefined || typeof value === 'number'
+        })))
   )
 }
 

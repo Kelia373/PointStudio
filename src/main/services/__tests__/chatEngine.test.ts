@@ -164,3 +164,19 @@ test('平台声明不需要 Key 时，即使没配 Key 也走真模型', async (
   await collect(streamReplyText('你好', { ...base, apiKey: null }))
   assert.equal(seen.called, true, '应当真的调用 provider')
 })
+
+test('引擎把默认参数传给 provider', async () => {
+  const spy: { request?: ChatStreamRequest } = {}
+  await collect(
+    streamReplyText('问题', {
+      provider: makeProvider(['x'], spy),
+      apiKey: 'k',
+      baseUrl: 'b',
+      model: 'm',
+      params: { temperature: 0.25, maxTokens: 256 }
+    })
+  )
+
+  assert.equal(spy.request?.params?.temperature, 0.25)
+  assert.equal(spy.request?.params?.maxTokens, 256)
+})
