@@ -30,4 +30,4 @@
 
 ## 现状
 
-空壳。依据 [ADR 0002](../../docs/adr/0002-技术栈选型与双版本架构.md)。
+已有 `paths.ts`：数据文件路径注册表（`conversations.json` / `messages.json` / `assistants.json` / `provider.json` / `workspace.json` / `workspace/` / `crash/`）。这些文件名是事实上的数据契约——改名等于让旧数据消失，因此集中一处并有测试锁住。其余子模块（lifecycle / logger / window / scheduler / security）仍为空壳。

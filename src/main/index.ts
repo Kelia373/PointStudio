@@ -11,6 +11,7 @@ import type { Assistant } from './ai/domain/assistant.ts'
 import type { Conversation, Message } from './ai/domain/conversation.ts'
 import { resolveProviderConfig, type ProviderSettings } from './ai/domain/providerSettings.ts'
 import { JsonFileStore } from './data/fileStore.ts'
+import { buildDataPaths } from './core/paths.ts'
 import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
@@ -72,46 +73,42 @@ interface Services {
 
 /** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
 function buildServices(): Services {
-  const dataDir = app.getPath('userData')
+  const paths = buildDataPaths(app.getPath('userData'))
   const deps = { newId: () => randomUUID(), now: () => new Date().toISOString() }
-  const settingsFilePath = join(dataDir, 'provider.json')
 
-  const workspaceRoot = join(dataDir, 'workspace')
-  const workspace = new WorkspaceService(
-    new JsonFileStore<WorkspaceFile>(join(dataDir, 'workspace.json')),
-    deps
-  )
+  const workspace = new WorkspaceService(new JsonFileStore<WorkspaceFile>(paths.workspaceIndex), deps)
   const importer = new WorkspaceImportService(workspace, {
     readSource: (absolutePath) => readFile(absolutePath, 'utf8'),
     writeStored: async (relativePath, content) => {
-      await mkdir(workspaceRoot, { recursive: true })
-      await writeFile(join(workspaceRoot, relativePath), content, 'utf8')
+      await mkdir(paths.workspaceRoot, { recursive: true })
+      await writeFile(join(paths.workspaceRoot, relativePath), content, 'utf8')
     }
   })
 
   return {
-    workspace,
-    importer,
-    workspaceRoot,
     conversations: new ConversationService(
-      new JsonFileStore<Conversation>(join(dataDir, 'conversations.json')),
-      new JsonFileStore<Message>(join(dataDir, 'messages.json')),
+      new JsonFileStore<Conversation>(paths.conversations),
+      new JsonFileStore<Message>(paths.messages),
       deps
     ),
-    assistants: new AssistantService(new JsonFileStore<Assistant>(join(dataDir, 'assistants.json')), deps),
-    settings: new ProviderSettingsService(new JsonFileStore<ProviderSettings>(settingsFilePath), {
+    assistants: new AssistantService(new JsonFileStore<Assistant>(paths.assistants), deps),
+    settings: new ProviderSettingsService(new JsonFileStore<ProviderSettings>(paths.providerSettings), {
       now: () => new Date().toISOString()
     }),
-    settingsFilePath
+    settingsFilePath: paths.providerSettings,
+    workspace,
+    importer,
+    workspaceRoot: paths.workspaceRoot
   }
 }
 
 /**
- * 崩溃落盘：写 userData/crash/ 并轮转。
- * 只在本机，不外传——个人版的红线。
+ * 崩溃落盘：写 userData/crash/ 并轮转。只在本机，不外传——个人版红线。
  */
-function installCrashRecorder(dataDir: string): (error: Error, context?: Record<string, unknown>) => void {
-  const crashDir = join(dataDir, 'crash')
+function installCrashRecorder(
+  dataDir: string
+): (error: Error, context?: Record<string, unknown>) => void {
+  const crashDir = buildDataPaths(dataDir).crashDir
   const env = {
     appVersion: app.getVersion(),
     platform: process.platform,
@@ -131,7 +128,7 @@ function installCrashRecorder(dataDir: string): (error: Error, context?: Record<
           removeFile: (name) => rm(join(crashDir, name), { force: true })
         })
       } catch {
-        // 连崩溃日志都写不下去时，只能放弃——不能让它再抛一次。
+        // 连崩溃日志都写不下去时只能放弃——不能让它再抛一次。
         console.error('[crash] 记录失败')
       }
     })()
