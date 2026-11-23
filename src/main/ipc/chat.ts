@@ -12,13 +12,15 @@ import {
   type ChatErrorEvent,
   type ChatNoticeEvent,
   type ChatSendRequest,
-  type ChatSendResult
+  type ChatSendResult,
+  type IpcResult
 } from '../../shared/types/ipc.ts'
 import { ProviderError } from '../ai/providers/types.ts'
 import { REPLY_CHUNK_DELAY_MS } from '../services/chatReply.ts'
 import { resolveMode, type ChatEngineDeps } from '../services/chatEngine.ts'
 import type { SearchHit } from '../ai/domain/search.ts'
 import { streamAssistantReply, type AssistantLookup } from '../services/chatFlow.ts'
+import { StreamRegistry } from '../services/streamRegistry.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -59,13 +61,26 @@ export interface ChatIpcOptions {
 
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
 export function registerChatIpc(options: ChatIpcOptions): void {
+  // 在途流登记表：用户的「停止」要能找到对应的 AbortController。
+  const streams = new StreamRegistry()
+
   ipcMain.handle(CHAT_CHANNELS.send, (event, request: unknown): ChatSendResult => {
     if (!isChatSendRequest(request)) {
       return { ok: false, code: 'E_BAD_INPUT' }
     }
 
-    void streamReply(event.sender, request, options)
+    const handle = streams.create(request.id)
+    void streamReply(event.sender, request, options, handle.signal, () => streams.dispose(request.id))
     return { ok: true, mode: resolveMode(options.engine) }
+  })
+
+  ipcMain.handle(CHAT_CHANNELS.cancel, (_event, id: unknown): IpcResult<true> => {
+    if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+      return { ok: false, code: 'E_BAD_INPUT' }
+    }
+    // 命中与否都算成功：用户点停止时请求可能刚好结束。
+    streams.cancel(id)
+    return { ok: true, value: true }
   })
 }
 
@@ -73,7 +88,9 @@ export function registerChatIpc(options: ChatIpcOptions): void {
 async function streamReply(
   sender: WebContents,
   request: ChatSendRequest,
-  options: ChatIpcOptions
+  options: ChatIpcOptions,
+  signal: AbortSignal,
+  onSettled: () => void
 ): Promise<void> {
   const { id, conversationId, text } = request
   try {
@@ -81,6 +98,7 @@ async function streamReply(
       conversations: options.conversations,
       assistants: options.assistants,
       engine: options.engine,
+      signal,
       retrieval: options.retrieval,
       onContextTrimmed: (droppedCount) => {
         if (!sender.isDestroyed()) {
@@ -114,5 +132,7 @@ async function streamReply(
         code: toChatErrorCode(error)
       } satisfies ChatErrorEvent)
     }
+  } finally {
+    onSettled()
   }
 }

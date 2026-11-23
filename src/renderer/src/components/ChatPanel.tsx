@@ -27,6 +27,7 @@ export default function ChatPanel() {
   const [messages, setMessages] = useState<UiMessage[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  const [inflightId, setInflightId] = useState<string | null>(null)
   const [mode, setMode] = useState<ChatMode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -74,6 +75,7 @@ export default function ChatPanel() {
     const offDone = window.pointstudio.chat.onDone(({ id }) => {
       setMessages((prev) => markStatus(prev, id, 'complete'))
       setBusy(false)
+      setInflightId(null)
       // 落库完成，用磁盘上的版本覆盖界面。
       const current = activeIdRef.current
       if (current) {
@@ -107,6 +109,7 @@ export default function ChatPanel() {
     const offError = window.pointstudio.chat.onError(({ id, code }) => {
       setMessages((prev) => markStatus(prev, id, 'error', `（${describeError(code)}）`))
       setBusy(false)
+      setInflightId(null)
     })
 
     return () => {
@@ -167,6 +170,7 @@ export default function ChatPanel() {
       setDraft('')
     }
     setBusy(true)
+    setInflightId(requestId)
 
     const result = await window.pointstudio.chat.send({ id: requestId, conversationId, text })
     if (result.ok) {
@@ -175,6 +179,7 @@ export default function ChatPanel() {
     }
     setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
     setBusy(false)
+    setInflightId(null)
   }
 
   async function bindAssistant(assistantId: string): Promise<void> {
@@ -440,13 +445,23 @@ export default function ChatPanel() {
               }
             }}
           />
-          <button
-            className="chat__send"
-            type="submit"
-            disabled={busy || draft.trim() === '' || !activeId}
-          >
-            发送
-          </button>
+          {busy && inflightId ? (
+            <button
+              className="chat__send"
+              type="button"
+              onClick={() => void window.pointstudio.chat.cancel(inflightId)}
+            >
+              停止
+            </button>
+          ) : (
+            <button
+              className="chat__send"
+              type="submit"
+              disabled={busy || draft.trim() === '' || !activeId}
+            >
+              发送
+            </button>
+          )}
         </form>
       </section>
     </div>

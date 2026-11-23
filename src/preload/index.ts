@@ -56,6 +56,8 @@ function subscribe<TPayload>(
 const chat: ChatBridge = {
   send: (request: ChatSendRequest): Promise<ChatSendResult> =>
     ipcRenderer.invoke(CHAT_CHANNELS.send, request) as Promise<ChatSendResult>,
+  cancel: (id: string): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(CHAT_CHANNELS.cancel, id) as Promise<IpcResult<true>>,
   onChunk: (listener: (event: ChatChunkEvent) => void): Unsubscribe =>
     subscribe(CHAT_CHANNELS.chunk, listener),
   onDone: (listener: (event: ChatDoneEvent) => void): Unsubscribe =>

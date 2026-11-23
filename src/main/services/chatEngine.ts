@@ -27,6 +27,8 @@ export interface ReplyOptions {
   history?: ContextMessage[]
   /** 检索到的参考片段（已格式化）。非空时拼在本轮输入前面，并保留来源标注。 */
   references?: string
+  /** 中断信号：用户点「停止」时由外壳触发。 */
+  signal?: AbortSignal
 }
 
 /**
@@ -82,6 +84,7 @@ export async function* streamReplyText(
     model: options.model?.trim() ? options.model : deps.model,
     messages,
     // 单次覆盖优先，其次平台默认。params 里的 undefined 不影响对方默认值。
-    params: options.params ?? deps.params
+    params: options.params ?? deps.params,
+    signal: options.signal
   })
 }

@@ -180,3 +180,18 @@ test('引擎把默认参数传给 provider', async () => {
   assert.equal(spy.request?.params?.temperature, 0.25)
   assert.equal(spy.request?.params?.maxTokens, 256)
 })
+
+test('中断信号被透传给 provider', async () => {
+  const spy: { request?: ChatStreamRequest } = {}
+  const controller = new AbortController()
+
+  await collect(
+    streamReplyText(
+      '问题',
+      { provider: makeProvider(['x'], spy), apiKey: 'k', baseUrl: 'b', model: 'm' },
+      { signal: controller.signal }
+    )
+  )
+
+  assert.equal(spy.request?.signal, controller.signal, '取消要能到达 provider，否则停不下来')
+})

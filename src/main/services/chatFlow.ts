@@ -39,6 +39,8 @@ export interface ChatFlowDeps {
   retrieval?: { search(query: string): Promise<SearchHit[]> }
   /** 命中参考片段时回调，便于界面显示「引用了哪些文件」。 */
   onReferences?: (hits: SearchHit[]) => void
+  /** 用户中断信号。 */
+  signal?: AbortSignal
 }
 
 /** 把助手绑定翻译成引擎选项；助手不存在时返回空选项（降级为裸对话）。 */
@@ -123,7 +125,7 @@ export async function* streamAssistantReply(
     }
   }
 
-  const options = { ...bound, history: trimmed.messages, references }
+  const options = { ...bound, history: trimmed.messages, references, signal: deps.signal }
 
   let accumulated = ''
   try {

@@ -10,7 +10,8 @@ export const CHAT_CHANNELS = {
   chunk: 'chat:chunk',
   done: 'chat:done',
   error: 'chat:error',
-  notice: 'chat:notice'
+  notice: 'chat:notice',
+  cancel: 'chat:cancel'
 } as const
 
 /** 错误码是稳定契约：渲染进程按码判断，不解析文案、不看堆栈。 */
@@ -66,6 +67,8 @@ export interface ChatErrorEvent {
 /** preload 暴露给渲染进程的 chat 能力。 */
 export interface ChatBridge {
   send(request: ChatSendRequest): Promise<ChatSendResult>
+  /** 停止某次生成；返回是否命中在途请求。 */
+  cancel(id: string): Promise<IpcResult<true>>
   /** 返回解绑函数：effect 清理时必须调用，否则流式内容会重复追加。 */
   onChunk(listener: (event: ChatChunkEvent) => void): () => void
   onDone(listener: (event: ChatDoneEvent) => void): () => void
