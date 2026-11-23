@@ -29,4 +29,4 @@
 
 ## 现状
 
-已落地 `domain/chat.ts`、`domain/assistant.ts`、`domain/conversation.ts`（会话与消息模型、标题派生与校验）（`splitIntoChunks`，把文本按码点切成流式块，契约测试在 `tests/js/chat.test.ts`）。`tools/` 已落地协议与注册表；`agent/` 已落地 Plan 协议（校验、状态推进、进度汇总）与执行循环（确认门、失败即停、步骤回调）；「模型生成计划」与「失败后重规划」仍未做。
+已落地 `domain/chat.ts`、`domain/assistant.ts`、`domain/conversation.ts`（会话与消息模型、标题派生与校验）（`splitIntoChunks`，把文本按码点切成流式块，契约测试在 `tests/js/chat.test.ts`）。`tools/` 已落地协议、注册表与三个只读内置工具（now / calc / read_text_file）；`agent/` 已落地 Plan 协议（校验、状态推进、进度汇总）与执行循环（确认门、失败即停、步骤回调）；「模型生成计划」与「失败后重规划」仍未做。
