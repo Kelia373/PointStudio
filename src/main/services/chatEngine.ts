@@ -26,8 +26,16 @@ export interface ReplyOptions {
   references?: string
 }
 
-/** 本次会走哪条路。纯函数，界面靠它显示状态，不靠猜。 */
+/**
+ * 本次会走哪条路。纯函数，界面靠它显示状态，不靠猜。
+ *
+ * 判断依据有两条：平台是否要求凭据、以及有没有凭据。
+ * 本地模型（requiresApiKey === false）即使没 Key 也走真模型。
+ */
 export function resolveMode(deps: ChatEngineDeps): ChatMode {
+  if (deps.provider.requiresApiKey === false) {
+    return 'live'
+  }
   return (deps.apiKey?.trim() ?? '') === '' ? 'local' : 'live'
 }
 

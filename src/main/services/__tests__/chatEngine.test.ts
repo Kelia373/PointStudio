@@ -146,3 +146,21 @@ test('没有参考片段时不改动用户消息', async () => {
 
   assert.deepEqual(spy.request?.messages.at(-1), { role: 'user', content: '问题' })
 })
+
+test('平台声明不需要 Key 时，即使没配 Key 也走真模型', async () => {
+  const seen: { called: boolean } = { called: false }
+  const provider: ChatProvider = {
+    id: 'local',
+    requiresApiKey: false,
+    async *streamChat(): AsyncGenerator<string> {
+      seen.called = true
+      yield 'x'
+    }
+  }
+
+  const base = { provider, baseUrl: 'b', model: 'm' }
+  assert.equal(resolveMode({ ...base, apiKey: null }), 'live', '本地模型不该被判成本地假流式')
+
+  await collect(streamReplyText('你好', { ...base, apiKey: null }))
+  assert.equal(seen.called, true, '应当真的调用 provider')
+})

@@ -29,4 +29,13 @@
 
 ## 现状
 
-已落地 `domain/chat.ts`、`domain/assistant.ts`、`domain/conversation.ts`（会话与消息模型、标题派生与校验）（`splitIntoChunks`，把文本按码点切成流式块，契约测试在 `tests/js/chat.test.ts`）。`tools/` 已落地协议、注册表与三个只读内置工具（now / calc / read_text_file）；`domain/chunking.ts` 提供文本切块（RAG 前置）；`domain/backup.ts` 与 `domain/crashReport.ts` 提供备份格式与崩溃报告脱敏；`domain/search.ts` 提供无依赖的关键词检索（可替换为向量检索）；`agent/` 已落地 Plan 协议（校验、状态推进、进度汇总）与执行循环（确认门、失败即停、步骤回调）；计划生成侧已落地提示词构造与响应解析（`planPrompt.ts`，含协议校验）；「失败后重规划」与界面确认仍未做。
+| 目录 | 已有 |
+| --- | --- |
+| `domain/` | `chat`（文本分块）、`assistant`（助手模型与校验）、`conversation`（会话/消息/引用）、`context`（上下文裁剪）、`workspace`（导入校验）、`chunking`、`search`、`backup`、`crashReport` |
+| `providers/` | DeepSeek（OpenAI 兼容 SSE）、Ollama（本地、免 Key、NDJSON） |
+| `tools/` | 协议 + 注册表 + 三个只读内置工具（now / calc / read_text_file） |
+| `agent/` | Plan 协议（校验、状态推进、进度汇总）、执行循环（确认门、失败即停）、计划提示词与响应解析 |
+
+未做：`providers/` 的平台选择界面、`agent/` 的失败重规划界面与人工确认交互。
+
+测试与实现同目录，位于各模块的 `__tests__/`。

@@ -30,6 +30,11 @@ export interface ChatStreamRequest {
 export interface ChatProvider {
   /** 平台标识，如 'deepseek'。用于日志与设置里选型，不用来分支业务。 */
   readonly id: string
+  /**
+   * 是否必须有凭据才能调用。默认 true。
+   * 本地模型（Ollama）为 false——引擎据此允许「没有 Key 也走真模型」。
+   */
+  readonly requiresApiKey?: boolean
   /** 产出**增量文本片段**；拼接与落库归调用方，provider 不产出半成品消息。 */
   streamChat(request: ChatStreamRequest): AsyncIterable<string>
 }
