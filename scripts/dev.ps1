@@ -1,4 +1,4 @@
-# Start the desktop app in development mode (hot reload on).
+﻿# Start the desktop app in development mode (hot reload on).
 # Run from anywhere; paths are resolved relative to this script.
 
 $ErrorActionPreference = 'Stop'

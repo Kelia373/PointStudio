@@ -59,6 +59,7 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 - electron 二进制可能缺失，需在包目录 `node install.js`，带 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
 - **AI 无法启动 Electron 窗口**，只能验证构建产物与 `tsc --noEmit`；窗口必须人开终端确认。
 - PowerShell 拦 `.ps1`：用 `.CMD` 后缀或 `bash`；改执行策略由人做。
+- **含中文的 `.ps1` 必须存成 UTF-8 BOM**：PowerShell 5.1 在无 BOM 时按系统 ANSI(GBK) 解码 UTF-8 字节，中文注释会把**下一行代码吃掉**，报错却指向再下一行（表现为莫名其妙的 null 参数）。已踩：`scripts/dev.ps1`。
 - TS 7 移除了 `baseUrl`，`paths` 写相对路径。
 - 改主进程要手动重启 dev；改界面热更新可用。这些细节见 `docs/03` §6。
 
