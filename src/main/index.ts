@@ -1,8 +1,10 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 
+import { registerChatIpc } from './ipc/chat.ts'
+
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
-// 任何业务逻辑都不允许出现在这里 —— 它属于 packages/。
+// 它是组合根：负责把内核目录接起来（比如注册 IPC 通道），但自己不含业务逻辑。
 
 function createWindow(): void {
   const window = new BrowserWindow({
@@ -28,6 +30,8 @@ function createWindow(): void {
 }
 
 void app.whenReady().then(() => {
+  // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
+  registerChatIpc()
   createWindow()
 
   // macOS：点 dock 图标且没有窗口时重开一个。

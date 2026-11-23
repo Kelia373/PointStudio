@@ -29,4 +29,4 @@
 
 ## 现状
 
-空壳。四个子文档里的规则已定，实现待写。
+已落地 `domain/chat.ts`（`splitIntoChunks`，把文本按码点切成流式块，契约测试在 `tests/js/chat.test.ts`）。`providers` / `tools` / `agent` 仍是空壳。
