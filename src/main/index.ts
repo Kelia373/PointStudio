@@ -183,7 +183,7 @@ void app.whenReady().then(async () => {
     tools.register(tool)
   }
   registerAgentIpc({ engine, tools })
-  registerAssistantIpc({ assistants: services.assistants })
+  registerAssistantIpc({ assistants: services.assistants, conversations: services.conversations })
   registerSettingsIpc({
     settings: services.settings,
     onChange: (next) => {

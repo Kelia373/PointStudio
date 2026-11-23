@@ -12,6 +12,8 @@ import {
 } from '../../shared/types/ipc.ts'
 import type { Assistant, AssistantDraft } from '../ai/domain/assistant.ts'
 import type { AssistantService } from '../services/assistantService.ts'
+import { removeAssistantAndUnbind } from '../services/assistantCleanup.ts'
+import type { ConversationService } from '../services/conversationService.ts'
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -60,6 +62,8 @@ function toDraft(value: unknown): AssistantDraft | null {
 
 export interface AssistantIpcOptions {
   assistants: AssistantService
+  /** 删除助手时要解绑引用它的会话，因此需要会话服务。 */
+  conversations: ConversationService
 }
 
 export function registerAssistantIpc(options: AssistantIpcOptions): void {
@@ -107,7 +111,7 @@ export function registerAssistantIpc(options: AssistantIpcOptions): void {
       if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      const result = await service.remove(id)
+      const result = await removeAssistantAndUnbind(service, options.conversations, id)
       return result.ok ? { ok: true, value: true } : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
     }
   )
