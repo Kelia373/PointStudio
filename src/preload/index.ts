@@ -89,6 +89,10 @@ const conversations: ConversationBridge = {
   ): Promise<IpcResult<{ removed: number }>> =>
     ipcRenderer.invoke(CONVERSATION_CHANNELS.deleteTurn, conversationId, messageId) as Promise<
       IpcResult<{ removed: number }>
+    >,
+  exportMarkdown: (conversationId: string): Promise<IpcResult<string>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.exportMarkdown, conversationId) as Promise<
+      IpcResult<string>
     >
 }
 

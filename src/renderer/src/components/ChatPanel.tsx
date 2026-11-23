@@ -28,6 +28,7 @@ export default function ChatPanel() {
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState<ChatMode | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
   const [drafting, setDrafting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -205,6 +206,21 @@ export default function ChatPanel() {
     }
   }
 
+  async function exportConversation(): Promise<void> {
+    const conversationId = activeId
+    if (!conversationId) {
+      return
+    }
+    const result = await window.pointstudio.conversations.exportMarkdown(conversationId)
+    if (!result.ok) {
+      setError(result.code)
+      return
+    }
+    await copyText(result.value)
+    setError(null)
+    setInfo('已复制 Markdown 到剪贴板')
+  }
+
   async function copyText(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text)
@@ -335,6 +351,15 @@ export default function ChatPanel() {
             ⚙ 设置
           </button>
           <span className="chat__hint">{hint}</span>
+          <button
+            className="chat__assistant-new"
+            type="button"
+            onClick={() => void exportConversation()}
+            disabled={!activeId}
+          >
+            ⤓ 导出
+          </button>
+          {info ? <span className="chat__info">{info}</span> : null}
           {error ? <span className="chat__error">{error}</span> : null}
         </header>
 

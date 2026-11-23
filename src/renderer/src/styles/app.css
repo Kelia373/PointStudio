@@ -593,3 +593,8 @@ body {
 .bubble__action:hover {
   color: #2f6feb;
 }
+
+.chat__info {
+  font-size: 12px;
+  color: #2f9e44;
+}

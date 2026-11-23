@@ -84,7 +84,8 @@ export const CONVERSATION_CHANNELS = {
   remove: 'conversation:remove',
   messages: 'conversation:messages',
   setAssistant: 'conversation:set-assistant',
-  deleteTurn: 'conversation:delete-turn'
+  deleteTurn: 'conversation:delete-turn',
+  exportMarkdown: 'conversation:export-markdown'
 } as const
 
 /** 跨进程传输用的会话形态：只放界面需要显示的字段。 */
@@ -132,6 +133,8 @@ export interface ConversationBridge {
   setAssistant(id: string, assistantId: string | null): Promise<IpcResult<ConversationDto>>
   /** 删除「这一轮」：用户消息连同其后的助手回复。 */
   deleteTurn(conversationId: string, messageId: string): Promise<IpcResult<{ removed: number }>>
+  /** 导出为 Markdown 文本（界面负责写文件或复制）。 */
+  exportMarkdown(conversationId: string): Promise<IpcResult<string>>
 }
 
 

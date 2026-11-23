@@ -13,6 +13,7 @@ import {
 } from '../../shared/types/ipc.ts'
 import type { Conversation, Message } from '../ai/domain/conversation.ts'
 import type { ConversationService } from '../services/conversationService.ts'
+import { renderConversationMarkdown } from '../services/exportService.ts'
 import { deleteTurn } from '../services/turnService.ts'
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -134,6 +135,21 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
       return result.ok
         ? { ok: true, value: result.value }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
+  ipcMain.handle(
+    CONVERSATION_CHANNELS.exportMarkdown,
+    async (_event, id: unknown): Promise<IpcResult<string>> => {
+      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      const conversation = await service.get(id)
+      if (!conversation) {
+        return { ok: false, code: 'E_NOT_FOUND' }
+      }
+      const messages = await service.listMessages(id)
+      return { ok: true, value: renderConversationMarkdown(conversation, messages) }
     }
   )
 
