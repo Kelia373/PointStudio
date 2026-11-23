@@ -40,6 +40,7 @@ export class ProviderSettingsService {
     const current = await this.read()
     if (!current) {
       return {
+        providerId: DEFAULT_PROVIDER_ID,
         hasKey: false,
         maskedKey: '',
         baseUrl: DEFAULT_BASE_URL,
@@ -48,6 +49,7 @@ export class ProviderSettingsService {
       }
     }
     return {
+      providerId: current.id,
       hasKey: current.apiKey !== '',
       maskedKey: maskApiKey(current.apiKey),
       baseUrl: current.baseUrl,
@@ -64,8 +66,8 @@ export class ProviderSettingsService {
     }
 
     const settings: ProviderSettings = {
-      id: DEFAULT_PROVIDER_ID,
       ...checked.value,
+      id: checked.value.providerId,
       updatedAt: this.deps.now()
     }
     await this.store.writeAll([settings])

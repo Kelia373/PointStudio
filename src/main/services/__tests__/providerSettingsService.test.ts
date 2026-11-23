@@ -101,3 +101,15 @@ test('只改模型时保留已保存的 Key', async () => {
     assert.equal(current?.model, 'deepseek-reasoner')
   })
 })
+
+test('可以切换到 ollama 并保留空 Key', async () => {
+  await withService(async ({ service }) => {
+    const saved = await service.save({ providerId: 'ollama' })
+    assert.equal(saved.ok, true)
+
+    const view = await service.readMasked()
+    assert.equal(view.providerId, 'ollama')
+    assert.equal(view.hasKey, false)
+    assert.equal(view.baseUrl, 'http://127.0.0.1:11434')
+  })
+})

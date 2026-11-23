@@ -19,7 +19,8 @@ function isDraft(value: unknown): value is ProviderSettingsDraftRequest {
   }
   const input = value as Partial<ProviderSettingsDraftRequest>
   return (
-    typeof input.apiKey === 'string' &&
+    (input.apiKey === undefined || typeof input.apiKey === 'string') &&
+    (input.providerId === undefined || input.providerId === 'deepseek' || input.providerId === 'ollama') &&
     (input.baseUrl === undefined || typeof input.baseUrl === 'string') &&
     (input.model === undefined || typeof input.model === 'string')
   )

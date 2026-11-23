@@ -4,10 +4,11 @@
 // 样式是占位，等设计稿来了整体换皮。
 import { useEffect, useState } from 'react'
 
-import type { ProviderSettingsViewDto } from '../../../shared/types/ipc.ts'
+import type { ProviderIdDto, ProviderSettingsViewDto } from '../../../shared/types/ipc.ts'
 
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [view, setView] = useState<ProviderSettingsViewDto | null>(null)
+  const [providerId, setProviderId] = useState<ProviderIdDto>('deepseek')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
@@ -17,6 +18,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
     void (async () => {
       const current = await window.pointstudio.settings.readProvider()
       setView(current)
+      setProviderId(current.providerId)
       setModel(current.model)
       setBaseUrl(current.baseUrl)
     })()
@@ -24,6 +26,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
 
   async function save(): Promise<void> {
     const saved = await window.pointstudio.settings.saveProvider({
+      providerId,
       apiKey,
       model: model.trim() === '' ? undefined : model.trim(),
       baseUrl: baseUrl.trim() === '' ? undefined : baseUrl.trim()
@@ -50,6 +53,21 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   return (
     <div className="settings">
       <div className="settings__row">
+        <label className="settings__label" htmlFor="settings-provider">
+          平台
+        </label>
+        <select
+          id="settings-provider"
+          className="settings__input"
+          value={providerId}
+          onChange={(event) => setProviderId(event.target.value as ProviderIdDto)}
+        >
+          <option value="deepseek">DeepSeek（云端，需要 Key）</option>
+          <option value="ollama">Ollama（本地，免 Key）</option>
+        </select>
+      </div>
+
+      <div className="settings__row">
         <label className="settings__label" htmlFor="settings-key">
           API Key
         </label>
@@ -58,7 +76,13 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           className="settings__input"
           type="password"
           value={apiKey}
-          placeholder={view?.hasKey ? `已配置：${view.maskedKey}（留空则不变）` : 'sk-...'}
+          placeholder={
+            providerId === 'ollama'
+              ? '本地模型不需要 Key（留空即可）'
+              : view?.hasKey
+                ? `已配置：${view.maskedKey}（留空则不变）`
+                : 'sk-...'
+          }
           onChange={(event) => setApiKey(event.target.value)}
         />
       </div>

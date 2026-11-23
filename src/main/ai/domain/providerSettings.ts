@@ -6,16 +6,29 @@ import {
   DEEPSEEK_DEFAULT_BASE_URL,
   DEEPSEEK_DEFAULT_MODEL
 } from '../providers/deepseek.ts'
+import { OLLAMA_DEFAULT_BASE_URL, OLLAMA_DEFAULT_MODEL } from '../providers/ollama.ts'
 
 export type Validation<T> = { ok: true; value: T } | { ok: false; errors: string[] }
 
-export const DEFAULT_PROVIDER_ID = 'deepseek'
+export type ProviderId = 'deepseek' | 'ollama'
+
+export const PROVIDER_IDS: readonly ProviderId[] = ['deepseek', 'ollama']
+export const DEFAULT_PROVIDER_ID: ProviderId = 'deepseek'
 export const DEFAULT_BASE_URL = DEEPSEEK_DEFAULT_BASE_URL
 export const DEFAULT_MODEL = DEEPSEEK_DEFAULT_MODEL
 
+/** 每个平台的默认值，以及是否必须有凭据。新增平台只加一行。 */
+export const PROVIDER_DEFAULTS: Record<
+  ProviderId,
+  { baseUrl: string; model: string; requiresApiKey: boolean }
+> = {
+  deepseek: { baseUrl: DEEPSEEK_DEFAULT_BASE_URL, model: DEEPSEEK_DEFAULT_MODEL, requiresApiKey: true },
+  ollama: { baseUrl: OLLAMA_DEFAULT_BASE_URL, model: OLLAMA_DEFAULT_MODEL, requiresApiKey: false }
+}
+
 /** 持久化形态：只存一个平台（当前只有 DeepSeek），换平台时按 id 区分。 */
 export interface ProviderSettings {
-  id: string
+  id: ProviderId
   apiKey: string
   baseUrl: string
   model: string
@@ -24,13 +37,15 @@ export interface ProviderSettings {
 
 /** 用户输入形态，允许只改其中几项。 */
 export interface ProviderSettingsDraft {
-  apiKey: string
+  providerId?: ProviderId
+  apiKey?: string
   baseUrl?: string
   model?: string
 }
 
 /** 对外视图：绝不含明文 Key。 */
 export interface ProviderSettingsView {
+  providerId: ProviderId
   hasKey: boolean
   maskedKey: string
   baseUrl: string
@@ -39,6 +54,7 @@ export interface ProviderSettingsView {
 }
 
 export interface ResolvedProviderConfig {
+  providerId: ProviderId
   apiKey: string | null
   baseUrl: string
   model: string
@@ -70,27 +86,34 @@ export function validateSettings(
   draft: ProviderSettingsDraft,
   currentApiKey = ''
 ): Validation<{
+  providerId: ProviderId
   apiKey: string
   baseUrl: string
   model: string
 }> {
   const errors: string[] = []
-  const apiKey = (draft.apiKey ?? '').trim() || currentApiKey.trim()
-  if (apiKey === '') {
+  const providerId = (draft.providerId ?? DEFAULT_PROVIDER_ID) as ProviderId
+  if (!PROVIDER_IDS.includes(providerId)) {
+    return { ok: false, errors: ['E_PROVIDER_UNSUPPORTED'] }
+  }
+
+  const defaults = PROVIDER_DEFAULTS[providerId]
+  const apiKey = (draft.apiKey ?? '').trim() || (providerId === DEFAULT_PROVIDER_ID ? currentApiKey.trim() : '')
+  if (defaults.requiresApiKey && apiKey === '') {
     errors.push('E_KEY_REQUIRED')
   }
 
-  const baseUrl = normalizeBaseUrl(draft.baseUrl ?? DEFAULT_BASE_URL)
+  const baseUrl = normalizeBaseUrl(draft.baseUrl ?? defaults.baseUrl)
   if (!isValidBaseUrl(baseUrl)) {
     errors.push('E_BASE_URL_INVALID')
   }
 
-  const model = (draft.model ?? '').trim() || DEFAULT_MODEL
+  const model = (draft.model ?? '').trim() || defaults.model
 
   if (errors.length > 0) {
     return { ok: false, errors }
   }
-  return { ok: true, value: { apiKey, baseUrl, model } }
+  return { ok: true, value: { providerId, apiKey, baseUrl, model } }
 }
 
 /**
@@ -114,22 +137,29 @@ export function maskApiKey(apiKey: string): string {
  * （既能免去每次手填，也保证「没配任何东西」时仍然能跑通本地假流式）。
  */
 export function resolveProviderConfig(
-  settings: { apiKey: string; baseUrl: string; model: string } | null,
+  settings: { id: ProviderId; apiKey: string; baseUrl: string; model: string } | null,
   env: { apiKey?: string | null; baseUrl?: string | null; model?: string | null }
 ): ResolvedProviderConfig {
-  const settingsKey = settings?.apiKey?.trim() ?? ''
-  if (settingsKey !== '') {
-    return {
-      apiKey: settingsKey,
-      baseUrl: settings?.baseUrl || DEFAULT_BASE_URL,
-      model: settings?.model || DEFAULT_MODEL,
-      source: 'settings'
+  if (settings) {
+    // 免凭据的平台（本地模型）只要配置过就算生效；需要凭据的平台必须有 Key。
+    const requiresKey = PROVIDER_DEFAULTS[settings.id]?.requiresApiKey ?? true
+    const usable = requiresKey ? settings.apiKey.trim() !== '' : true
+    if (usable) {
+      const defaults = PROVIDER_DEFAULTS[settings.id]
+      return {
+        providerId: settings.id,
+        apiKey: settings.apiKey,
+        baseUrl: settings.baseUrl || defaults.baseUrl,
+        model: settings.model || defaults.model,
+        source: 'settings'
+      }
     }
   }
 
   const envKey = env.apiKey?.trim() ?? ''
   if (envKey !== '') {
     return {
+      providerId: DEFAULT_PROVIDER_ID,
       apiKey: envKey,
       baseUrl: env.baseUrl?.trim() || DEFAULT_BASE_URL,
       model: env.model?.trim() || DEFAULT_MODEL,
@@ -138,6 +168,7 @@ export function resolveProviderConfig(
   }
 
   return {
+    providerId: DEFAULT_PROVIDER_ID,
     apiKey: null,
     baseUrl: DEFAULT_BASE_URL,
     model: DEFAULT_MODEL,

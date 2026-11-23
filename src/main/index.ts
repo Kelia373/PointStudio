@@ -4,6 +4,9 @@ import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { DeepSeekProvider } from './ai/providers/deepseek.ts'
+import { OllamaProvider } from './ai/providers/ollama.ts'
+import type { ChatProvider } from './ai/providers/types.ts'
+import type { ProviderId } from './ai/domain/providerSettings.ts'
 import type { Assistant } from './ai/domain/assistant.ts'
 import type { Conversation, Message } from './ai/domain/conversation.ts'
 import { resolveProviderConfig, type ProviderSettings } from './ai/domain/providerSettings.ts'
@@ -47,6 +50,11 @@ function createWindow(): void {
   } else {
     void window.loadFile(join(__dirname, '../renderer/index.html'))
   }
+}
+
+/** 平台选择：新增平台只加一行。 */
+function createProvider(id: ProviderId): ChatProvider {
+  return id === 'ollama' ? new OllamaProvider() : new DeepSeekProvider()
 }
 
 interface Services {
@@ -153,7 +161,7 @@ void app.whenReady().then(async () => {
 
   // 引擎依赖是可变对象：设置里保存新凭据后原地替换，用户不必重启应用。
   const engine: ChatEngineDeps = {
-    provider: new DeepSeekProvider(),
+    provider: createProvider(resolved.providerId),
     apiKey: resolved.apiKey,
     baseUrl: resolved.baseUrl,
     model: resolved.model
@@ -167,6 +175,7 @@ void app.whenReady().then(async () => {
     settings: services.settings,
     onChange: (next) => {
       const applied = resolveProviderConfig(next, envConfig)
+      engine.provider = createProvider(applied.providerId)
       engine.apiKey = applied.apiKey
       engine.baseUrl = applied.baseUrl
       engine.model = applied.model
