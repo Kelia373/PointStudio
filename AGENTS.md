@@ -82,6 +82,7 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 | --- | --- |
 | 分支合并、提交流程、测试契约、自检、停止条件 | `docs/01` |
 | 任务分级、计划六问、澄清预算、阶段出口 | `docs/02` |
+| 产品能力清单、模块归属、里程碑与验收判据 | `docs/04` |
 | 个人版 / 企业版边界与不做清单 | `docs/00` |
 | 环境坑、能力盘点、能力缺口 | `docs/03` |
 | 包分层、依赖方向、新能力归位 | `docs/references/architecture/main-architecture.md` |
