@@ -27,6 +27,9 @@ import {
   type MessageDto,
   type PointStudioApi,
   SETTINGS_CHANNELS,
+  WORKSPACE_CHANNELS,
+  type WorkspaceBridge,
+  type WorkspaceFileDto,
   type ProviderSettingsDraftRequest,
   type ProviderSettingsViewDto,
   type SettingsBridge
@@ -100,12 +103,22 @@ const settings: SettingsBridge = {
     ipcRenderer.invoke(SETTINGS_CHANNELS.clearProvider) as Promise<IpcResult<true>>
 }
 
+const workspace: WorkspaceBridge = {
+  list: (): Promise<WorkspaceFileDto[]> =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.list) as Promise<WorkspaceFileDto[]>,
+  importPath: (absolutePath: string): Promise<IpcResult<WorkspaceFileDto>> =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.import, absolutePath) as Promise<IpcResult<WorkspaceFileDto>>,
+  remove: (id: string): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(WORKSPACE_CHANNELS.remove, id) as Promise<IpcResult<true>>
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
   conversations,
   assistants,
-  settings
+  settings,
+  workspace
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)

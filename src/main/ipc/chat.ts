@@ -17,6 +17,7 @@ import {
 import { ProviderError } from '../ai/providers/types.ts'
 import { REPLY_CHUNK_DELAY_MS } from '../services/chatReply.ts'
 import { resolveMode, type ChatEngineDeps } from '../services/chatEngine.ts'
+import type { SearchHit } from '../ai/domain/search.ts'
 import { streamAssistantReply, type AssistantLookup } from '../services/chatFlow.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 
@@ -52,6 +53,8 @@ export interface ChatIpcOptions {
   engine: ChatEngineDeps
   conversations: ConversationService
   assistants: AssistantLookup
+  /** 可选：工作区检索。不注入则对话不引用任何文件。 */
+  retrieval?: { search(query: string): Promise<SearchHit[]> }
 }
 
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
@@ -78,6 +81,7 @@ async function streamReply(
       conversations: options.conversations,
       assistants: options.assistants,
       engine: options.engine,
+      retrieval: options.retrieval,
       onContextTrimmed: (droppedCount) => {
         if (!sender.isDestroyed()) {
           sender.send(CHAT_CHANNELS.notice, { id, droppedCount } satisfies ChatNoticeEvent)

@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { DeepSeekProvider } from './ai/providers/deepseek.ts'
@@ -11,6 +12,11 @@ import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
 import { registerSettingsIpc } from './ipc/settings.ts'
+import { registerWorkspaceIpc } from './ipc/workspace.ts'
+import { WorkspaceImportService } from './services/workspaceImportService.ts'
+import { WorkspaceService } from './services/workspaceService.ts'
+import { searchWorkspaceFiles } from './services/retrievalService.ts'
+import type { WorkspaceFile } from './ai/domain/workspace.ts'
 import { AssistantService } from './services/assistantService.ts'
 import type { ChatEngineDeps } from './services/chatEngine.ts'
 import { ConversationService } from './services/conversationService.ts'
@@ -47,6 +53,9 @@ interface Services {
   assistants: AssistantService
   settings: ProviderSettingsService
   settingsFilePath: string
+  workspace: WorkspaceService
+  importer: WorkspaceImportService
+  workspaceRoot: string
 }
 
 /** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
@@ -55,7 +64,23 @@ function buildServices(): Services {
   const deps = { newId: () => randomUUID(), now: () => new Date().toISOString() }
   const settingsFilePath = join(dataDir, 'provider.json')
 
+  const workspaceRoot = join(dataDir, 'workspace')
+  const workspace = new WorkspaceService(
+    new JsonFileStore<WorkspaceFile>(join(dataDir, 'workspace.json')),
+    deps
+  )
+  const importer = new WorkspaceImportService(workspace, {
+    readSource: (absolutePath) => readFile(absolutePath, 'utf8'),
+    writeStored: async (relativePath, content) => {
+      await mkdir(workspaceRoot, { recursive: true })
+      await writeFile(join(workspaceRoot, relativePath), content, 'utf8')
+    }
+  })
+
   return {
+    workspace,
+    importer,
+    workspaceRoot,
     conversations: new ConversationService(
       new JsonFileStore<Conversation>(join(dataDir, 'conversations.json')),
       new JsonFileStore<Message>(join(dataDir, 'messages.json')),
@@ -94,6 +119,7 @@ void app.whenReady().then(async () => {
 
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
   registerConversationIpc({ conversations: services.conversations })
+  registerWorkspaceIpc({ workspace: services.workspace, importer: services.importer })
   registerAssistantIpc({ assistants: services.assistants })
   registerSettingsIpc({
     settings: services.settings,
@@ -107,7 +133,14 @@ void app.whenReady().then(async () => {
   registerChatIpc({
     conversations: services.conversations,
     assistants: services.assistants,
-    engine
+    engine,
+    // 检索是可选能力：工作区为空时它自然返回空数组，不影响对话。
+    retrieval: {
+      search: async (query) =>
+        searchWorkspaceFiles(query, await services.workspace.list(), {
+          readTextFile: (relativePath) => readFile(join(services.workspaceRoot, relativePath), 'utf8')
+        })
+    }
   })
 
   createWindow()

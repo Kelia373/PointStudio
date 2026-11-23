@@ -28,7 +28,7 @@
 
 ## 现状
 
-已注册 `chat`、`conversation`、`assistant`、`settings` 四个域。`settings.ts` 负责模型凭据：读只返回脱敏视图，明文永不出主进程。`conversation.ts` 走 invoke（列表/建/改名/删/消息/绑助手），`assistant.ts` 走 invoke（增删改查），领域错误码原样返回不翻译成文案。
+已注册 `chat`、`conversation`、`assistant`、`settings`、`workspace` 五个域。`workspace.ts` 只收绝对路径，读源/落盘/登记全在主进程完成。`settings.ts` 负责模型凭据：读只返回脱敏视图，明文永不出主进程。`conversation.ts` 走 invoke（列表/建/改名/删/消息/绑助手），`assistant.ts` 走 invoke（增删改查），领域错误码原样返回不翻译成文案。
 
 `chat` 域（`chat.ts`）：`chat:send` 走 `ipcMain.handle`，推流用 `webContents.send`
 走 `chat:chunk` / `chat:done` / `chat:error`。通道名与载荷类型在 `src/shared/types/ipc.ts`。

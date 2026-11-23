@@ -160,12 +160,35 @@ export interface AssistantBridge {
   remove(id: string): Promise<IpcResult<true>>
 }
 
+// ---------------------------------------------------------------- 工作区
+
+export const WORKSPACE_CHANNELS = {
+  list: 'workspace:list',
+  import: 'workspace:import',
+  remove: 'workspace:remove'
+} as const
+
+export interface WorkspaceFileDto {
+  id: string
+  path: string
+  sizeBytes: number
+  importedAt: string
+}
+
+export interface WorkspaceBridge {
+  list(): Promise<WorkspaceFileDto[]>
+  /** 传入从系统拿到的绝对路径；落盘与登记都在主进程完成。 */
+  importPath(absolutePath: string): Promise<IpcResult<WorkspaceFileDto>>
+  remove(id: string): Promise<IpcResult<true>>
+}
+
 export interface PointStudioApi {
   electronVersion: string
   chat: ChatBridge
   conversations: ConversationBridge
   assistants: AssistantBridge
   settings: SettingsBridge
+  workspace: WorkspaceBridge
 }
 
 
