@@ -6,6 +6,7 @@
 // 1. 不做 IO。需要读文件时通过注入的 `readTextFile` 读——本目录不 import fs，
 //    也不 import electron，因此可脱离运行环境单测。
 // 2. 路径不许出工作区。绝对路径、`..` 穿越一律拒绝，且拒绝时**不发生读取**。
+import { isSafeRelativePath } from '../../../utils/paths.ts'
 import type { ToolDefinition } from '../types.ts'
 
 export interface BuiltinToolDeps {
@@ -18,21 +19,6 @@ export interface BuiltinToolDeps {
 }
 
 export const DEFAULT_MAX_READ_BYTES = 100_000
-
-/**
- * 判断是否为「工作区内的相对路径」。
- * 拦截：绝对路径、盘符路径、`..` 穿越、空路径。
- */
-export function isSafeRelativePath(candidate: string): boolean {
-  const path = candidate.trim()
-  if (path === '') {
-    return false
-  }
-  if (path.startsWith('/') || path.startsWith('\\') || /^[a-zA-Z]:/.test(path)) {
-    return false
-  }
-  return path.split(/[\\/]+/).every((segment) => segment !== '..')
-}
 
 /**
  * 四则运算求值：递归下降，手写，**不用 eval**。

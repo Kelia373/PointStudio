@@ -35,7 +35,7 @@
 
 ## 现状
 
-已有：`chatReply.ts`（假流式回复）、`chatEngine.ts`（有 Key 走真模型、无 Key 降级）、`chatFlow.ts`（一次问答的落库编排：先存用户消息 → 流式产出 → 存助手消息，失败时保留已产出部分并标记 error）、`assistantService.ts`（助手增删改查）、`conversationService.ts`（会话与消息：建/改名/删（级联删消息）、追加/编辑/删除消息、按最近活动排序）、`providerSettingsService.ts`（模型凭据读写，对外只给脱敏视图）、`planService.ts`（调模型生成计划：拼提示词 → 解析 → 协议校验 → 带错误码重试，默认最多 2 次；`replanAfterFailure` 把失败现场交给模型产出修订版，旧计划保持不可变）。
+已有：`chatReply.ts`（假流式回复）、`chatEngine.ts`（有 Key 走真模型、无 Key 降级）、`chatFlow.ts`（一次问答的落库编排：先存用户消息 → 流式产出 → 存助手消息，失败时保留已产出部分并标记 error）、`assistantService.ts`（助手增删改查）、`conversationService.ts`（会话与消息：建/改名/删（级联删消息）、追加/编辑/删除消息、按最近活动排序）、`providerSettingsService.ts`（模型凭据读写，对外只给脱敏视图）、`workspaceService.ts`（工作区文件登记：路径安全校验、同路径去重、持久化；不含文件落盘）、`planService.ts`（调模型生成计划：拼提示词 → 解析 → 协议校验 → 带错误码重试，默认最多 2 次；`replanAfterFailure` 把失败现场交给模型产出修订版，旧计划保持不可变）。
 
 上下文：`chatFlow` 在落库前先读历史，用 `ai/domain/context.ts` 的 `trimHistory` 按条数 + 估算 token 裁剪，被丢掉的条数通过 `onContextTrimmed` 回调上报（界面显示提示），不静默丢弃。
 

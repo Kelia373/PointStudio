@@ -29,4 +29,4 @@
 
 ## 现状
 
-空。依据 [ADR 0002](../../docs/adr/0002-技术栈选型与双版本架构.md)。
+已有 `paths.ts`：`isSafeRelativePath`（拦截绝对路径、盘符路径、`..` 穿越、空路径）与 `normalizeRelativePath`（统一分隔符、去掉开头 `./`）。被 `ai/tools/builtin` 与 `ai/domain/workspace` 共用。
