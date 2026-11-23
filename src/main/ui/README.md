@@ -1,12 +1,12 @@
-# packages/ui
+# src/main/ui
 
 **职责**：跨端共享的 UI 组件（基于 Tailwind + shadcn/ui）。
 
-**允许依赖**：`core` 的类型；React 与 UI 库。
+**允许依赖**：仅 React 与 UI 库。不依赖任何内核包——它只接收 props。
 
 **禁止**：
 
-- 禁止被任何非 UI 包依赖（`core` / `agent` / `storage` 等**不得** import 本包）；
+- 禁止被任何非 UI 包依赖（`core` / `ai` / `data` 等**不得** import 本包）；
 - 禁止在组件里直接调用存储、网络、模型（数据经 props 或上层 hook 注入）；
 - 禁止硬编码用户可见文案（走 i18n）。
 

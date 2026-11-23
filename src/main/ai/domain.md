@@ -1,8 +1,8 @@
-# packages/core
+# ai/domain
 
 **职责**：领域模型与用例。会话、任务、产物、用户意图的核心类型与纯逻辑运算。
 
-**允许依赖**：只允许依赖其他 `packages/*` 中的纯逻辑包（`tools` 的类型、`providers` 的接口）。
+**允许依赖**：同包内的 `tools.md` 与 `providers.md` 定义的类型与接口。跨包只允许依赖 `utils`。
 
 **禁止**：
 

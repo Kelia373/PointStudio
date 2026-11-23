@@ -7,8 +7,8 @@ $root = Split-Path -Parent $PSScriptRoot
 Write-Host '[clean] removing build output' -ForegroundColor Cyan
 
 $targets = @(
-  'apps\desktop\out',
-  'apps\desktop\node_modules\.vite',
+  'out',
+  'node_modules\.vite',
   'node_modules\.vite',
   '*.tsbuildinfo',
   'run.log'

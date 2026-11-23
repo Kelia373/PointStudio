@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$app = Join-Path $root 'apps\desktop'
+$app = $root
 
 Write-Host '[check] type check' -ForegroundColor Cyan
 Set-Location $app

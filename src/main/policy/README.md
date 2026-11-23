@@ -1,4 +1,4 @@
-# packages/policy
+# src/main/policy
 
 **职责**：策略层，也是**个人版与企业版差异的唯一落点**。
 

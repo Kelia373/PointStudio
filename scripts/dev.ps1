@@ -3,7 +3,7 @@
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$app = Join-Path $root 'apps\desktop'
+$app = $root   # 根目录即桌面应用（src/main、preload、renderer）
 $electronModule = Join-Path $app 'node_modules\electron'
 $electronExe = Join-Path $electronModule 'dist\electron.exe'
 
@@ -12,7 +12,7 @@ Write-Host '[dev] PointStudio desktop - development mode' -ForegroundColor Cyan
 # 1. Dependencies live OUTSIDE the workspace (see AGENTS.md pitfall 0).
 #    node_modules inside the workspace is a junction to D:\deveTools\ps-node.
 if (-not (Test-Path $electronModule)) {
-  Write-Host '[dev] FAILED: apps\desktop\node_modules is missing.' -ForegroundColor Red
+  Write-Host '[dev] FAILED: node_modules is missing.' -ForegroundColor Red
   Write-Host '      Dependencies must be installed in D:\deveTools\ps-node and junctioned in.' -ForegroundColor Yellow
   Write-Host '      See AGENTS.md, pitfall 0. Do not run pnpm install inside the workspace.' -ForegroundColor Yellow
   exit 1

@@ -1,12 +1,31 @@
 {
   "name": "pointstudio",
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "private": true,
   "description": "PointStudio - AI workstation kernel and personal edition shell",
+  "main": "./out/main/index.js",
   "scripts": {
-    "dev": "pnpm --filter @pointstudio/desktop dev",
-    "build": "pnpm --filter @pointstudio/desktop build",
-    "typecheck": "pnpm -r typecheck"
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "docs:index": "node scripts/gen-doc-index.mjs",
+    "docs:index:check": "node scripts/gen-doc-index.mjs --check"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.4.1",
+    "electron-vite": "^6.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
   },
   "engines": {
     "node": ">=22"
