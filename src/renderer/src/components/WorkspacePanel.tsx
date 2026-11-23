@@ -4,6 +4,7 @@
 // 读源 / 落盘 / 登记全在主进程，界面不碰文件系统。
 import { useCallback, useEffect, useState } from 'react'
 
+import { describeError } from '../../../shared/i18n/errors.ts'
 import type { WorkspaceFileDto } from '../../../shared/types/ipc.ts'
 import { formatBytes } from '../../../shared/utils/format.ts'
 
@@ -22,7 +23,7 @@ export default function WorkspacePanel({ onClose }: { onClose: () => void }) {
   async function pickAndImport(): Promise<void> {
     const result = await window.pointstudio.workspace.pickAndImport()
     if (!result.ok) {
-      setMessage(result.code)
+      setMessage(describeError(result.code))
       return
     }
     setMessage(`已导入 ${result.value.path}`)
@@ -32,7 +33,7 @@ export default function WorkspacePanel({ onClose }: { onClose: () => void }) {
   async function remove(id: string): Promise<void> {
     const result = await window.pointstudio.workspace.remove(id)
     if (!result.ok) {
-      setMessage(result.code)
+      setMessage(describeError(result.code))
       return
     }
     setMessage(null)

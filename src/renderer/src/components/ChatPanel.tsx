@@ -6,6 +6,7 @@ import type {
   ConversationDto,
   PlanViewDto
 } from '../../../shared/types/ipc.ts'
+import { describeError } from '../../../shared/i18n/errors.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
@@ -104,7 +105,7 @@ export default function ChatPanel() {
     })
 
     const offError = window.pointstudio.chat.onError(({ id, code }) => {
-      setMessages((prev) => markStatus(prev, id, 'error', `（出错了：${code}）`))
+      setMessages((prev) => markStatus(prev, id, 'error', `（${describeError(code)}）`))
       setBusy(false)
     })
 
@@ -131,7 +132,7 @@ export default function ChatPanel() {
         await reloadConversations()
         setActiveId(created.value.id)
       } else {
-        setError(created.code)
+        setError(describeError(created.code))
       }
     })()
   }, [reloadConversations])
@@ -172,7 +173,7 @@ export default function ChatPanel() {
       setMode(result.mode)
       return
     }
-    setMessages((prev) => markStatus(prev, requestId, 'error', `（出错了：${result.code}）`))
+    setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
     setBusy(false)
   }
 
@@ -185,7 +186,7 @@ export default function ChatPanel() {
       assistantId === '' ? null : assistantId
     )
     if (!bound.ok) {
-      setError(bound.code)
+      setError(describeError(bound.code))
       return
     }
     setError(null)
@@ -213,7 +214,7 @@ export default function ChatPanel() {
     }
     const result = await window.pointstudio.conversations.exportMarkdown(conversationId)
     if (!result.ok) {
-      setError(result.code)
+      setError(describeError(result.code))
       return
     }
     await copyText(result.value)
@@ -235,7 +236,7 @@ export default function ChatPanel() {
     }
     const result = await window.pointstudio.conversations.deleteTurn(activeId, messageId)
     if (!result.ok) {
-      setError(result.code)
+      setError(describeError(result.code))
       return
     }
     setError(null)
@@ -252,7 +253,7 @@ export default function ChatPanel() {
       systemPrompt: assistantPrompt.trim()
     })
     if (!created.ok) {
-      setError(created.code)
+      setError(describeError(created.code))
       return
     }
     setAssistantName('')
@@ -268,7 +269,7 @@ export default function ChatPanel() {
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
-      setError(created.code)
+      setError(describeError(created.code))
       return
     }
     await reloadConversations()
@@ -278,7 +279,7 @@ export default function ChatPanel() {
   async function removeConversation(id: string): Promise<void> {
     const removed = await window.pointstudio.conversations.remove(id)
     if (!removed.ok) {
-      setError(removed.code)
+      setError(describeError(removed.code))
       return
     }
     const items = await reloadConversations()

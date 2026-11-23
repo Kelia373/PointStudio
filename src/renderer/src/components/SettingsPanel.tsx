@@ -4,6 +4,7 @@
 // 样式是占位，等设计稿来了整体换皮。
 import { useEffect, useState } from 'react'
 
+import { describeError } from '../../../shared/i18n/errors.ts'
 import type { ProviderIdDto, ProviderSettingsViewDto } from '../../../shared/types/ipc.ts'
 
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
@@ -52,7 +53,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
       }
     })
     if (!saved.ok) {
-      setMessage(saved.code)
+      setMessage(describeError(saved.code))
       return
     }
     setView(saved.value)
@@ -63,7 +64,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   async function clear(): Promise<void> {
     const cleared = await window.pointstudio.settings.clearProvider()
     if (!cleared.ok) {
-      setMessage(cleared.code)
+      setMessage(describeError(cleared.code))
       return
     }
     setView(await window.pointstudio.settings.readProvider())
