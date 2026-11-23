@@ -75,7 +75,8 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
             type: 'done',
             status: result.status,
             plan: toDto(result.plan),
-            ...(result.reason ? { reason: result.reason } : {})
+            ...(result.reason ? { reason: result.reason } : {}),
+            details: result.history.at(-1)?.result.stepResults ?? []
           })
         } catch (error) {
           console.error('[agent] 目标推进失败', error)

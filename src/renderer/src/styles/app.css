@@ -767,3 +767,12 @@ body {
   word-break: break-word;
   font-family: inherit;
 }
+
+.plan__detail {
+  font-size: 11px;
+  color: #9a9a9a;
+}
+
+.plan__detail--error {
+  color: #d9534f;
+}

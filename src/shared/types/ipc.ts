@@ -229,11 +229,26 @@ export interface PlanViewDto {
   }
 }
 
+export interface AgentStepDetailDto {
+  id: string
+  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped'
+  tool?: string
+  durationMs?: number
+  code?: string
+}
+
 export type AgentEventDto =
   | { type: 'plan'; plan: PlanViewDto }
   | { type: 'step'; plan: PlanViewDto }
   | { type: 'replan'; failedStepId: string; errorCode: string }
-  | { type: 'done'; status: 'completed' | 'failed' | 'stopped'; plan: PlanViewDto; reason?: string }
+  | {
+      type: 'done'
+      status: 'completed' | 'failed' | 'stopped'
+      plan: PlanViewDto
+      reason?: string
+      /** 最后一轮的每步详情（工具、耗时、错误码）。 */
+      details?: AgentStepDetailDto[]
+    }
   | { type: 'error'; code: string }
 
 export interface AgentRunRequest {

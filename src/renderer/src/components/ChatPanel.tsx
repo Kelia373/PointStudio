@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import type {
+  AgentStepDetailDto,
   AssistantDto,
   ChatMode,
   ConversationDto,
@@ -47,6 +48,7 @@ export default function ChatPanel() {
     id: string
     plan: PlanViewDto | null
     status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
+    details?: AgentStepDetailDto[]
   } | null>(null)
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
@@ -105,7 +107,7 @@ export default function ChatPanel() {
           return { ...current, plan: event.plan, status: 'running' }
         }
         if (event.type === 'done') {
-          return { ...current, plan: event.plan, status: event.status }
+          return { ...current, plan: event.plan, status: event.status, details: event.details }
         }
         if (event.type === 'error') {
           return { ...current, status: 'failed' }
@@ -415,6 +417,7 @@ export default function ChatPanel() {
           <PlanPanel
             plan={planRun.plan}
             status={planRun.status}
+            details={planRun.details}
             onClose={() => setPlanRun(null)}
             onConfirm={planRun.status === 'stopped' ? () => void confirmAndResume() : undefined}
           />

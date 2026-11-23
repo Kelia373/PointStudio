@@ -1,7 +1,16 @@
 // 计划面板：显示「它打算怎么做、走到哪一步」。
 //
 // 只显示主进程推来的视图，不在界面里推断进度——进度只有执行器知道。
-import type { PlanViewDto } from '../../../shared/types/ipc.ts'
+import { describeError } from '../../../shared/i18n/errors.ts'
+import type { AgentStepDetailDto, PlanViewDto } from '../../../shared/types/ipc.ts'
+
+function detailOf(id: string, details?: AgentStepDetailDto[]): AgentStepDetailDto | undefined {
+  return details?.find((item) => item.id === id)
+}
+
+function detilCode(id: string, details?: AgentStepDetailDto[]): string {
+  return describeError(detailOf(id, details)?.code ?? '')
+}
 
 const STATUS_LABEL: Record<PlanViewDto['steps'][number]['status'], string> = {
   pending: '待执行',
@@ -14,11 +23,13 @@ const STATUS_LABEL: Record<PlanViewDto['steps'][number]['status'], string> = {
 export default function PlanPanel({
   plan,
   status,
+  details,
   onClose,
   onConfirm
 }: {
   plan: PlanViewDto
   status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
+  details?: AgentStepDetailDto[]
   onClose: () => void
   /** 停止时提供：带着确认结果重跑。 */
   onConfirm?: () => void
@@ -48,6 +59,14 @@ export default function PlanPanel({
             {step.tool ? <span className="plan__tool">{step.tool}</span> : null}
             {step.requiresConfirmation ? (
               <span className="plan__needs">需要确认</span>
+            ) : null}
+            {detailOf(step.id, details)?.durationMs !== undefined ? (
+              <span className="plan__detail">{detailOf(step.id, details)?.durationMs}ms</span>
+            ) : null}
+            {detailOf(step.id, details)?.code ? (
+              <span className="plan__detail plan__detail--error">
+                {detilCode(step.id, details)}
+              </span>
             ) : null}
           </li>
         ))}

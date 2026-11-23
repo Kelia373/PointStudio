@@ -221,3 +221,53 @@ test('每一步状态变化都会回调，拿到的是推进后的计划', async
     ['success', 'success']
   ])
 })
+
+test('步骤结果里记下用了哪个工具、耗时多少（供界面显示详情）', async () => {
+  const tools = registry([
+    {
+      name: 'echo',
+      async handler() {
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        return { ok: true, value: 'ok' }
+      }
+    }
+  ])
+
+  const result = await executePlan(plan(), { tools })
+
+  assert.equal(result.stepResults.length, 2)
+  for (const outcome of result.stepResults) {
+    assert.equal(outcome.tool, 'echo')
+    assert.ok((outcome.durationMs ?? -1) >= 0, '成功步骤要有耗时')
+    assert.equal(outcome.code, undefined)
+  }
+})
+
+test('失败步骤的详情里带错误码与耗时', async () => {
+  const tools = registry([
+    {
+      name: 'echo',
+      async handler() {
+        return { ok: false, code: 'E_TOOL_TIMEOUT' }
+      }
+    }
+  ])
+
+  const result = await executePlan(plan(), { tools })
+  assert.equal(result.stepResults[0].status, 'failed')
+  assert.equal(result.stepResults[0].code, 'E_TOOL_TIMEOUT')
+  assert.equal(result.stepResults[0].tool, 'echo')
+  assert.ok((result.stepResults[0].durationMs ?? -1) >= 0)
+})
+
+test('没有工具的步骤不记工具与耗时', async () => {
+  const tools = registry([{ name: 'echo' }])
+  const result = await executePlan(
+    plan({ steps: [{ action: '人来做', expect: '人工完成', risk: 'low' }] }),
+    { tools }
+  )
+
+  assert.equal(result.stepResults[0].status, 'skipped')
+  assert.equal(result.stepResults[0].tool, undefined)
+  assert.equal(result.stepResults[0].durationMs, undefined)
+})

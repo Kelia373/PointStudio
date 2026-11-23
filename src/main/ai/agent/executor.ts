@@ -18,6 +18,10 @@ export interface StepOutcome {
   status: PlanStep['status']
   /** 失败时的错误码。 */
   code?: string
+  /** 这一步实际调用的工具（无工具步骤不填）。 */
+  tool?: string
+  /** 这一步花了多久（无工具步骤不填）。 */
+  durationMs?: number
 }
 
 export interface ExecuteResult {
@@ -66,17 +70,31 @@ export async function executePlan(plan: Plan, options: ExecuteOptions): Promise<
     current = markStep(current, planned.id, 'running')
     options.onStepChange?.(current)
 
+    const startedAt = Date.now()
     const result = await options.tools.run(planned.tool, planned.input)
+    const durationMs = Date.now() - startedAt
+
     if (result.ok) {
       current = markStep(current, planned.id, 'success')
       options.onStepChange?.(current)
-      stepResults.push({ id: planned.id, status: 'success' })
+      stepResults.push({
+        id: planned.id,
+        status: 'success',
+        tool: planned.tool,
+        durationMs
+      })
       continue
     }
 
     current = markStep(current, planned.id, 'failed')
     options.onStepChange?.(current)
-    stepResults.push({ id: planned.id, status: 'failed', code: result.code })
+    stepResults.push({
+      id: planned.id,
+      status: 'failed',
+      code: result.code,
+      tool: planned.tool,
+      durationMs
+    })
 
     if (failureMode === 'stop') {
       return { plan: current, status: 'failed', reason: result.code, stepResults }
