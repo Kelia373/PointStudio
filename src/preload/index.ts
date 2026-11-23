@@ -30,6 +30,9 @@ import {
   WORKSPACE_CHANNELS,
   AGENT_CHANNELS,
   BACKUP_CHANNELS,
+  MCP_CHANNELS,
+  type McpBridge,
+  type McpConnectionDto,
   type BackupBridge,
   type RestoreCountsDto,
   type RestoreModeDto,
@@ -157,6 +160,15 @@ const backup: BackupBridge = {
     >
 }
 
+const mcp: McpBridge = {
+  list: (): Promise<McpConnectionDto[]> =>
+    ipcRenderer.invoke(MCP_CHANNELS.list) as Promise<McpConnectionDto[]>,
+  add: (request: { serverName: string; url: string }): Promise<IpcResult<{ toolNames: string[] }>> =>
+    ipcRenderer.invoke(MCP_CHANNELS.add, request) as Promise<IpcResult<{ toolNames: string[] }>>,
+  remove: (serverName: string): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(MCP_CHANNELS.remove, serverName) as Promise<IpcResult<true>>
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
@@ -165,7 +177,8 @@ const api: PointStudioApi = {
   settings,
   workspace,
   agent,
-  backup
+  backup,
+  mcp
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)

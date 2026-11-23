@@ -146,3 +146,21 @@ test('失败与超时也会记录审计', async () => {
   await registry.run('failing', {}, { onRecord: (record) => records.push(record) })
   assert.equal(records[0].status, 'error')
 })
+
+test('unregister 移除工具；未知名字返回 false', () => {
+  const registry = new ToolRegistry()
+  registry.register(makeTool({ name: 'temp' }))
+
+  assert.equal(registry.unregister('temp'), true)
+  assert.equal(registry.get('temp'), undefined)
+  assert.equal(registry.unregister('temp'), false)
+})
+
+test('卸载后同名工具可以重新注册（不残留占位）', () => {
+  const registry = new ToolRegistry()
+  registry.register(makeTool({ name: 'again', description: '第一版' }))
+  registry.unregister('again')
+  registry.register(makeTool({ name: 'again', description: '第二版' }))
+
+  assert.equal(registry.get('again')?.description, '第二版')
+})

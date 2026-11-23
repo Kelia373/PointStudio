@@ -18,6 +18,8 @@ import { registerConversationIpc } from './ipc/conversation.ts'
 import { registerSettingsIpc } from './ipc/settings.ts'
 import { registerAgentIpc } from './ipc/agent.ts'
 import { registerBackupIpc } from './ipc/backup.ts'
+import { registerMcpIpc } from './ipc/mcp.ts'
+import { McpConnections } from './services/mcpConnections.ts'
 import { BackupService } from './services/backupService.ts'
 import { registerWorkspaceIpc } from './ipc/workspace.ts'
 import { ToolRegistry } from './ai/tools/registry.ts'
@@ -191,6 +193,11 @@ void app.whenReady().then(async () => {
     tools.register(tool)
   }
   registerAgentIpc({ engine, tools })
+
+  // 外部 MCP 服务：接入的工具进同一个注册表，Agent 因而能直接调用。
+  const mcpConnections = new McpConnections(tools)
+  registerMcpIpc({ connections: mcpConnections })
+  app.on('before-quit', () => mcpConnections.removeAll())
   registerAssistantIpc({ assistants: services.assistants, conversations: services.conversations })
   registerSettingsIpc({
     settings: services.settings,

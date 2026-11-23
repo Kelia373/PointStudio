@@ -30,7 +30,7 @@
 
 运行时校验集中在 `validators.ts`（不依赖 electron，可直接单测）：UUID、聊天请求、会话创建、助手草稿、设置草稿、计划请求、工作区路径。handler 只调这些判断，不再各自复制正则。
 
-已注册 `chat`、`conversation`、`assistant`、`settings`、`workspace`、`agent`、`backup` 七个域。`agent.ts` 跑一个目标并用事件推过程（plan/step/replan/done）。`workspace.ts` 只收绝对路径，读源/落盘/登记全在主进程完成。`settings.ts` 负责模型凭据：读只返回脱敏视图，明文永不出主进程。`conversation.ts` 走 invoke（列表/建/改名/删/消息/绑助手），`assistant.ts` 走 invoke（增删改查），领域错误码原样返回不翻译成文案。
+已注册 `chat`、`conversation`、`assistant`、`settings`、`workspace`、`agent`、`backup`、`mcp` 八个域。`agent.ts` 跑一个目标并用事件推过程（plan/step/replan/done）。`workspace.ts` 只收绝对路径，读源/落盘/登记全在主进程完成。`settings.ts` 负责模型凭据：读只返回脱敏视图，明文永不出主进程。`conversation.ts` 走 invoke（列表/建/改名/删/消息/绑助手），`assistant.ts` 走 invoke（增删改查），领域错误码原样返回不翻译成文案。
 
 `chat` 域（`chat.ts`）：`chat:send` 走 `ipcMain.handle`，推流用 `webContents.send`
 走 `chat:chunk` / `chat:done` / `chat:error`。通道名与载荷类型在 `src/shared/types/ipc.ts`。

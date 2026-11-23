@@ -176,6 +176,25 @@ export interface AssistantBridge {
   remove(id: string): Promise<IpcResult<true>>
 }
 
+// ---------------------------------------------------------------- MCP 服务
+
+export const MCP_CHANNELS = {
+  list: 'mcp:list',
+  add: 'mcp:add',
+  remove: 'mcp:remove'
+} as const
+
+export interface McpConnectionDto {
+  serverName: string
+  url: string
+}
+
+export interface McpBridge {
+  list(): Promise<McpConnectionDto[]>
+  add(request: { serverName: string; url: string }): Promise<IpcResult<{ toolNames: string[] }>>
+  remove(serverName: string): Promise<IpcResult<true>>
+}
+
 // ---------------------------------------------------------------- 备份
 
 export const BACKUP_CHANNELS = {
@@ -300,6 +319,7 @@ export interface PointStudioApi {
   workspace: WorkspaceBridge
   agent: AgentBridge
   backup: BackupBridge
+  mcp: McpBridge
 }
 
 

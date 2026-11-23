@@ -29,6 +29,11 @@ export class ToolRegistry {
     this.tools.set(tool.name, tool)
   }
 
+  /** 移除工具（断开外部服务时用）。返回是否真的移除了。 */
+  unregister(name: string): boolean {
+    return this.tools.delete(name)
+  }
+
   get(name: string): ToolDefinition | undefined {
     return this.tools.get(name)
   }
