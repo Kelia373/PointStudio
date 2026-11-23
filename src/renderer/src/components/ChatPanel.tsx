@@ -8,6 +8,7 @@ import type {
 } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
+import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
 import PlanPanel from './PlanPanel'
@@ -198,18 +199,31 @@ export default function ChatPanel() {
     await reloadConversations()
   }
 
-  async function runPlan(): Promise<void> {
-    const goal = draft.trim()
+  async function runPlan(goalOverride?: string, confirmedStepIds?: string[]): Promise<void> {
+    const goal = (goalOverride ?? draft).trim()
     if (goal === '' || planRun?.status === 'running') {
       return
     }
     const id = crypto.randomUUID()
     setPlanRun({ id, plan: null, status: 'running' })
     setDraft('')
-    const result = await window.pointstudio.agent.run({ id, goal })
+    const result = await window.pointstudio.agent.run({ id, goal, confirmedStepIds })
     if (!result.ok) {
       setPlanRun({ id, plan: null, status: 'failed' })
     }
+  }
+
+  /**
+   * 带着「确认结果」重跑。
+   * 注意：会重新生成计划（模型可能给出与上次不同的步骤），
+   * 真正的"断点续跑"需要把计划快照持久化，属后续工作。
+   */
+  async function confirmAndResume(): Promise<void> {
+    const plan = planRun?.plan
+    if (!plan) {
+      return
+    }
+    await runPlan(plan.goal, pendingHighRiskStepIds(plan))
   }
 
   async function exportConversation(): Promise<void> {
@@ -374,6 +388,7 @@ export default function ChatPanel() {
             plan={planRun.plan}
             status={planRun.status}
             onClose={() => setPlanRun(null)}
+            onConfirm={planRun.status === 'stopped' ? () => void confirmAndResume() : undefined}
           />
         ) : null}
 

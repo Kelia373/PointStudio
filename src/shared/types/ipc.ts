@@ -218,6 +218,8 @@ export type AgentEventDto =
 export interface AgentRunRequest {
   id: string
   goal: string
+  /** 用户已确认的高风险步骤 id；不传则遇到高风险步骤会停下。 */
+  confirmedStepIds?: string[]
 }
 
 export interface AgentBridge {

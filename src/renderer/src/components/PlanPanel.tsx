@@ -14,11 +14,14 @@ const STATUS_LABEL: Record<PlanViewDto['steps'][number]['status'], string> = {
 export default function PlanPanel({
   plan,
   status,
-  onClose
+  onClose,
+  onConfirm
 }: {
   plan: PlanViewDto
   status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped'
   onClose: () => void
+  /** 停止时提供：带着确认结果重跑。 */
+  onConfirm?: () => void
 }) {
   const { progress } = plan
 
@@ -55,7 +58,14 @@ export default function PlanPanel({
       ) : null}
 
       {status === 'stopped' ? (
-        <div className="plan__note">有高风险步骤未确认，计划已暂停。</div>
+        <div className="plan__note">
+          有高风险步骤未确认，计划已暂停。
+          {onConfirm ? (
+            <button className="plan__confirm" type="button" onClick={onConfirm}>
+              确认并继续
+            </button>
+          ) : null}
+        </div>
       ) : null}
       {status === 'failed' ? <div className="plan__note">执行失败，详见上方失败步骤。</div> : null}
     </div>

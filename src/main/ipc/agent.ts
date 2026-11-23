@@ -40,12 +40,14 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
       if (typeof request !== 'object' || request === null) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      const { id, goal } = request as Partial<AgentRunRequest>
+      const { id, goal, confirmedStepIds } = request as Partial<AgentRunRequest>
       if (
         typeof id !== 'string' ||
         !ID_PATTERN.test(id) ||
         typeof goal !== 'string' ||
-        goal.trim() === ''
+        goal.trim() === '' ||
+        (confirmedStepIds !== undefined &&
+          (!Array.isArray(confirmedStepIds) || confirmedStepIds.some((item) => typeof item !== 'string')))
       ) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
@@ -75,6 +77,7 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
                 now: () => new Date().toISOString()
               }),
             maxReplans: options.maxReplans ?? 1,
+            confirmedStepIds,
             onPlan: (plan) => emit({ type: 'plan', plan: toDto(plan) }),
             onReplan: (request_) =>
               emit({ type: 'replan', failedStepId: request_.failedStepId, errorCode: request_.errorCode })
