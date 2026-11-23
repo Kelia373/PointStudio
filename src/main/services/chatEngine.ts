@@ -22,6 +22,8 @@ export interface ReplyOptions {
   params?: ChatStreamParams
   /** 已裁剪过的历史消息（不含本轮输入）。 */
   history?: ContextMessage[]
+  /** 检索到的参考片段（已格式化）。非空时拼在本轮输入前面，并保留来源标注。 */
+  references?: string
 }
 
 /** 本次会走哪条路。纯函数，界面靠它显示状态，不靠猜。 */
@@ -50,10 +52,17 @@ export async function* streamReplyText(
 
   const systemPrompt = options.systemPrompt?.trim() ?? ''
   const history = options.history ?? []
+  const references = options.references?.trim() ?? ''
+  // 参考片段拼在**用户消息里**而不是再插一条 system：部分平台对多条 system 支持不一，
+  // 而用户消息各平台语义一致。
+  const userContent =
+    references === ''
+      ? prompt
+      : `以下是从工作区检索到的参考片段，回答时请标注来源：\n\n${references}\n\n问题：${prompt}`
   const messages = [
     ...(systemPrompt === '' ? [] : [{ role: 'system' as const, content: systemPrompt }]),
     ...history.map((item) => ({ role: item.role, content: item.content })),
-    { role: 'user' as const, content: prompt }
+    { role: 'user' as const, content: userContent }
   ]
 
   yield* deps.provider.streamChat({

@@ -258,3 +258,68 @@ test('上下文超限时回调丢了几条，而不是静默丢弃', async () =>
     assert.equal(dropped, 1, '第二轮历史有 2 条，上限 1 条，应丢 1 条')
   })
 })
+
+test('注入检索时，命中片段进入请求并回调引用', async () => {
+  const seen: ChatStreamRequest[] = []
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      seen.push(request)
+      yield '答'
+    }
+  }
+  let notified = 0
+
+  await withFlow(async ({ conversations, conversationId, assistants }) => {
+    for await (const _chunk of streamAssistantReply(conversationId, '工作台是什么', {
+      conversations,
+      assistants,
+      engine: { provider, apiKey: 'k', baseUrl: 'b', model: 'm' },
+      retrieval: {
+        search: async () => [
+          { chunk: { id: 'a.md#0', text: 'PointStudio 是 AI 工作台', source: 'a.md' }, score: 3, matchedTerms: ['工作'] }
+        ]
+      },
+      onReferences: () => {
+        notified += 1
+      }
+    })) {
+      // 消费
+    }
+  })
+
+  const userMessage = seen[0].messages.at(-1)
+  assert.ok(userMessage?.content.includes('a.md'), '参考片段的来源要进请求')
+  assert.ok(userMessage?.content.includes('工作台是什么'))
+  assert.equal(notified, 1)
+})
+
+test('检索失败不影响回答（降级为无参考资料）', async () => {
+  const seen: ChatStreamRequest[] = []
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      seen.push(request)
+      yield '答'
+    }
+  }
+
+  await withFlow(async ({ conversations, conversationId, assistants }) => {
+    let text = ''
+    for await (const chunk of streamAssistantReply(conversationId, '问题', {
+      conversations,
+      assistants,
+      engine: { provider, apiKey: 'k', baseUrl: 'b', model: 'm' },
+      retrieval: {
+        search: async () => {
+          throw new Error('E_INDEX_BROKEN')
+        }
+      }
+    })) {
+      text += chunk
+    }
+    assert.equal(text, '答')
+  })
+
+  assert.deepEqual(seen[0].messages.at(-1), { role: 'user', content: '问题' })
+})

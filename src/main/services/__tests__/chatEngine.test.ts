@@ -119,3 +119,30 @@ test('空白 systemPrompt 不插入 system 消息', async () => {
   )
   assert.deepEqual(spy.request?.messages, [{ role: 'user', content: '问题' }])
 })
+
+test('有参考片段时拼进用户消息，并保留来源', async () => {
+  const spy: { request?: ChatStreamRequest } = {}
+  await collect(
+    streamReplyText(
+      '工作台是什么',
+      { provider: makeProvider(['x'], spy), apiKey: 'k', baseUrl: 'b', model: 'm' },
+      { references: '[1] 来源：notes/intro.md\nPointStudio 是 AI 工作台。' }
+    )
+  )
+
+  const userMessage = spy.request?.messages.at(-1)
+  assert.equal(userMessage?.role, 'user')
+  assert.ok(userMessage?.content.includes('notes/intro.md'))
+  assert.ok(userMessage?.content.includes('工作台是什么'), '原问题必须还在')
+})
+
+test('没有参考片段时不改动用户消息', async () => {
+  const spy: { request?: ChatStreamRequest } = {}
+  await collect(
+    streamReplyText('问题', { provider: makeProvider(['x'], spy), apiKey: 'k', baseUrl: 'b', model: 'm' }, {
+      references: '   '
+    })
+  )
+
+  assert.deepEqual(spy.request?.messages.at(-1), { role: 'user', content: '问题' })
+})

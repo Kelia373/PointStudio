@@ -5,6 +5,8 @@
 // 也最需要测试：用户消息不能因为模型报错就跟着丢掉。
 import type { Assistant } from '../ai/domain/assistant.ts'
 import { trimHistory, type ContextMessage } from '../ai/domain/context.ts'
+import type { SearchHit } from '../ai/domain/search.ts'
+import { formatHitsForPrompt } from './retrievalService.ts'
 import type { ConversationService } from './conversationService.ts'
 import { streamReplyText, type ChatEngineDeps, type ReplyOptions } from './chatEngine.ts'
 
@@ -33,6 +35,10 @@ export interface ChatFlowDeps {
   contextLimits?: ContextLimits
   /** 上下文被裁剪时回调，用于告诉用户丢了几条。 */
   onContextTrimmed?: (droppedCount: number) => void
+  /** 可选的工作区检索；不注入则完全不做检索。 */
+  retrieval?: { search(query: string): Promise<SearchHit[]> }
+  /** 命中参考片段时回调，便于界面显示「引用了哪些文件」。 */
+  onReferences?: (hits: SearchHit[]) => void
 }
 
 /** 把助手绑定翻译成引擎选项；助手不存在时返回空选项（降级为裸对话）。 */
@@ -101,7 +107,21 @@ export async function* streamAssistantReply(
   if (trimmed.droppedCount > 0) {
     deps.onContextTrimmed?.(trimmed.droppedCount)
   }
-  const options = { ...bound, history: trimmed.messages }
+  // 检索是「锦上添花」：失败不该让整轮对话失败，退化为无参考资料。
+  let references = ''
+  if (deps.retrieval) {
+    try {
+      const hits = await deps.retrieval.search(prompt)
+      if (hits.length > 0) {
+        references = formatHitsForPrompt(hits)
+        deps.onReferences?.(hits)
+      }
+    } catch {
+      references = ''
+    }
+  }
+
+  const options = { ...bound, history: trimmed.messages, references }
 
   let accumulated = ''
   try {
