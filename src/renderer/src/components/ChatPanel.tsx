@@ -6,20 +6,13 @@ import type {
   ConversationDto,
   PlanViewDto
 } from '../../../shared/types/ipc.ts'
+import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import ConversationList from './ConversationList'
 import SettingsPanel from './SettingsPanel'
 import PlanPanel from './PlanPanel'
 import WorkspacePanel from './WorkspacePanel'
-import MessageBubble, { type BubbleRole } from './MessageBubble'
+import MessageBubble from './MessageBubble'
 
-/** 界面侧的消息形态：比持久化多一个「正在流式」的中间状态。 */
-interface UiMessage {
-  id: string
-  role: BubbleRole
-  content: string
-  status: 'complete' | 'error' | 'streaming'
-  references?: Array<{ chunkId: string; source: string }>
-}
 
 /**
  * 聊天面板：会话列表 + 消息流。
@@ -73,13 +66,11 @@ export default function ChatPanel() {
   // 订阅主进程推回来的流式事件。返回的清理函数必须调用，否则会重复追加。
   useEffect(() => {
     const offChunk = window.pointstudio.chat.onChunk(({ id, chunk }) => {
-      setMessages((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, content: m.content + chunk } : m))
-      )
+      setMessages((prev) => appendChunk(prev, id, chunk))
     })
 
     const offDone = window.pointstudio.chat.onDone(({ id }) => {
-      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, status: 'complete' } : m)))
+      setMessages((prev) => markStatus(prev, id, 'complete'))
       setBusy(false)
       // 落库完成，用磁盘上的版本覆盖界面。
       const current = activeIdRef.current
@@ -112,11 +103,7 @@ export default function ChatPanel() {
     })
 
     const offError = window.pointstudio.chat.onError(({ id, code }) => {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === id ? { ...m, status: 'error', content: m.content || `（出错了：${code}）` } : m
-        )
-      )
+      setMessages((prev) => markStatus(prev, id, 'error', `（出错了：${code}）`))
       setBusy(false)
     })
 
@@ -173,11 +160,7 @@ export default function ChatPanel() {
 
     const requestId = crypto.randomUUID()
     // 乐观渲染：用户消息与空气泡先上屏，chunk 到达即可追加。
-    setMessages((prev) => [
-      ...prev,
-      { id: `local-${requestId}`, role: 'user', content: text, status: 'complete' },
-      { id: requestId, role: 'assistant', content: '', status: 'streaming' }
-    ])
+    setMessages((prev) => startTurn(prev, { requestId, text }))
     if (textOverride === undefined) {
       setDraft('')
     }
@@ -188,11 +171,7 @@ export default function ChatPanel() {
       setMode(result.mode)
       return
     }
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === requestId ? { ...m, status: 'error', content: `（出错了：${result.code}）` } : m
-      )
-    )
+    setMessages((prev) => markStatus(prev, requestId, 'error', `（出错了：${result.code}）`))
     setBusy(false)
   }
 
