@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { generatePlan } from '../planService.ts'
+import { generatePlan, replanAfterFailure } from '../planService.ts'
 import { ToolRegistry } from '../../ai/tools/registry.ts'
 import type { ChatProvider, ChatStreamRequest } from '../../ai/providers/types.ts'
 import type { ToolDefinition } from '../../ai/tools/types.ts'
@@ -123,4 +123,80 @@ test('无可用 Key 时（本地假回复）也走同一条路径，最终返回
 
   assert.equal(result.ok, false)
   assert.equal(seen.length, 0, '无 Key 时不该发起真实请求')
+})
+
+const REVISED = {
+  goal: '查时间',
+  steps: [
+    { action: '换一种方式取时间', tool: 'now', expect: '拿到 ISO 时间', risk: 'low' },
+    { action: '算 1+2', tool: null, expect: '结果 3', risk: 'low' }
+  ],
+  stopConditions: ['再失败就停下来问人']
+}
+
+async function failedPlan() {
+  const seen: ChatStreamRequest[] = []
+  const result = await generatePlan('查时间', {
+    engine: engine(providerOf([JSON.stringify(VALID_PLAN)], seen)),
+    tools: tools(),
+    now: NOW
+  })
+  if (!result.ok) {
+    throw new Error('前置计划生成失败')
+  }
+  return result.value
+}
+
+test('重规划：把失败现场交给模型，返回修订后的新计划', async () => {
+  const plan = await failedPlan()
+  const seen: ChatStreamRequest[] = []
+
+  const result = await replanAfterFailure(
+    { plan, failedStepId: '1', errorCode: 'E_TOOL_TIMEOUT' },
+    { engine: engine(providerOf([JSON.stringify(REVISED)], seen)), tools: tools(), now: NOW }
+  )
+
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.value.steps.length, 2)
+    assert.equal(result.value.steps[0].action, '换一种方式取时间')
+  }
+
+  const prompt = seen[0].messages[seen[0].messages.length - 1].content
+  assert.ok(prompt.includes('E_TOOL_TIMEOUT'), '要把错误码告诉模型')
+  assert.ok(prompt.includes('失败步骤：1'), '要指出是哪一步失败')
+  // 检查原计划的实质内容被带上，而不是对措辞做字面断言（措辞会改，内容不会）。
+  assert.ok(prompt.includes('拿到 ISO 时间'), '要带上原计划的步骤内容')
+  assert.ok(prompt.includes('"status"'), '要带上每步的执行状态')
+})
+
+test('重规划不会修改传进来的旧计划', async () => {
+  const plan = await failedPlan()
+  const before = JSON.stringify(plan)
+  const seen: ChatStreamRequest[] = []
+
+  await replanAfterFailure(
+    { plan, failedStepId: '1', errorCode: 'E_TOOL_FAILED' },
+    { engine: engine(providerOf([JSON.stringify(REVISED)], seen)), tools: tools(), now: NOW }
+  )
+
+  assert.equal(JSON.stringify(plan), before, '旧计划是历史快照，不能被就地改写')
+})
+
+test('重规划也走带错重试；多次不合规时返回错误码', async () => {
+  const plan = await failedPlan()
+  const seen: ChatStreamRequest[] = []
+
+  const result = await replanAfterFailure(
+    { plan, failedStepId: '1', errorCode: 'E_TOOL_FAILED' },
+    {
+      engine: engine(providerOf(['不是 JSON'], seen)),
+      tools: tools(),
+      now: NOW,
+      maxAttempts: 2
+    }
+  )
+
+  assert.equal(result.ok, false)
+  assert.equal(seen.length, 2)
 })
