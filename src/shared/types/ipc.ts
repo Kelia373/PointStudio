@@ -9,7 +9,8 @@ export const CHAT_CHANNELS = {
   send: 'chat:send',
   chunk: 'chat:chunk',
   done: 'chat:done',
-  error: 'chat:error'
+  error: 'chat:error',
+  notice: 'chat:notice'
 } as const
 
 /** 错误码是稳定契约：渲染进程按码判断，不解析文案、不看堆栈。 */
@@ -50,6 +51,12 @@ export interface ChatDoneEvent {
   id: string
 }
 
+/** 上下文被裁剪的提示：告诉用户「前面几条没带上」，而不是静默丢掉。 */
+export interface ChatNoticeEvent {
+  id: string
+  droppedCount: number
+}
+
 /** 流中途失败。 */
 export interface ChatErrorEvent {
   id: string
@@ -63,6 +70,7 @@ export interface ChatBridge {
   onChunk(listener: (event: ChatChunkEvent) => void): () => void
   onDone(listener: (event: ChatDoneEvent) => void): () => void
   onError(listener: (event: ChatErrorEvent) => void): () => void
+  onNotice(listener: (event: ChatNoticeEvent) => void): () => void
 }
 
 /** preload 暴露到 window.pointstudio 上的完整形态。 */

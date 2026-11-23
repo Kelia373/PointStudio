@@ -10,6 +10,7 @@ import {
   type ChatChunkEvent,
   type ChatDoneEvent,
   type ChatErrorEvent,
+  type ChatNoticeEvent,
   type ChatSendRequest,
   type ChatSendResult
 } from '../../shared/types/ipc.ts'
@@ -76,7 +77,12 @@ async function streamReply(
     for await (const chunk of streamAssistantReply(conversationId, text, {
       conversations: options.conversations,
       assistants: options.assistants,
-      engine: options.engine
+      engine: options.engine,
+      onContextTrimmed: (droppedCount) => {
+        if (!sender.isDestroyed()) {
+          sender.send(CHAT_CHANNELS.notice, { id, droppedCount } satisfies ChatNoticeEvent)
+        }
+      }
     })) {
       if (sender.isDestroyed()) {
         return

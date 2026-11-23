@@ -74,6 +74,10 @@ export default function ChatPanel() {
       }
     })
 
+    const offNotice = window.pointstudio.chat.onNotice(({ droppedCount }) => {
+      setError(`已省略较早的 ${droppedCount} 条消息（超出上下文窗口）`)
+    })
+
     const offError = window.pointstudio.chat.onError(({ id, code }) => {
       setMessages((prev) =>
         prev.map((m) =>
@@ -86,6 +90,7 @@ export default function ChatPanel() {
     return () => {
       offChunk()
       offDone()
+      offNotice()
       offError()
     }
   }, [loadMessages, reloadConversations])

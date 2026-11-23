@@ -17,6 +17,7 @@ import {
   type ChatChunkEvent,
   type ChatDoneEvent,
   type ChatErrorEvent,
+  type ChatNoticeEvent,
   type ChatSendRequest,
   type ChatSendResult,
   type ConversationBridge,
@@ -53,7 +54,9 @@ const chat: ChatBridge = {
   onDone: (listener: (event: ChatDoneEvent) => void): Unsubscribe =>
     subscribe(CHAT_CHANNELS.done, listener),
   onError: (listener: (event: ChatErrorEvent) => void): Unsubscribe =>
-    subscribe(CHAT_CHANNELS.error, listener)
+    subscribe(CHAT_CHANNELS.error, listener),
+  onNotice: (listener: (event: ChatNoticeEvent) => void): Unsubscribe =>
+    subscribe(CHAT_CHANNELS.notice, listener)
 }
 
 const conversations: ConversationBridge = {

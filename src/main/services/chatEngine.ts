@@ -3,6 +3,7 @@
 // 放在 services 而不是 ipc：这是业务选择（有凭据就真的调模型，没有就降级），
 // 不是协议细节。ipc 层只负责把它接到通道上。
 import type { ChatProvider, ChatStreamParams } from '../ai/providers/types.ts'
+import type { ContextMessage } from '../ai/domain/context.ts'
 import type { ChatMode } from '../../shared/types/ipc.ts'
 import { buildReplyChunks } from './chatReply.ts'
 
@@ -19,6 +20,8 @@ export interface ReplyOptions {
   systemPrompt?: string
   model?: string
   params?: ChatStreamParams
+  /** 已裁剪过的历史消息（不含本轮输入）。 */
+  history?: ContextMessage[]
 }
 
 /** 本次会走哪条路。纯函数，界面靠它显示状态，不靠猜。 */
@@ -46,13 +49,12 @@ export async function* streamReplyText(
   }
 
   const systemPrompt = options.systemPrompt?.trim() ?? ''
-  const messages =
-    systemPrompt === ''
-      ? [{ role: 'user' as const, content: prompt }]
-      : [
-          { role: 'system' as const, content: systemPrompt },
-          { role: 'user' as const, content: prompt }
-        ]
+  const history = options.history ?? []
+  const messages = [
+    ...(systemPrompt === '' ? [] : [{ role: 'system' as const, content: systemPrompt }]),
+    ...history.map((item) => ({ role: item.role, content: item.content })),
+    { role: 'user' as const, content: prompt }
+  ]
 
   yield* deps.provider.streamChat({
     apiKey: deps.apiKey ?? '',

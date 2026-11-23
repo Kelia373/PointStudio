@@ -191,3 +191,70 @@ test('绑定的助手已被删除时降级为裸对话，不报错', async () =>
     { get: async () => null }
   )
 })
+
+test('第二轮请求会带上第一轮的历史（多轮真的有记忆）', async () => {
+  const requests: ChatStreamRequest[] = []
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      requests.push(request)
+      yield '答'
+    }
+  }
+
+  await withFlow(async ({ conversations, conversationId, assistants }) => {
+    const flowDeps = {
+      conversations,
+      assistants,
+      engine: { provider, apiKey: 'k', baseUrl: 'b', model: 'm' }
+    }
+    for await (const _chunk of streamAssistantReply(conversationId, '第一问', flowDeps)) {
+      // 消费
+    }
+    for await (const _chunk of streamAssistantReply(conversationId, '第二问', flowDeps)) {
+      // 消费
+    }
+
+    assert.equal(requests.length, 2)
+    assert.deepEqual(requests[0].messages, [{ role: 'user', content: '第一问' }])
+    assert.deepEqual(
+      requests[1].messages,
+      [
+        { role: 'user', content: '第一问' },
+        { role: 'assistant', content: '答' },
+        { role: 'user', content: '第二问' }
+      ],
+      '第二轮要带上第一轮的问与答，且本轮的输入只出现一次'
+    )
+  })
+})
+
+test('上下文超限时回调丢了几条，而不是静默丢弃', async () => {
+  let dropped = 0
+  await withFlow(async ({ conversations, conversationId, assistants }) => {
+    const provider: ChatProvider = {
+      id: 'fake',
+      async *streamChat(): AsyncGenerator<string> {
+        yield '答'
+      }
+    }
+    const deps = {
+      conversations,
+      assistants,
+      engine: { provider, apiKey: 'k', baseUrl: 'b', model: 'm' },
+      contextLimits: { maxMessages: 1, maxTokens: 10_000 },
+      onContextTrimmed: (count: number) => {
+        dropped = count
+      }
+    }
+
+    for await (const _chunk of streamAssistantReply(conversationId, '第一问', deps)) {
+      // 消费
+    }
+    for await (const _chunk of streamAssistantReply(conversationId, '第二问', deps)) {
+      // 消费
+    }
+
+    assert.equal(dropped, 1, '第二轮历史有 2 条，上限 1 条，应丢 1 条')
+  })
+})

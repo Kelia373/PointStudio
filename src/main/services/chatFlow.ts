@@ -4,6 +4,7 @@
 // （conversationService）。它决定的是顺序与失败语义——这部分最容易出错，
 // 也最需要测试：用户消息不能因为模型报错就跟着丢掉。
 import type { Assistant } from '../ai/domain/assistant.ts'
+import { trimHistory, type ContextMessage } from '../ai/domain/context.ts'
 import type { ConversationService } from './conversationService.ts'
 import { streamReplyText, type ChatEngineDeps, type ReplyOptions } from './chatEngine.ts'
 
@@ -15,10 +16,23 @@ export interface AssistantLookup {
   get(id: string): Promise<Assistant | null>
 }
 
+/** 上下文窗口上限：条数与粗略 token 预算。超了从头丢，并在返回值里报出来。 */
+export const CONTEXT_MAX_MESSAGES = 20
+export const CONTEXT_MAX_TOKENS = 4_000
+
+export interface ContextLimits {
+  maxMessages: number
+  maxTokens: number
+}
+
 export interface ChatFlowDeps {
   conversations: ConversationService
   assistants: AssistantLookup
   engine: ChatEngineDeps
+  /** 覆盖默认上下文上限（测试用；生产用默认常量）。 */
+  contextLimits?: ContextLimits
+  /** 上下文被裁剪时回调，用于告诉用户丢了几条。 */
+  onContextTrimmed?: (droppedCount: number) => void
 }
 
 /** 把助手绑定翻译成引擎选项；助手不存在时返回空选项（降级为裸对话）。 */
@@ -62,6 +76,14 @@ export async function* streamAssistantReply(
     throw new Error('E_NOT_FOUND')
   }
 
+  // 先取历史（此时还没有本轮这条），再落用户消息——顺序反了就会把本轮算进历史，
+  // 模型会看到同一句话两遍。
+  const previous = await deps.conversations.listMessages(conversationId)
+  const history: ContextMessage[] = previous.map((message) => ({
+    role: message.role,
+    content: message.content
+  }))
+
   const saved = await deps.conversations.appendMessage(conversationId, {
     role: 'user',
     content: prompt
@@ -70,7 +92,16 @@ export async function* streamAssistantReply(
     throw new Error(saved.errors[0] ?? 'E_UNKNOWN')
   }
 
-  const options = await resolveReplyOptions(conversationId, deps)
+  const bound = await resolveReplyOptions(conversationId, deps)
+  const limits = deps.contextLimits ?? {
+    maxMessages: CONTEXT_MAX_MESSAGES,
+    maxTokens: CONTEXT_MAX_TOKENS
+  }
+  const trimmed = trimHistory(history, limits)
+  if (trimmed.droppedCount > 0) {
+    deps.onContextTrimmed?.(trimmed.droppedCount)
+  }
+  const options = { ...bound, history: trimmed.messages }
 
   let accumulated = ''
   try {
