@@ -27,6 +27,9 @@ export default function ChatPanel() {
   const [mode, setMode] = useState<ChatMode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
+  const [drafting, setDrafting] = useState(false)
+  const [assistantName, setAssistantName] = useState('')
+  const [assistantPrompt, setAssistantPrompt] = useState('')
 
   const listRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
@@ -166,6 +169,29 @@ export default function ChatPanel() {
     await reloadConversations()
   }
 
+  async function createAssistant(): Promise<void> {
+    const name = assistantName.trim()
+    if (name === '') {
+      return
+    }
+    const created = await window.pointstudio.assistants.create({
+      name,
+      systemPrompt: assistantPrompt.trim()
+    })
+    if (!created.ok) {
+      setError(created.code)
+      return
+    }
+    setAssistantName('')
+    setAssistantPrompt('')
+    setDrafting(false)
+    setError(null)
+    setAssistants(await window.pointstudio.assistants.list())
+    if (activeId) {
+      await bindAssistant(created.value.id)
+    }
+  }
+
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
@@ -222,9 +248,36 @@ export default function ChatPanel() {
               </option>
             ))}
           </select>
+          <button
+            className="chat__assistant-new"
+            type="button"
+            onClick={() => setDrafting((value) => !value)}
+          >
+            ＋助手
+          </button>
           <span className="chat__hint">{hint}</span>
           {error ? <span className="chat__error">{error}</span> : null}
         </header>
+
+        {drafting ? (
+          <div className="assistant-form">
+            <input
+              className="assistant-form__name"
+              value={assistantName}
+              placeholder="助手名称"
+              onChange={(event) => setAssistantName(event.target.value)}
+            />
+            <input
+              className="assistant-form__prompt"
+              value={assistantPrompt}
+              placeholder="系统提示（可选）：例如「你是严格的代码审查员」"
+              onChange={(event) => setAssistantPrompt(event.target.value)}
+            />
+            <button className="assistant-form__save" type="button" onClick={() => void createAssistant()}>
+              保存
+            </button>
+          </div>
+        ) : null}
 
         <div className="chat__list" ref={listRef}>
           {messages.length === 0 ? (
