@@ -7,8 +7,12 @@ import { contextBridge, ipcRenderer } from 'electron'
 // 否则每渲染一次就多挂一个监听，流式内容会被重复追加。
 
 import {
+  ASSISTANT_CHANNELS,
   CHAT_CHANNELS,
   CONVERSATION_CHANNELS,
+  type AssistantBridge,
+  type AssistantDto,
+  type AssistantDraftRequest,
   type ChatBridge,
   type ChatChunkEvent,
   type ChatDoneEvent,
@@ -58,13 +62,31 @@ const conversations: ConversationBridge = {
   remove: (id: string): Promise<IpcResult<true>> =>
     ipcRenderer.invoke(CONVERSATION_CHANNELS.remove, id) as Promise<IpcResult<true>>,
   messages: (id: string): Promise<MessageDto[]> =>
-    ipcRenderer.invoke(CONVERSATION_CHANNELS.messages, id) as Promise<MessageDto[]>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.messages, id) as Promise<MessageDto[]>,
+  setAssistant: (id: string, assistantId: string | null): Promise<IpcResult<ConversationDto>> =>
+    ipcRenderer.invoke(
+      CONVERSATION_CHANNELS.setAssistant,
+      id,
+      assistantId
+    ) as Promise<IpcResult<ConversationDto>>
+}
+
+const assistants: AssistantBridge = {
+  list: (): Promise<AssistantDto[]> =>
+    ipcRenderer.invoke(ASSISTANT_CHANNELS.list) as Promise<AssistantDto[]>,
+  create: (request: AssistantDraftRequest): Promise<IpcResult<AssistantDto>> =>
+    ipcRenderer.invoke(ASSISTANT_CHANNELS.create, request) as Promise<IpcResult<AssistantDto>>,
+  update: (id: string, request: AssistantDraftRequest): Promise<IpcResult<AssistantDto>> =>
+    ipcRenderer.invoke(ASSISTANT_CHANNELS.update, id, request) as Promise<IpcResult<AssistantDto>>,
+  remove: (id: string): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(ASSISTANT_CHANNELS.remove, id) as Promise<IpcResult<true>>
 }
 
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
-  conversations
+  conversations,
+  assistants
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)

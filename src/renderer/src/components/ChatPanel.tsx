@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import type { ChatMode, ConversationDto } from '../../../shared/types/ipc.ts'
+import type { AssistantDto, ChatMode, ConversationDto } from '../../../shared/types/ipc.ts'
 import ConversationList from './ConversationList'
 import MessageBubble, { type BubbleRole } from './MessageBubble'
 
@@ -26,6 +26,7 @@ export default function ChatPanel() {
   const [busy, setBusy] = useState(false)
   const [mode, setMode] = useState<ChatMode | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [assistants, setAssistants] = useState<AssistantDto[]>([])
 
   const listRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
@@ -87,6 +88,7 @@ export default function ChatPanel() {
   // 首次进入：有会话就用最近一个，没有就建一个。
   useEffect(() => {
     void (async () => {
+      setAssistants(await window.pointstudio.assistants.list())
       const items = await reloadConversations()
       if (items.length > 0) {
         setActiveId(items[0].id)
@@ -148,6 +150,22 @@ export default function ChatPanel() {
     setBusy(false)
   }
 
+  async function bindAssistant(assistantId: string): Promise<void> {
+    if (!activeId) {
+      return
+    }
+    const bound = await window.pointstudio.conversations.setAssistant(
+      activeId,
+      assistantId === '' ? null : assistantId
+    )
+    if (!bound.ok) {
+      setError(bound.code)
+      return
+    }
+    setError(null)
+    await reloadConversations()
+  }
+
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
@@ -191,6 +209,19 @@ export default function ChatPanel() {
       <section className="chat">
         <header className="chat__header">
           <h1>PointStudio</h1>
+          <select
+            className="chat__assistant"
+            value={conversations.find((c) => c.id === activeId)?.assistantId ?? ''}
+            onChange={(event) => void bindAssistant(event.target.value)}
+            disabled={!activeId}
+          >
+            <option value="">不使用助手</option>
+            {assistants.map((assistant) => (
+              <option key={assistant.id} value={assistant.id}>
+                {assistant.name}
+              </option>
+            ))}
+          </select>
           <span className="chat__hint">{hint}</span>
           {error ? <span className="chat__error">{error}</span> : null}
         </header>

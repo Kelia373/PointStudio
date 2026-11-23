@@ -98,6 +98,22 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
   )
 
   ipcMain.handle(
+    CONVERSATION_CHANNELS.setAssistant,
+    async (_event, id: unknown, assistantId: unknown): Promise<IpcResult<ConversationDto>> => {
+      if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      if (assistantId !== null && (typeof assistantId !== 'string' || !ID_PATTERN.test(assistantId))) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      const result = await service.setAssistant(id, assistantId)
+      return result.ok
+        ? { ok: true, value: toConversationDto(result.value) }
+        : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
+  ipcMain.handle(
     CONVERSATION_CHANNELS.messages,
     async (_event, id: unknown): Promise<MessageDto[]> => {
       if (typeof id !== 'string' || !ID_PATTERN.test(id)) {

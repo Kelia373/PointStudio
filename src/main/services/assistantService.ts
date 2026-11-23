@@ -30,6 +30,11 @@ export class AssistantService {
     return this.store.readAll()
   }
 
+  async get(id: string): Promise<Assistant | null> {
+    const items = await this.store.readAll()
+    return items.find((item) => item.id === id) ?? null
+  }
+
   async create(draft: AssistantDraft): Promise<ServiceResult<Assistant>> {
     const checked = validateAssistantDraft(draft)
     if (!checked.ok) {

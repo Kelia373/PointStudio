@@ -16,7 +16,7 @@ import {
 import { ProviderError } from '../ai/providers/types.ts'
 import { REPLY_CHUNK_DELAY_MS } from '../services/chatReply.ts'
 import { resolveMode, type ChatEngineDeps } from '../services/chatEngine.ts'
-import { streamAssistantReply } from '../services/chatFlow.ts'
+import { streamAssistantReply, type AssistantLookup } from '../services/chatFlow.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -50,6 +50,7 @@ function toChatErrorCode(error: unknown): 'E_UPSTREAM' | 'E_INTERNAL' {
 export interface ChatIpcOptions {
   engine: ChatEngineDeps
   conversations: ConversationService
+  assistants: AssistantLookup
 }
 
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
@@ -74,6 +75,7 @@ async function streamReply(
   try {
     for await (const chunk of streamAssistantReply(conversationId, text, {
       conversations: options.conversations,
+      assistants: options.assistants,
       engine: options.engine
     })) {
       if (sender.isDestroyed()) {

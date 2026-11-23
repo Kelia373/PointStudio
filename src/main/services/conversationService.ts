@@ -54,6 +54,11 @@ export class ConversationService {
     return [...items].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }
 
+  async get(id: string): Promise<Conversation | null> {
+    const items = await this.conversations.readAll()
+    return items.find((item) => item.id === id) ?? null
+  }
+
   async create(input: CreateConversationInput = {}): Promise<ServiceResult<Conversation>> {
     let title = DEFAULT_CONVERSATION_TITLE
     if (input.title !== undefined) {
@@ -94,6 +99,24 @@ export class ConversationService {
     const updated: Conversation = {
       ...items[index],
       title: checked.value,
+      updatedAt: this.deps.now()
+    }
+    items[index] = updated
+    await this.conversations.writeAll(items)
+    return { ok: true, value: updated }
+  }
+
+  /** 绑定（或解绑）助手。assistantId 为 null 表示退回裸对话。 */
+  async setAssistant(id: string, assistantId: string | null): Promise<ServiceResult<Conversation>> {
+    const items = await this.conversations.readAll()
+    const index = items.findIndex((item) => item.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    const updated: Conversation = {
+      ...items[index],
+      assistantId,
       updatedAt: this.deps.now()
     }
     items[index] = updated

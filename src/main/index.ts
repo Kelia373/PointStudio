@@ -7,10 +7,13 @@ import {
   DEEPSEEK_DEFAULT_BASE_URL,
   DEEPSEEK_DEFAULT_MODEL
 } from './ai/providers/deepseek.ts'
+import type { Assistant } from './ai/domain/assistant.ts'
 import type { Conversation, Message } from './ai/domain/conversation.ts'
 import { JsonFileStore } from './data/fileStore.ts'
+import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
+import { AssistantService } from './services/assistantService.ts'
 import { ConversationService } from './services/conversationService.ts'
 
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
@@ -40,8 +43,19 @@ function createWindow(): void {
 }
 
 /** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
-function buildConversationService(): ConversationService {
+function buildServices(): { conversations: ConversationService; assistants: AssistantService } {
   const dataDir = app.getPath('userData')
+  const deps = { newId: () => randomUUID(), now: () => new Date().toISOString() }
+  return {
+    conversations: buildConversationService(dataDir),
+    assistants: new AssistantService(
+      new JsonFileStore<Assistant>(join(dataDir, 'assistants.json')),
+      deps
+    )
+  }
+}
+
+function buildConversationService(dataDir: string): ConversationService {
   return new ConversationService(
     new JsonFileStore<Conversation>(join(dataDir, 'conversations.json')),
     new JsonFileStore<Message>(join(dataDir, 'messages.json')),
@@ -51,11 +65,13 @@ function buildConversationService(): ConversationService {
 
 void app.whenReady().then(() => {
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
-  const conversations = buildConversationService()
+  const { conversations, assistants } = buildServices()
 
   registerConversationIpc({ conversations })
+  registerAssistantIpc({ assistants })
   registerChatIpc({
     conversations,
+    assistants,
     engine: {
       provider: new DeepSeekProvider(),
       // 凭据只从进程环境读取：不落盘、不进仓库、不出现在任何提交里。

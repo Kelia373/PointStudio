@@ -115,3 +115,14 @@ test('损坏的 JSON：返回空列表不崩，且不覆盖原文件', async () 
     assert.equal(await readFile(filePath, 'utf8'), broken)
   })
 })
+
+test('get 能按 id 取回助手，不存在时返回 null', async () => {
+  await withTempService(async ({ service }) => {
+    const created = await service.create({ name: '要取的助手' })
+    if (!created.ok) return
+
+    const found = await service.get(created.value.id)
+    assert.equal(found?.name, '要取的助手')
+    assert.equal(await service.get('missing'), null)
+  })
+})

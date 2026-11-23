@@ -28,6 +28,8 @@
 
 ## 现状
 
-已注册 `chat` 域（`chat.ts`）：`chat:send` 走 `ipcMain.handle`，推流用 `webContents.send`
+已注册 `chat`、`conversation`、`assistant` 三个域。`conversation.ts` 走 invoke（列表/建/改名/删/消息/绑助手），`assistant.ts` 走 invoke（增删改查），领域错误码原样返回不翻译成文案。
+
+`chat` 域（`chat.ts`）：`chat:send` 走 `ipcMain.handle`，推流用 `webContents.send`
 走 `chat:chunk` / `chat:done` / `chat:error`。通道名与载荷类型在 `src/shared/types/ipc.ts`。
 参数在边界处做运行时校验（TS 类型在跨进程时不存在），错误归一为错误码。

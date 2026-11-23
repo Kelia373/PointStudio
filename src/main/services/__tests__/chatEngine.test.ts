@@ -91,3 +91,31 @@ test('resolveMode 直接反映有没有可用凭据', () => {
   assert.equal(resolveMode({ ...base, apiKey: '   ' }), 'local')
   assert.equal(resolveMode({ ...base, apiKey: 'k' }), 'live')
 })
+
+test('传了 systemPrompt 就把它放在消息最前面', async () => {
+  const spy: { request?: ChatStreamRequest } = {}
+  await collect(
+    streamReplyText('问题', { provider: makeProvider(['x'], spy), apiKey: 'k', baseUrl: 'b', model: 'm' }, {
+      systemPrompt: '你是代码审查员',
+      model: 'bound-model',
+      params: { temperature: 0.2 }
+    })
+  )
+
+  assert.deepEqual(spy.request?.messages, [
+    { role: 'system', content: '你是代码审查员' },
+    { role: 'user', content: '问题' }
+  ])
+  assert.equal(spy.request?.model, 'bound-model', '助手绑定的模型应覆盖默认模型')
+  assert.equal(spy.request?.params?.temperature, 0.2)
+})
+
+test('空白 systemPrompt 不插入 system 消息', async () => {
+  const spy: { request?: ChatStreamRequest } = {}
+  await collect(
+    streamReplyText('问题', { provider: makeProvider(['x'], spy), apiKey: 'k', baseUrl: 'b', model: 'm' }, {
+      systemPrompt: '   '
+    })
+  )
+  assert.deepEqual(spy.request?.messages, [{ role: 'user', content: '问题' }])
+})

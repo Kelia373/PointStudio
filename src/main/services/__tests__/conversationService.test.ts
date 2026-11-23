@@ -200,3 +200,33 @@ test('改名与会话不存在时的错误码', async () => {
     }
   })
 })
+
+test('get 能按 id 取回会话，不存在时返回 null', async () => {
+  await withService(async ({ service }) => {
+    const created = await service.create({ title: '要取的' })
+    if (!created.ok) return
+
+    const found = await service.get(created.value.id)
+    assert.equal(found?.title, '要取的')
+    assert.equal(await service.get('missing'), null)
+  })
+})
+
+test('绑定与解绑助手', async () => {
+  await withService(async ({ service }) => {
+    const created = await service.create({ title: '绑助手' })
+    if (!created.ok) return
+    const id = created.value.id
+
+    const bound = await service.setAssistant(id, 'assistant-1')
+    assert.equal(bound.ok, true)
+    assert.equal((await service.get(id))?.assistantId, 'assistant-1')
+
+    const unbound = await service.setAssistant(id, null)
+    assert.equal(unbound.ok, true)
+    assert.equal((await service.get(id))?.assistantId, null)
+
+    const missing = await service.setAssistant('missing', 'x')
+    assert.equal(missing.ok, false)
+  })
+})

@@ -66,12 +66,6 @@ export interface ChatBridge {
 }
 
 /** preload 暴露到 window.pointstudio 上的完整形态。 */
-export interface PointStudioApi {
-  electronVersion: string
-  chat: ChatBridge
-  conversations: ConversationBridge
-}
-
 
 // ---------------------------------------------------------------- 会话与消息
 
@@ -80,7 +74,8 @@ export const CONVERSATION_CHANNELS = {
   create: 'conversation:create',
   rename: 'conversation:rename',
   remove: 'conversation:remove',
-  messages: 'conversation:messages'
+  messages: 'conversation:messages',
+  setAssistant: 'conversation:set-assistant'
 } as const
 
 /** 跨进程传输用的会话形态：只放界面需要显示的字段。 */
@@ -117,4 +112,49 @@ export interface ConversationBridge {
   rename(id: string, title: string): Promise<IpcResult<ConversationDto>>
   remove(id: string): Promise<IpcResult<true>>
   messages(id: string): Promise<MessageDto[]>
+  /** 绑定 / 解绑助手；null 表示退回裸对话。 */
+  setAssistant(id: string, assistantId: string | null): Promise<IpcResult<ConversationDto>>
+}
+
+
+// ---------------------------------------------------------------- 助手
+
+export const ASSISTANT_CHANNELS = {
+  list: 'assistant:list',
+  create: 'assistant:create',
+  update: 'assistant:update',
+  remove: 'assistant:remove'
+} as const
+
+export interface AssistantDto {
+  id: string
+  name: string
+  systemPrompt: string
+  providerId: string | null
+  modelId: string | null
+  params: { temperature: number; maxTokens: number; topP: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AssistantDraftRequest {
+  name: string
+  systemPrompt?: string
+  modelId?: string | null
+  providerId?: string | null
+  params?: { temperature?: number; maxTokens?: number; topP?: number }
+}
+
+export interface AssistantBridge {
+  list(): Promise<AssistantDto[]>
+  create(request: AssistantDraftRequest): Promise<IpcResult<AssistantDto>>
+  update(id: string, request: AssistantDraftRequest): Promise<IpcResult<AssistantDto>>
+  remove(id: string): Promise<IpcResult<true>>
+}
+
+export interface PointStudioApi {
+  electronVersion: string
+  chat: ChatBridge
+  conversations: ConversationBridge
+  assistants: AssistantBridge
 }
