@@ -65,9 +65,14 @@ export default function Annotate({
       return
     }
 
+    // 标注模式开启后会拦截整页点击；但开关本身必须放行，
+    // 否则「打开标注」之后就再也点不到关闭按钮了（只能刷新）。
     function block(event: Event): boolean {
       const target = event.target
-      return target instanceof HTMLElement && target.closest('.annot-ui') !== null
+      if (!(target instanceof HTMLElement)) {
+        return false
+      }
+      return target.closest('.annot-ui') !== null || target.closest('[data-annot-skip]') !== null
     }
 
     function onMove(event: PointerEvent): void {

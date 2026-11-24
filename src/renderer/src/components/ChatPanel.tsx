@@ -480,6 +480,7 @@ export default function ChatPanel() {
           <button
             className={`icon-btn${annotate ? ' icon-btn--on' : ''}`}
             type="button"
+            data-annot-skip=""
             onClick={() => setAnnotate((value) => !value)}
             title={annotate ? '退出标注模式' : '标注模式：点界面元素写意见'}
             aria-label="切换标注模式"

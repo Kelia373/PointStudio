@@ -182,8 +182,10 @@ select:focus {
 
 .side__search-icon {
   color: var(--fg-3);
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
+  /* 小尺寸下 1.8 的描边会糊成一团，这里按参考图的观感调细 */
+  stroke-width: 1.6;
 }
 
 .side__search-input {
