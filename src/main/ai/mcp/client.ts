@@ -123,7 +123,20 @@ export class McpClient {
       this.pending.set(id, { resolve, reject, timer })
     })
 
-    await this.transport.send({ jsonrpc: '2.0', id, method, params })
+    try {
+      await this.transport.send({ jsonrpc: '2.0', id, method, params })
+    } catch (error) {
+      // 发送本身失败（连接被拒、传输层崩了）：必须就地收敛这个请求。
+      // 否则它会留在 pending 里成为没人 await 的 promise，之后 dispose()
+      // 再 reject 它就变成 unhandledRejection——测试里是偶发 fail，
+      // 线上是进程级未处理拒绝。
+      const entry = this.pending.get(id)
+      if (entry) {
+        clearTimeout(entry.timer)
+        this.pending.delete(id)
+        entry.reject(error instanceof Error ? error : new Error(String(error)))
+      }
+    }
     return promise
   }
 

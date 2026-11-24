@@ -200,3 +200,31 @@ test('MCP 报错时工具返回错误码而不是抛异常', async () => {
 
   assert.deepEqual(await call, { ok: false, code: 'E_TOOL_FAILED' })
 })
+
+test('发送失败时立刻收敛请求，不在 dispose 时冒出未处理拒绝', async () => {
+  // 回归：send 抛错时旧实现把 promise 留在 pending 里没人 await，
+  // dispose() 再去 reject 它就变成 unhandledRejection。
+  const unhandled: unknown[] = []
+  const collect = (reason: unknown): void => {
+    unhandled.push(reason)
+  }
+
+  const transport: McpTransport = {
+    send: async () => {
+      throw new Error('ECONNREFUSED')
+    },
+    onMessage: () => () => {}
+  }
+  const client = new McpClient(transport)
+
+  process.on('unhandledRejection', collect)
+  try {
+    await assert.rejects(() => client.request('tools/list', {}), /ECONNREFUSED/)
+    // 失败后 dispose 不应再有任何托管中的请求可被拒绝。
+    client.dispose()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    assert.deepEqual(unhandled, [])
+  } finally {
+    process.off('unhandledRejection', collect)
+  }
+})
