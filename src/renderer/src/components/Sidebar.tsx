@@ -1,6 +1,11 @@
-// 侧栏：品牌行 + 会话列表 + 功能区。
-// 收起态只留图标轨（64px），语义不变——按钮仍有 aria-label 与 title。
+// 侧栏：品牌行 + 搜索 + 会话列表 + 功能区。
+// 收起态只留图标轨（64px）：品牌行改成上下排布（logo 在上、折叠键在下），
+// 搜索变成一个放大镜按钮，点它展开侧栏并聚焦输入框。
+import { useEffect, useMemo, useRef, useState } from 'react'
+
 import type { ConversationDto } from '../../../shared/types/ipc.ts'
+import { filterConversations } from '../lib/filterConversations'
+import Icon from './Icon'
 
 export default function Sidebar({
   conversations,
@@ -27,6 +32,25 @@ export default function Sidebar({
   onOpenSettings: () => void
   onExport: () => void
 }) {
+  const [keyword, setKeyword] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  const visible = useMemo(() => filterConversations(conversations, keyword), [conversations, keyword])
+
+  // Ctrl/⌘ + F 聚焦搜索：界面上那个 ⌘F 标记得是真的。
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+        event.preventDefault()
+        if (collapsed) {
+          onToggleCollapse()
+        }
+        window.setTimeout(() => inputRef.current?.focus(), 0)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [collapsed, onToggleCollapse])
+
   return (
     <aside className={`side${collapsed ? ' side--rail' : ''}`}>
       <div className="side__brand">
@@ -41,25 +65,63 @@ export default function Sidebar({
           title={collapsed ? '展开侧栏' : '收起侧栏'}
           aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
         >
-          {collapsed ? '»' : '«'}
+          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} />
         </button>
       </div>
 
-      <button
-        className="side__new"
-        type="button"
-        onClick={onCreate}
-        title="新建会话"
-        aria-label="新建会话"
-      >
-        <span className="side__new-icon" aria-hidden="true">
-          ＋
-        </span>
-        <span className="side__new-label">新建</span>
-      </button>
+      {collapsed ? (
+        <div className="side__rail-tools">
+          <button
+            className="side__rail-btn"
+            type="button"
+            onClick={onToggleCollapse}
+            title="搜索会话"
+            aria-label="搜索会话"
+          >
+            <Icon name="search" />
+          </button>
+          <button
+            className="side__rail-btn"
+            type="button"
+            onClick={onCreate}
+            title="新建会话"
+            aria-label="新建会话"
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
+      ) : (
+        <div className="side__search">
+          <Icon name="search" className="side__search-icon" />
+          <input
+            ref={inputRef}
+            className="side__search-input"
+            value={keyword}
+            placeholder="搜索会话"
+            aria-label="搜索会话"
+            onChange={(event) => setKeyword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                setKeyword('')
+                event.currentTarget.blur()
+              }
+            }}
+          />
+          <span className="side__key">⌘F</span>
+          <button
+            className="side__search-add"
+            type="button"
+            onClick={onCreate}
+            title="新建会话"
+            aria-label="新建会话"
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
+      )}
 
       <ul className="side__list">
-        {conversations.map((conversation) => (
+        {visible.map((conversation) => (
           <li key={conversation.id}>
             <div
               className={`side__item${conversation.id === activeId ? ' side__item--active' : ''}`}
@@ -84,6 +146,9 @@ export default function Sidebar({
             </div>
           </li>
         ))}
+        {visible.length === 0 && conversations.length > 0 ? (
+          <li className="side__empty">没有匹配的会话</li>
+        ) : null}
         {conversations.length === 0 ? <li className="side__empty">还没有会话</li> : null}
       </ul>
 
@@ -94,19 +159,19 @@ export default function Sidebar({
           onClick={onOpenAssistants}
           title="助手管理"
         >
-          <span className="side__act-icon">👤</span>
+          <Icon name="user" className="side__act-icon" />
           <span className="side__act-label">助手管理</span>
         </button>
         <button className="side__act" type="button" onClick={onOpenWorkspace} title="工作区">
-          <span className="side__act-icon">📁</span>
+          <Icon name="folder" className="side__act-icon" />
           <span className="side__act-label">工作区</span>
         </button>
         <button className="side__act" type="button" onClick={onExport} title="导出 Markdown">
-          <span className="side__act-icon">⤓</span>
+          <Icon name="download" className="side__act-icon" />
           <span className="side__act-label">导出</span>
         </button>
         <button className="side__act" type="button" onClick={onOpenSettings} title="设置">
-          <span className="side__act-icon">⚙</span>
+          <Icon name="settings" className="side__act-icon" />
           <span className="side__act-label">设置</span>
         </button>
       </div>

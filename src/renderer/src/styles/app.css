@@ -99,6 +99,11 @@ select:focus {
 
 /* ------------------------------------------------------------ 侧栏 */
 
+.ico {
+  display: block;
+  flex: none;
+}
+
 .side {
   display: flex;
   flex-direction: column;
@@ -157,22 +162,96 @@ select:focus {
   color: var(--fg);
 }
 
-.side__new {
+.side__search {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: var(--sp-1);
-  margin: var(--sp-3) var(--sp-3) var(--sp-2);
+  margin: var(--sp-3) var(--sp-2) var(--sp-2);
+  padding: 0 var(--sp-1) 0 var(--sp-2);
   height: 32px;
   flex: none;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: var(--rad-ctl);
-  font-size: 13px;
-  transition: background var(--dur-1), border-color var(--dur-1);
+  background: var(--panel-2);
+  transition: border-color var(--dur-2);
 }
 
-.side__new:hover {
+.side__search:focus-within {
+  border-color: var(--line-strong);
+}
+
+.side__search-icon {
+  color: var(--fg-3);
+  width: 14px;
+  height: 14px;
+}
+
+.side__search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 13px;
+}
+
+.side__search-input:focus {
+  border: none;
+}
+
+.side__search-input::placeholder {
+  color: var(--fg-3);
+}
+
+.side__key {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--fg-3);
+  font-size: 10px;
+  line-height: 16px;
+}
+
+.side__search-add {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--rad-ctl);
+  color: var(--fg-3);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+
+.side__search-add:hover {
   background: var(--hover);
+  color: var(--fg);
+}
+
+/* 收起态的工具位：搜索与新建各一个图标 */
+.side__rail-tools {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: var(--sp-2) 0;
+  flex: none;
+}
+
+.side__rail-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--rad-ctl);
+  color: var(--fg-3);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+
+.side__rail-btn:hover {
+  background: var(--hover);
+  color: var(--fg);
 }
 
 .side__list {
@@ -270,13 +349,12 @@ select:focus {
 
 .side__act-icon {
   width: 16px;
+  height: 16px;
   flex: none;
-  text-align: center;
 }
 
 /* 收起态：变成 64px 图标轨，不留空白 */
 .side--rail .side__name,
-.side--rail .side__new-label,
 .side--rail .side__item-main,
 .side--rail .side__item-remove,
 .side--rail .side__act-label,
@@ -284,24 +362,17 @@ select:focus {
   display: none;
 }
 
+/* 收起态：logo 与折叠键上下排布 */
 .side--rail .side__brand {
+  flex-direction: column;
+  height: auto;
+  padding: var(--sp-3) 0 var(--sp-2);
+  gap: var(--sp-2);
   justify-content: center;
-  padding: 0;
 }
 
 .side--rail .side__collapse {
   margin-left: 0;
-}
-
-.side--rail .side__new {
-  margin: var(--sp-3) auto var(--sp-2);
-  width: 32px;
-  padding: 0;
-}
-
-/* 收起态没有文字，图标本身就是按钮语义 */
-.side--rail .side__new-icon {
-  font-size: 15px;
 }
 
 .side--rail .side__list {
