@@ -310,6 +310,20 @@ export interface WorkspaceBridge {
   remove(id: string): Promise<IpcResult<true>>
 }
 
+// ---------------------------------------------------------------- 剪贴板
+
+// 走主进程的 Electron clipboard，而不是浏览器 API：
+// `navigator.clipboard.writeText` 在无用户手势 / 权限被拒时可能**永不 resolve**，
+// 界面会一直停在「复制中」。主进程这条路没有这些约束。
+export const CLIPBOARD_CHANNELS = {
+  writeText: 'clipboard:write-text'
+} as const
+
+export interface ClipboardBridge {
+  /** 返回是否写入成功；失败不抛异常，交给界面提示。 */
+  writeText(text: string): Promise<boolean>
+}
+
 export interface PointStudioApi {
   electronVersion: string
   chat: ChatBridge
@@ -320,6 +334,7 @@ export interface PointStudioApi {
   agent: AgentBridge
   backup: BackupBridge
   mcp: McpBridge
+  clipboard: ClipboardBridge
 }
 
 

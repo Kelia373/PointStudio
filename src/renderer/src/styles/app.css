@@ -1162,3 +1162,127 @@ select:focus {
     grid-template-columns: var(--side-w-rail) minmax(0, 1fr) 0;
   }
 }
+
+/* ------------------------------------------------------------ 标注模式 */
+
+.annot-ui {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.annot-outline {
+  position: fixed;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: var(--rad-ctl);
+  pointer-events: none;
+  transition: left var(--dur-1), top var(--dur-1), width var(--dur-1), height var(--dur-1);
+}
+
+.annot-pop {
+  position: fixed;
+  z-index: 42;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-card);
+  background: var(--panel);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+  pointer-events: auto;
+  animation: rise var(--dur-3) var(--ease-out);
+}
+
+.annot-pop__target {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--fg-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.annot-pop__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+}
+
+.annot-chip {
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--fg-3);
+  font-size: 11px;
+  transition: background var(--dur-1), color var(--dur-1), border-color var(--dur-1);
+}
+
+.annot-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.annot-chip--on {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+
+.annot-pop__note {
+  width: 100%;
+  resize: vertical;
+  font-size: 12px;
+}
+
+.annot-pop__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--sp-1);
+}
+
+.annot-bar {
+  position: fixed;
+  left: 50%;
+  bottom: var(--sp-4);
+  transform: translateX(-50%);
+  z-index: 42;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel-2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  pointer-events: auto;
+  animation: rise var(--dur-3) var(--ease-out);
+}
+
+.annot-bar__count {
+  font-size: 12px;
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.annot-btn {
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-ctl);
+  color: var(--fg-3);
+  font-size: 12px;
+  transition: background var(--dur-1), color var(--dur-1);
+}
+
+.annot-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.annot-btn--main {
+  background: var(--accent);
+  color: var(--on-accent);
+}

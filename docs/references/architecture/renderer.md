@@ -15,8 +15,19 @@
 - `components/EmptyState.tsx` —— 空状态四张建议卡，点击只填入输入框、不直接发送。
 - `components/Inspector.tsx` —— 右检查器三视图：上下文 / 工具调用 / 运行。
 - `components/MessageBubble.tsx` —— 纯展示，只有 props；悬停出操作（复制 / 重发 / 删除整轮）。
+- `components/Annotate.tsx` —— 标注模式：点界面元素选标签写备注，底部条汇总、一键复制。纯前端，标注存 `localStorage`。
+- `lib/clipboard.ts` —— 复制统一入口：优先走主进程 `clipboard:write-text`，失败再退浏览器 API（浏览器 API 在部分环境**永不 resolve**，必须带超时）。
 
 仍然没有组件库、没有路由、没有状态管理方案。界面类改动的最终效果必须人在真窗口确认。
+
+### 标注模式怎么开 / 怎么彻底关掉
+
+顶栏的 **✎** 就是开关。要移除这个功能，注释掉 **一行**即可：
+
+- `src/renderer/src/components/ChatPanel.tsx` 顶栏里标了 `ANNOTATE` 注释的那个 `<button>`（搜索 `ANNOTATE` 能直接定位）。
+- 与该按钮同生共死的 `<Annotate … />` 在文件末尾，同样带 `ANNOTATE` 标记；按钮注释掉后它不会被挂载，一并注释更干净。
+
+为什么这么设计：标注是**给我和你对齐用的评审工具**，不是产品功能，所以它必须能一行去掉，且不牵动业务代码。
 
 ## 唯一一条硬规则
 

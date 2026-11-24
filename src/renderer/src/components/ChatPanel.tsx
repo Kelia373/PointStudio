@@ -9,8 +9,10 @@ import type {
 } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
+import { copyToClipboard } from '../lib/clipboard'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import { reduceAgentEvent, type PlanRunState } from '../lib/planRunState'
+import Annotate from './Annotate'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
 import EmptyState from './EmptyState'
@@ -60,6 +62,8 @@ export default function ChatPanel() {
   const [planRun, setPlanRun] = useState<PlanRunState | null>(null)
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
+  // 标注模式：开关就是顶栏那个按钮，注释掉就能整块移除（见下方 ANNOTATE 注释）
+  const [annotate, setAnnotate] = useState(false)
 
   // 外壳状态
   const [sideCollapsed, setSideCollapsed] = useState(false)
@@ -293,9 +297,8 @@ export default function ChatPanel() {
   }
 
   async function copyText(text: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text)
-    } catch {
+    const ok = await copyToClipboard(text)
+    if (!ok) {
       setError('复制失败（剪贴板不可用）')
     }
   }
@@ -439,6 +442,17 @@ export default function ChatPanel() {
             </span>
           ) : null}
 
+          {/* ANNOTATE：标注模式开关。要关掉这个功能，注释掉下面这一个按钮即可 */}
+          <button
+            className={`icon-btn${annotate ? ' icon-btn--on' : ''}`}
+            type="button"
+            onClick={() => setAnnotate((value) => !value)}
+            title={annotate ? '退出标注模式' : '标注模式：点界面元素写意见'}
+            aria-label="切换标注模式"
+          >
+            ✎
+          </button>
+
           <button
             className="icon-btn"
             type="button"
@@ -555,6 +569,9 @@ export default function ChatPanel() {
           <pre className="chunk-preview__text">{chunkPreview.text}</pre>
         </div>
       ) : null}
+
+      {/* ANNOTATE：标注层与开关同生共死，注释掉上面按钮时这里也可一并注释 */}
+      <Annotate enabled={annotate} onClose={() => setAnnotate(false)} />
 
       {drawer ? (
         <>

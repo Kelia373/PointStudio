@@ -19,6 +19,7 @@ import { registerSettingsIpc } from './ipc/settings.ts'
 import { registerAgentIpc } from './ipc/agent.ts'
 import { registerBackupIpc } from './ipc/backup.ts'
 import { registerMcpIpc } from './ipc/mcp.ts'
+import { registerClipboardIpc } from './ipc/clipboard.ts'
 import { McpConnections } from './services/mcpConnections.ts'
 import { BackupService } from './services/backupService.ts'
 import { registerWorkspaceIpc } from './ipc/workspace.ts'
@@ -184,6 +185,7 @@ void app.whenReady().then(async () => {
     readStoredFile: (relativePath) => readFile(join(services.workspaceRoot, relativePath), 'utf8')
   })
   registerBackupIpc({ backup: services.backup })
+  registerClipboardIpc()
 
   // 工具注册表：内置只读工具 + 工作区读取。MCP 工具待传输层落地后再注册。
   const tools = new ToolRegistry()

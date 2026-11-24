@@ -43,7 +43,9 @@ import {
   type WorkspaceFileDto,
   type ProviderSettingsDraftRequest,
   type ProviderSettingsViewDto,
-  type SettingsBridge
+  type SettingsBridge,
+  CLIPBOARD_CHANNELS,
+  type ClipboardBridge
 } from '../shared/types/ipc.ts'
 
 type Unsubscribe = () => void
@@ -169,6 +171,12 @@ const mcp: McpBridge = {
     ipcRenderer.invoke(MCP_CHANNELS.remove, serverName) as Promise<IpcResult<true>>
 }
 
+const clipboardBridge: ClipboardBridge = {
+  // 主进程写入可能失败（非字符串 / 超长），失败只回 false，不抛给界面。
+  writeText: (text: string): Promise<boolean> =>
+    ipcRenderer.invoke(CLIPBOARD_CHANNELS.writeText, text) as Promise<boolean>
+}
+
 const api: PointStudioApi = {
   electronVersion: process.versions.electron,
   chat,
@@ -178,7 +186,8 @@ const api: PointStudioApi = {
   workspace,
   agent,
   backup,
-  mcp
+  mcp,
+  clipboard: clipboardBridge
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)
