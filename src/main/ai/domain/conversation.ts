@@ -7,11 +7,25 @@
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'complete' | 'error'
 
+/** 会话级采样参数：只存显式设置过的项，缺省继承助手 / 全局。 */
+export interface ConversationParams {
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+}
+
 export interface Conversation {
   id: string
   title: string
   /** 绑定的助手；null 表示不用助手（裸聊天）。 */
   assistantId: string | null
+  /**
+   * 会话级模型覆盖。空表示跟随助手 / 全局默认。
+   * 模型是「这次执行用什么」，所以跟着会话走，而不是全局一刀切。
+   */
+  model?: string | null
+  /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
+  params?: ConversationParams
   createdAt: string
   updatedAt: string
 }
@@ -80,4 +94,59 @@ export function validateMessageContent(raw: string): Validation<string> {
 
 export function isMessageRole(value: unknown): value is MessageRole {
   return value === 'user' || value === 'assistant'
+}
+
+/** 模型名：允许空（表示跟随默认），否则必须是 1~120 字的可见字符。 */
+export function validateModelId(value: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null || value === undefined) {
+    return { ok: true, value: null }
+  }
+  if (typeof value !== 'string') {
+    return { ok: false, error: 'E_BAD_MODEL' }
+  }
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return { ok: true, value: null }
+  }
+  if (trimmed.length > 120) {
+    return { ok: false, error: 'E_BAD_MODEL' }
+  }
+  return { ok: true, value: trimmed }
+}
+
+/**
+ * 采样参数：只认三个数字字段，范围和类型都要卡住。
+ * 越界值不是「夹一下」而是报错——静默改值会让人对不上自己设的东西。
+ */
+export function validateConversationParams(
+  value: unknown
+): { ok: true; value: ConversationParams } | { ok: false; error: string } {
+  if (value === null || value === undefined) {
+    return { ok: true, value: {} }
+  }
+  if (typeof value !== 'object') {
+    return { ok: false, error: 'E_BAD_PARAMS' }
+  }
+
+  const input = value as Record<string, unknown>
+  const result: ConversationParams = {}
+
+  const ranges: Array<[keyof ConversationParams, number, number]> = [
+    ['temperature', 0, 2],
+    ['topP', 0, 1],
+    ['maxTokens', 1, 32_000]
+  ]
+
+  for (const [key, min, max] of ranges) {
+    const raw = input[key]
+    if (raw === undefined || raw === null) {
+      continue
+    }
+    if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < min || raw > max) {
+      return { ok: false, error: 'E_BAD_PARAMS' }
+    }
+    result[key] = raw
+  }
+
+  return { ok: true, value: result }
 }

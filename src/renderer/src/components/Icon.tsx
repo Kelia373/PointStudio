@@ -1,65 +1,36 @@
-import type { ReactElement } from 'react'
-
-// 图标：统一从原型那套 24×24 线条图标里取，避免混进 emoji 与不同粗细的图形。
+// 图标：统一用 lucide-static v1.79.0（ISC）里的那套 24×24 线条图标。
 //
-// 全部用 stroke="currentColor"，颜色跟着父级文字走；尺寸由 CSS 的 .ico 控制。
-type IconName =
-  | 'search'
-  | 'plus'
-  | 'chevron-left'
-  | 'chevron-right'
-  | 'panel'
-  | 'theme'
-  | 'user'
-  | 'folder'
-  | 'download'
-  | 'settings'
+// 用到的图标已从图标包里抄进 `assets/icons/`（构建时随包走），
+// 没用到的留在工作区 `.lucide-static/`（不入库，见 .gitignore）。
+// 每个图标以 `?raw` 导入，只取内部标记，外层由这里统一给出：
+// 颜色跟随文字（currentColor），尺寸由 size 控制。
+import chevronLeft from '../assets/icons/chevron-left.svg?raw'
+import chevronRight from '../assets/icons/chevron-right.svg?raw'
+import download from '../assets/icons/download.svg?raw'
+import folder from '../assets/icons/folder.svg?raw'
+import moon from '../assets/icons/moon.svg?raw'
+import panelRight from '../assets/icons/panel-right.svg?raw'
+import plus from '../assets/icons/plus.svg?raw'
+import search from '../assets/icons/search.svg?raw'
+import settings from '../assets/icons/settings.svg?raw'
+import sun from '../assets/icons/sun.svg?raw'
+import user from '../assets/icons/user.svg?raw'
 
-const PATHS: Record<IconName, ReactElement> = {
-  search: (
-    <>
-      <circle cx="11" cy="11" r="7" />
-      <path d="M20 20l-3.5-3.5" />
-    </>
-  ),
-  plus: <path d="M12 5v14M5 12h14" />,
-  'chevron-left': <path d="M15 6l-6 6 6 6" />,
-  'chevron-right': <path d="M9 6l6 6-6 6" />,
-  // 检查器开关：右侧竖栏的抽象
-  panel: (
-    <>
-      <rect x="3" y="4" width="18" height="16" rx="2" />
-      <path d="M15 4v16" />
-    </>
-  ),
-  theme: (
-    <>
-      <circle cx="12" cy="12" r="4" />
-      <path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5" />
-    </>
-  ),
-  user: (
-    <>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 20a7 7 0 0 1 14 0" />
-    </>
-  ),
-  folder: (
-    <path d="M4 7a2 2 0 0 1 2-2h3l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
-  ),
-  download: (
-    <>
-      <path d="M12 4v10M8 10l4 4 4-4" />
-      <path d="M5 19h14" />
-    </>
-  ),
-  settings: (
-    <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3v2M12 19v2M4.2 7.5l1.7 1M18.1 15.5l1.7 1M4.2 16.5l1.7-1M18.1 8.5l1.7-1" />
-    </>
-  )
-}
+const PATHS = {
+  search,
+  plus,
+  'chevron-left': chevronLeft,
+  'chevron-right': chevronRight,
+  'panel-right': panelRight,
+  sun,
+  moon,
+  user,
+  folder,
+  download,
+  settings
+} as const
+
+export type IconName = keyof typeof PATHS
 
 export default function Icon({
   name,
@@ -78,13 +49,12 @@ export default function Icon({
       height={size}
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.6"
+      strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
-    >
-      {PATHS[name]}
-    </svg>
+      dangerouslySetInnerHTML={{ __html: PATHS[name] }}
+    />
   )
 }

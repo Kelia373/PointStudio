@@ -124,3 +124,33 @@ export function isAgentRunRequest(value: unknown): value is AgentRunRequest {
 export function isWorkspaceImportPath(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
+
+/** 会话级模型设置：model 允许 null / 字符串；params 只允许三个数字字段。 */
+export function isConversationModelPatch(value: unknown): value is {
+  model?: string | null
+  params?: { temperature?: number; maxTokens?: number; topP?: number }
+} {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const input = value as Record<string, unknown>
+
+  if ('model' in input && input['model'] !== null && typeof input['model'] !== 'string') {
+    return false
+  }
+
+  if ('params' in input && input['params'] !== undefined) {
+    const params = input['params']
+    if (typeof params !== 'object' || params === null) {
+      return false
+    }
+    for (const key of ['temperature', 'maxTokens', 'topP']) {
+      const raw = (params as Record<string, unknown>)[key]
+      if (raw !== undefined && (typeof raw !== 'number' || !Number.isFinite(raw))) {
+        return false
+      }
+    }
+  }
+
+  return true
+}

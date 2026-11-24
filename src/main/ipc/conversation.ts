@@ -14,13 +14,15 @@ import type { Conversation, Message } from '../ai/domain/conversation.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 import { renderConversationMarkdown } from '../services/exportService.ts'
 import { deleteTurn } from '../services/turnService.ts'
-import { isCreateConversationRequest, isUuid } from './validators.ts'
+import { isConversationModelPatch, isCreateConversationRequest, isUuid } from './validators.ts'
 
 function toConversationDto(conversation: Conversation): ConversationDto {
   return {
     id: conversation.id,
     title: conversation.title,
     assistantId: conversation.assistantId,
+    ...(conversation.model ? { model: conversation.model } : {}),
+    ...(conversation.params ? { params: conversation.params } : {}),
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt
   }
@@ -101,6 +103,19 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
       return result.ok
         ? { ok: true, value: toConversationDto(result.value) }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
+  ipcMain.handle(
+    CONVERSATION_CHANNELS.setModel,
+    async (_event, id: unknown, patch: unknown): Promise<IpcResult<ConversationDto>> => {
+      if (typeof id !== 'string' || !isUuid(id) || !isConversationModelPatch(patch)) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      const saved = await service.setModel(id, patch)
+      return saved.ok
+        ? { ok: true, value: toConversationDto(saved.value) }
+        : { ok: false, code: saved.errors[0] ?? 'E_UNKNOWN' }
     }
   )
 

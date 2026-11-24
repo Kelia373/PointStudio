@@ -6,9 +6,12 @@ import {
   DEFAULT_CONVERSATION_TITLE,
   deriveTitle,
   isMessageRole,
+  validateConversationParams,
   validateMessageContent,
+  validateModelId,
   validateTitle,
   type Conversation,
+  type ConversationParams,
   type Message,
   type MessageReference,
   type MessageRole,
@@ -128,6 +131,51 @@ export class ConversationService {
   }
 
   /** 删会话必须连它的消息一起删，否则会留下永远读不到的孤儿数据。 */
+  /**
+   * 设置会话级模型与采样参数。
+   * 传 undefined 表示「这一项不动」，传 null 表示「清掉覆盖、跟随默认」。
+   */
+  async setModel(
+    id: string,
+    patch: { model?: string | null; params?: ConversationParams }
+  ): Promise<ServiceResult<Conversation>> {
+    const items = await this.conversations.readAll()
+    const index = items.findIndex((item) => item.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    const next: Conversation = { ...items[index], updatedAt: this.deps.now() }
+
+    if (patch.model !== undefined) {
+      const model = validateModelId(patch.model)
+      if (!model.ok) {
+        return { ok: false, errors: [model.error] }
+      }
+      if (model.value === null) {
+        delete next.model
+      } else {
+        next.model = model.value
+      }
+    }
+
+    if (patch.params !== undefined) {
+      const params = validateConversationParams(patch.params)
+      if (!params.ok) {
+        return { ok: false, errors: [params.error] }
+      }
+      if (Object.keys(params.value).length === 0) {
+        delete next.params
+      } else {
+        next.params = params.value
+      }
+    }
+
+    items[index] = next
+    await this.conversations.writeAll(items)
+    return { ok: true, value: next }
+  }
+
   async remove(id: string): Promise<ServiceResult<true>> {
     const items = await this.conversations.readAll()
     const index = items.findIndex((item) => item.id === id)

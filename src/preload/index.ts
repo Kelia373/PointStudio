@@ -22,6 +22,7 @@ import {
   type ChatSendResult,
   type ConversationBridge,
   type ConversationDto,
+  type ConversationParamsDto,
   type CreateConversationRequest,
   type IpcResult,
   type MessageDto,
@@ -94,6 +95,13 @@ const conversations: ConversationBridge = {
       id,
       assistantId
     ) as Promise<IpcResult<ConversationDto>>,
+  setModel: (
+    id: string,
+    patch: { model?: string | null; params?: ConversationParamsDto }
+  ): Promise<IpcResult<ConversationDto>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.setModel, id, patch) as Promise<
+      IpcResult<ConversationDto>
+    >,
   deleteTurn: (
     conversationId: string,
     messageId: string

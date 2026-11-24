@@ -53,6 +53,7 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 
 ## 本机环境事实
 
+- **临时产物一律进 `_local/`**（已在 `.gitignore`）：判断标准是「会不会提交」。素材、日志、一次性脚本、mock 都放这里按子目录分类；应用真正要用的资源必须挪进 `src/renderer/src/assets/`，打包不会带 `_local/`。
 - **依赖在工作区外**：实体在 `D:\deveTools\ps-node`，工作区里的 `node_modules` 是指向它的 junction。**改完 `package.json` 的依赖要同步过去再 install。**
 - **工作区目录会让其中的 exe 静默失败**（无输出、退出码 0、不执行）。判断：`icacls <目录>` 有没有 `S-1-4-`。别再用"文件损坏/签名/环境变量"解释它。
 - 跑 electron 前清 `ELECTRON_RUN_AS_NODE`（DSH 会注入），否则报 `whenReady` undefined。
@@ -67,6 +68,7 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 
 | 路径 | 作用 |
 | --- | --- |
+| `_local/` | **本机临时区，不入库**：图标素材、agent 中间产物、一次性脚本、截图。分类见 `_local/README.md` |
 | `src/main/` | 主进程与内核目录：`core` `ipc` `data` `ai` `features` `services` `utils` `i18n` `policy` `remote` `ui`（内核禁依赖 UI） |
 | `docs/` | 规则、ADR、盘点（编号上限 5 个） |
 | `scripts/` | 构建与检查脚本；根目录 `dev.cmd` 是双击启动入口 |

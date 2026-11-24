@@ -10,12 +10,19 @@ import type {
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import { copyToClipboard } from '../lib/clipboard'
+import {
+  EFFORT_MAX_TOKENS,
+  effortFromMaxTokens,
+  modelChoices,
+  type Effort
+} from '../lib/modelOptions'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import { reduceAgentEvent, type PlanRunState } from '../lib/planRunState'
 import Annotate from './Annotate'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
 import EmptyState from './EmptyState'
+import Icon from './Icon'
 import Inspector, { type InspectorTab } from './Inspector'
 import MessageBubble from './MessageBubble'
 import PlanPanel from './PlanPanel'
@@ -73,11 +80,21 @@ export default function ChatPanel() {
   const [provider, setProvider] = useState<ProviderSettingsViewDto | null>(null)
   const [mcpConnections, setMcpConnections] = useState<McpConnectionDto[]>([])
   const [lastRunMs, setLastRunMs] = useState<number | null>(null)
+  // 内容列宽：消息流与输入框共用，拖拽右边界调整，存 local storage。
+  const [contentWidth, setContentWidth] = useState<number>(() => {
+    const stored = Number(window.localStorage.getItem('pointstudio.contentWidth'))
+    return Number.isFinite(stored) && stored >= 480 && stored <= 1400 ? stored : 720
+  })
   const runStartedAt = useRef<number | null>(null)
+  const resizeStart = useRef<{ x: number; width: number } | null>(null)
 
   const listRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
+
+  useEffect(() => {
+    window.localStorage.setItem('pointstudio.contentWidth', String(contentWidth))
+  }, [contentWidth])
 
   useEffect(() => {
     document.documentElement.dataset['theme'] = theme
@@ -271,6 +288,23 @@ export default function ChatPanel() {
     await runPlan(plan.goal, pendingHighRiskStepIds(plan))
   }
 
+  /** 会话级模型 / 参数：只改当前会话，新会话仍继承全局默认。 */
+  async function applyModel(patch: {
+    model?: string | null
+    params?: { maxTokens?: number }
+  }): Promise<void> {
+    if (!activeId) {
+      return
+    }
+    const saved = await window.pointstudio.conversations.setModel(activeId, patch)
+    if (!saved.ok) {
+      setError(describeError(saved.code))
+      return
+    }
+    setError(null)
+    await reloadConversations()
+  }
+
   async function exportConversation(): Promise<void> {
     const conversationId = activeId
     if (!conversationId) {
@@ -395,7 +429,7 @@ export default function ChatPanel() {
         onExport={() => void exportConversation()}
       />
 
-      <main className="main">
+      <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
         <header className="topbar">
           <h1 className="topbar__title">{activeConversation?.title ?? 'PointStudio'}</h1>
           <span className="topbar__spacer" />
@@ -460,7 +494,7 @@ export default function ChatPanel() {
             title={theme === 'dark' ? '切换到浅色' : '切换到深色'}
             aria-label="切换主题"
           >
-            {theme === 'dark' ? '☾' : '☀'}
+            <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
           </button>
 
           <button
@@ -470,7 +504,7 @@ export default function ChatPanel() {
             title={inspCollapsed ? '展开检查器' : '收起检查器'}
             aria-label="切换检查器"
           >
-            ⫶
+            <Icon name={inspCollapsed ? 'chevron-left' : 'chevron-right'} />
           </button>
         </header>
 
@@ -496,10 +530,63 @@ export default function ChatPanel() {
         {error ? <div className="banner banner--error">{error}</div> : null}
 
         {messages.length === 0 ? (
-          <EmptyState mode={mode} onPick={(text) => setDraft(text)} />
+          <div className="stream stream--empty">
+            <div className="stream__inner stream__inner--empty">
+              <div
+                className="stream__resize"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="拖动调整内容宽度"
+                title="拖动调整宽度（双击复位）"
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                  resizeStart.current = { x: event.clientX, width: contentWidth }
+                }}
+                onPointerMove={(event) => {
+                  const start = resizeStart.current
+                  if (!start) {
+                    return
+                  }
+                  const next = start.width + (event.clientX - start.x) * 2
+                  setContentWidth(Math.min(1400, Math.max(480, next)))
+                }}
+                onPointerUp={(event) => {
+                  resizeStart.current = null
+                  event.currentTarget.releasePointerCapture(event.pointerId)
+                }}
+                onDoubleClick={() => setContentWidth(720)}
+              />
+              <EmptyState mode={mode} onPick={(text) => setDraft(text)} />
+            </div>
+          </div>
         ) : (
           <div className="stream" ref={listRef}>
             <div className="stream__inner">
+              <div
+                className="stream__resize"
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="拖动调整内容宽度"
+                title="拖动调整宽度（双击复位）"
+                onPointerDown={(event) => {
+                  event.currentTarget.setPointerCapture(event.pointerId)
+                  resizeStart.current = { x: event.clientX, width: contentWidth }
+                }}
+                onPointerMove={(event) => {
+                  const start = resizeStart.current
+                  if (!start) {
+                    return
+                  }
+                  // 内容列是居中的：往右拖等于两侧同时变宽，所以按 2 倍位移换算。
+                  const next = start.width + (event.clientX - start.x) * 2
+                  setContentWidth(Math.min(1400, Math.max(480, next)))
+                }}
+                onPointerUp={(event) => {
+                  resizeStart.current = null
+                  event.currentTarget.releasePointerCapture(event.pointerId)
+                }}
+                onDoubleClick={() => setContentWidth(720)}
+              />
               {messages.map((message, index) => (
                 <MessageBubble
                   key={message.id}
@@ -525,7 +612,21 @@ export default function ChatPanel() {
           draft={draft}
           busy={busy}
           canSend={!busy && draft.trim() !== '' && activeId !== null}
+          model={
+            activeConversation?.model ?? provider?.model ?? ''
+          }
+          models={modelChoices(
+            provider?.providerId ?? null,
+            activeConversation?.model ?? provider?.model ?? null
+          )}
+          effort={effortFromMaxTokens(
+            activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens
+          )}
           onDraftChange={setDraft}
+          onModelChange={(next) => void applyModel({ model: next === '' ? null : next })}
+          onEffortChange={(level: Effort) =>
+            void applyModel({ params: { maxTokens: EFFORT_MAX_TOKENS[level] } })
+          }
           onSend={() => void submit()}
           onStop={() => {
             if (inflightId) {

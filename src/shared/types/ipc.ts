@@ -87,15 +87,27 @@ export const CONVERSATION_CHANNELS = {
   remove: 'conversation:remove',
   messages: 'conversation:messages',
   setAssistant: 'conversation:set-assistant',
+  setModel: 'conversation:set-model',
   deleteTurn: 'conversation:delete-turn',
   exportMarkdown: 'conversation:export-markdown'
 } as const
 
 /** 跨进程传输用的会话形态：只放界面需要显示的字段。 */
+/** 会话级采样参数：只有显式设置过的项才出现。 */
+export interface ConversationParamsDto {
+  temperature?: number
+  maxTokens?: number
+  topP?: number
+}
+
 export interface ConversationDto {
   id: string
   title: string
   assistantId: string | null
+  /** 会话级模型覆盖；缺省表示跟随助手 / 全局默认。 */
+  model?: string | null
+  /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
+  params?: ConversationParamsDto
   createdAt: string
   updatedAt: string
 }
@@ -134,6 +146,14 @@ export interface ConversationBridge {
   messages(id: string): Promise<MessageDto[]>
   /** 绑定 / 解绑助手；null 表示退回裸对话。 */
   setAssistant(id: string, assistantId: string | null): Promise<IpcResult<ConversationDto>>
+  /**
+   * 设置会话级模型与采样参数。
+   * `model: null` 表示清掉模型覆盖；`params` 不传表示不动，传空对象表示清空覆盖。
+   */
+  setModel(
+    id: string,
+    patch: { model?: string | null; params?: ConversationParamsDto }
+  ): Promise<IpcResult<ConversationDto>>
   /** 删除「这一轮」：用户消息连同其后的助手回复。 */
   deleteTurn(conversationId: string, messageId: string): Promise<IpcResult<{ removed: number }>>
   /** 导出为 Markdown 文本（界面负责写文件或复制）。 */

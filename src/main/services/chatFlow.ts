@@ -49,21 +49,30 @@ async function resolveReplyOptions(
   deps: ChatFlowDeps
 ): Promise<ReplyOptions> {
   const conversation = await deps.conversations.get(conversationId)
-  if (!conversation?.assistantId) {
+  if (!conversation) {
     return {}
   }
 
-  const assistant = await deps.assistants.get(conversation.assistantId)
-  if (!assistant) {
-    // 助手被删了不该让整个对话失败——退回裸对话，用户还能继续说话。
-    return {}
-  }
+  // 优先级：会话级覆盖 > 助手设定 > 全局默认（引擎里再兜底）。
+  // 模型是「这次执行用什么」，所以会话排在最前面。
+  const assistant = conversation.assistantId
+    ? await deps.assistants.get(conversation.assistantId)
+    : null
 
-  return {
-    systemPrompt: assistant.systemPrompt,
-    model: assistant.modelId ?? undefined,
-    params: assistant.params
+  const conversationParams = conversation.params ?? {}
+  const assistantParams = assistant?.params ?? {}
+  const params = { ...assistantParams, ...conversationParams }
+
+  const model = conversation.model ?? assistant?.modelId ?? undefined
+
+  const options: ReplyOptions = { model }
+  if (assistant?.systemPrompt) {
+    options.systemPrompt = assistant.systemPrompt
   }
+  if (Object.keys(params).length > 0) {
+    options.params = params
+  }
+  return options
 }
 
 /**
