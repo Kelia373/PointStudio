@@ -4,21 +4,37 @@ import type {
   AssistantDto,
   ChatMode,
   ConversationDto,
+  McpConnectionDto,
+  ProviderSettingsViewDto
 } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import { reduceAgentEvent, type PlanRunState } from '../lib/planRunState'
-import ConversationList from './ConversationList'
-import SettingsPanel from './SettingsPanel'
 import AssistantPanel from './AssistantPanel'
-import PlanPanel from './PlanPanel'
-import WorkspacePanel from './WorkspacePanel'
+import Composer from './Composer'
+import EmptyState from './EmptyState'
+import Inspector, { type InspectorTab } from './Inspector'
 import MessageBubble from './MessageBubble'
+import PlanPanel from './PlanPanel'
+import SettingsPanel from './SettingsPanel'
+import Sidebar from './Sidebar'
+import WorkspacePanel from './WorkspacePanel'
 
+type Drawer = 'settings' | 'assistants' | 'workspace' | 'plan' | null
+type Theme = 'dark' | 'light'
+
+function readTheme(): Theme {
+  const stored = window.localStorage.getItem('pointstudio.theme')
+  return stored === 'light' ? 'light' : 'dark'
+}
+
+function formatMs(value: number): string {
+  return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(1)}s`
+}
 
 /**
- * 聊天面板：会话列表 + 消息流。
+ * 工作台外壳：侧栏 + 对话流 + 检查器。
  *
  * 真相在磁盘上，不在组件里：发送结束后统一从主进程重新拉取会话与消息，
  * 组件只保留一个「正在流式」的临时气泡。这样界面永远不会和数据分叉。
@@ -35,9 +51,7 @@ export default function ChatPanel() {
   const [info, setInfo] = useState<string | null>(null)
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
   const [drafting, setDrafting] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [workspaceOpen, setWorkspaceOpen] = useState(false)
-  const [assistantPanelOpen, setAssistantPanelOpen] = useState(false)
+  const [drawer, setDrawer] = useState<Drawer>(null)
   const [chunkPreview, setChunkPreview] = useState<{
     path: string
     index: number
@@ -47,9 +61,24 @@ export default function ChatPanel() {
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
 
+  // 外壳状态
+  const [sideCollapsed, setSideCollapsed] = useState(false)
+  const [inspCollapsed, setInspCollapsed] = useState(false)
+  const [inspTab, setInspTab] = useState<InspectorTab>('context')
+  const [theme, setTheme] = useState<Theme>(readTheme)
+  const [provider, setProvider] = useState<ProviderSettingsViewDto | null>(null)
+  const [mcpConnections, setMcpConnections] = useState<McpConnectionDto[]>([])
+  const [lastRunMs, setLastRunMs] = useState<number | null>(null)
+  const runStartedAt = useRef<number | null>(null)
+
   const listRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
+
+  useEffect(() => {
+    document.documentElement.dataset['theme'] = theme
+    window.localStorage.setItem('pointstudio.theme', theme)
+  }, [theme])
 
   const reloadConversations = useCallback(async (): Promise<ConversationDto[]> => {
     const items = await window.pointstudio.conversations.list()
@@ -59,6 +88,14 @@ export default function ChatPanel() {
 
   const refreshAssistants = useCallback(async (): Promise<void> => {
     setAssistants(await window.pointstudio.assistants.list())
+  }, [])
+
+  const refreshProvider = useCallback(async (): Promise<void> => {
+    setProvider(await window.pointstudio.settings.readProvider())
+  }, [])
+
+  const refreshMcp = useCallback(async (): Promise<void> => {
+    setMcpConnections(await window.pointstudio.mcp.list())
   }, [])
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
@@ -84,6 +121,10 @@ export default function ChatPanel() {
       setMessages((prev) => markStatus(prev, id, 'complete'))
       setBusy(false)
       setInflightId(null)
+      if (runStartedAt.current !== null) {
+        setLastRunMs(Date.now() - runStartedAt.current)
+        runStartedAt.current = null
+      }
       // 落库完成，用磁盘上的版本覆盖界面。
       const current = activeIdRef.current
       if (current) {
@@ -104,6 +145,7 @@ export default function ChatPanel() {
       setMessages((prev) => markStatus(prev, id, 'error', `（${describeError(code)}）`))
       setBusy(false)
       setInflightId(null)
+      runStartedAt.current = null
     })
 
     return () => {
@@ -118,7 +160,7 @@ export default function ChatPanel() {
   // 首次进入：有会话就用最近一个，没有就建一个。
   useEffect(() => {
     void (async () => {
-      await refreshAssistants()
+      await Promise.all([refreshAssistants(), refreshProvider(), refreshMcp()])
       const items = await reloadConversations()
       if (items.length > 0) {
         setActiveId(items[0].id)
@@ -132,7 +174,7 @@ export default function ChatPanel() {
         setError(describeError(created.code))
       }
     })()
-  }, [refreshAssistants, reloadConversations])
+  }, [refreshAssistants, refreshProvider, refreshMcp, reloadConversations])
 
   // 切换会话就重新读消息——界面不缓存历史，避免分叉。
   useEffect(() => {
@@ -165,6 +207,8 @@ export default function ChatPanel() {
     }
     setBusy(true)
     setInflightId(requestId)
+    runStartedAt.current = Date.now()
+    setError(null)
 
     const result = await window.pointstudio.chat.send({ id: requestId, conversationId, text })
     if (result.ok) {
@@ -174,6 +218,7 @@ export default function ChatPanel() {
     setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
     setBusy(false)
     setInflightId(null)
+    runStartedAt.current = null
   }
 
   async function bindAssistant(assistantId: string): Promise<void> {
@@ -200,6 +245,9 @@ export default function ChatPanel() {
     const id = crypto.randomUUID()
     setPlanRun({ id, plan: null, status: 'running' })
     setDraft('')
+    setInspTab('run')
+    setInspCollapsed(false)
+    setDrawer('plan')
     const result = await window.pointstudio.agent.run({ id, goal, confirmedStepIds })
     if (!result.ok) {
       setPlanRun({ id, plan: null, status: 'failed' })
@@ -310,32 +358,52 @@ export default function ChatPanel() {
     }
   }
 
-  const hint = busy
-    ? '正在回复…'
-    : mode === 'live'
-      ? 'DeepSeek · 真模型'
-      : mode === 'local'
-        ? '本地假流式 · 未配 Key'
-        : '按 Enter 发送'
+  function closeDrawer(): void {
+    // 设置可能改了模型与参数，关掉时刷新检查器里的值。
+    if (drawer === 'settings') {
+      void refreshProvider()
+    }
+    setDrawer(null)
+  }
+
+  const activeConversation = conversations.find((item) => item.id === activeId) ?? null
+  const boundAssistant =
+    assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
+  const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
+  const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
   return (
-    <div className="layout">
-      <ConversationList
+    <div
+      className={`app${sideCollapsed ? ' app--side-rail' : ''}${
+        inspCollapsed ? ' app--insp-hidden' : ''
+      }`}
+    >
+      <Sidebar
         conversations={conversations}
         activeId={activeId}
+        collapsed={sideCollapsed}
+        onToggleCollapse={() => setSideCollapsed((value) => !value)}
         onSelect={setActiveId}
         onCreate={() => void createConversation()}
         onRemove={(id) => void removeConversation(id)}
+        onOpenAssistants={() => setDrawer('assistants')}
+        onOpenWorkspace={() => setDrawer('workspace')}
+        onOpenSettings={() => setDrawer('settings')}
+        onExport={() => void exportConversation()}
       />
 
-      <section className="chat">
-        <header className="chat__header">
-          <h1>PointStudio</h1>
+      <main className="main">
+        <header className="topbar">
+          <h1 className="topbar__title">{activeConversation?.title ?? 'PointStudio'}</h1>
+          <span className="topbar__spacer" />
+
           <select
-            className="chat__assistant"
-            value={conversations.find((c) => c.id === activeId)?.assistantId ?? ''}
+            className="chip"
+            value={activeConversation?.assistantId ?? ''}
             onChange={(event) => void bindAssistant(event.target.value)}
             disabled={!activeId}
+            title="当前会话使用的助手"
+            style={{ height: 26 }}
           >
             <option value="">不使用助手</option>
             {assistants.map((assistant) => (
@@ -344,178 +412,187 @@ export default function ChatPanel() {
               </option>
             ))}
           </select>
+
           <button
-            className="chat__assistant-new"
+            className="icon-btn"
             type="button"
             onClick={() => setDrafting((value) => !value)}
+            title="快速新建助手"
+            aria-label="快速新建助手"
           >
-            ＋助手
+            ＋
           </button>
+
+          <span
+            className={`chip${mode === 'live' ? ' chip--live' : ''}${
+              busy ? ' chip--busy' : ''
+            }`}
+            title={mode === 'live' ? 'API Key 已配置，走真实模型' : '没有 Key 时走本地假流式'}
+          >
+            <i className="chip__dot" />
+            {modeLabel}
+          </span>
+
+          {lastRunMs !== null ? (
+            <span className="chip" title="上一轮生成耗时">
+              {formatMs(lastRunMs)}
+            </span>
+          ) : null}
+
           <button
-            className="chat__assistant-new"
+            className="icon-btn"
             type="button"
-            onClick={() => void runPlan()}
-            disabled={draft.trim() === '' || planRun?.status === 'running'}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? '切换到浅色' : '切换到深色'}
+            aria-label="切换主题"
           >
-            🧭 计划
+            {theme === 'dark' ? '☾' : '☀'}
           </button>
+
           <button
-            className="chat__assistant-new"
+            className={`icon-btn${inspCollapsed ? '' : ' icon-btn--on'}`}
             type="button"
-            onClick={() => setAssistantPanelOpen((value) => !value)}
+            onClick={() => setInspCollapsed((value) => !value)}
+            title={inspCollapsed ? '展开检查器' : '收起检查器'}
+            aria-label="切换检查器"
           >
-            👤 助手管理
+            ⫶
           </button>
-          <button
-            className="chat__assistant-new"
-            type="button"
-            onClick={() => setWorkspaceOpen((value) => !value)}
-          >
-            📁 工作区
-          </button>
-          <button
-            className="chat__assistant-new"
-            type="button"
-            onClick={() => setSettingsOpen((value) => !value)}
-          >
-            ⚙ 设置
-          </button>
-          <span className="chat__hint">{hint}</span>
-          <button
-            className="chat__assistant-new"
-            type="button"
-            onClick={() => void exportConversation()}
-            disabled={!activeId}
-          >
-            ⤓ 导出
-          </button>
-          {info ? <span className="chat__info">{info}</span> : null}
-          {error ? <span className="chat__error">{error}</span> : null}
         </header>
-
-        {planRun?.plan ? (
-          <PlanPanel
-            plan={planRun.plan}
-            status={planRun.status}
-            details={planRun.details}
-            onClose={() => setPlanRun(null)}
-            onConfirm={planRun.status === 'stopped' ? () => void confirmAndResume() : undefined}
-          />
-        ) : null}
-
-        {assistantPanelOpen ? (
-          <AssistantPanel
-            onClose={() => setAssistantPanelOpen(false)}
-            onChanged={() => void refreshAssistants()}
-          />
-        ) : null}
-
-        {workspaceOpen ? <WorkspacePanel onClose={() => setWorkspaceOpen(false)} /> : null}
-
-        {settingsOpen ? <SettingsPanel onClose={() => setSettingsOpen(false)} /> : null}
 
         {drafting ? (
           <div className="assistant-form">
             <input
-              className="assistant-form__name"
               value={assistantName}
               placeholder="助手名称"
               onChange={(event) => setAssistantName(event.target.value)}
             />
             <input
-              className="assistant-form__prompt"
               value={assistantPrompt}
               placeholder="系统提示（可选）：例如「你是严格的代码审查员」"
               onChange={(event) => setAssistantPrompt(event.target.value)}
             />
-            <button className="assistant-form__save" type="button" onClick={() => void createAssistant()}>
+            <button className="btn-send" type="button" onClick={() => void createAssistant()}>
               保存
             </button>
           </div>
         ) : null}
 
-        <div className="chat__list" ref={listRef}>
-          {messages.length === 0 ? (
-            <p className="chat__empty">
-              说点什么。配了 API Key 就直接问 DeepSeek；没配 Key 则走本地假流式，链路一样是通的。
-            </p>
-          ) : (
-            messages.map((message) => (
-              <MessageBubble
-                key={message.id}
-                role={message.role}
-                content={message.content}
-                streaming={message.status === 'streaming'}
-                failed={message.status === 'error'}
-                references={message.references}
-                onReference={(chunkId) => void openReference(chunkId)}
-                onCopy={() => void copyText(message.content)}
-                onDelete={() => void removeTurn(message.id)}
-                {...(message.role === 'user'
-                  ? { onResend: () => void submit(message.content) }
-                  : {})}
-              />
-            ))
-          )}
-        </div>
+        {info ? <div className="banner banner--info">{info}</div> : null}
+        {error ? <div className="banner banner--error">{error}</div> : null}
 
-        {chunkPreview ? (
-          <div className="chunk-preview">
-            <div className="chunk-preview__head">
-              <span className="chunk-preview__path">
-                {chunkPreview.path} · 第 {chunkPreview.index + 1} 段
-              </span>
-              <button
-                className="chunk-preview__close"
-                type="button"
-                onClick={() => setChunkPreview(null)}
-              >
-                关闭
-              </button>
+        {messages.length === 0 ? (
+          <EmptyState mode={mode} onPick={(text) => setDraft(text)} />
+        ) : (
+          <div className="stream" ref={listRef}>
+            <div className="stream__inner">
+              {messages.map((message, index) => (
+                <MessageBubble
+                  key={message.id}
+                  index={index}
+                  role={message.role}
+                  content={message.content}
+                  streaming={message.status === 'streaming'}
+                  failed={message.status === 'error'}
+                  references={message.references}
+                  onReference={(chunkId) => void openReference(chunkId)}
+                  onCopy={() => void copyText(message.content)}
+                  onDelete={() => void removeTurn(message.id)}
+                  {...(message.role === 'user'
+                    ? { onResend: () => void submit(message.content) }
+                    : {})}
+                />
+              ))}
             </div>
-            <pre className="chunk-preview__text">{chunkPreview.text}</pre>
           </div>
-        ) : null}
+        )}
 
-        <form
-          className="chat__composer"
-          onSubmit={(event) => {
-            event.preventDefault()
-            void submit()
+        <Composer
+          draft={draft}
+          busy={busy}
+          canSend={!busy && draft.trim() !== '' && activeId !== null}
+          onDraftChange={setDraft}
+          onSend={() => void submit()}
+          onStop={() => {
+            if (inflightId) {
+              void window.pointstudio.chat.cancel(inflightId)
+            }
           }}
-        >
-          <textarea
-            className="chat__input"
-            value={draft}
-            placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-            rows={2}
-            onChange={(event) => setDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                void submit()
-              }
-            }}
-          />
-          {busy && inflightId ? (
+          onPlan={() => void runPlan()}
+        />
+      </main>
+
+      <Inspector
+        tab={inspTab}
+        onTab={setInspTab}
+        collapsed={inspCollapsed}
+        onToggleCollapsed={() => setInspCollapsed(true)}
+        conversationTitle={activeConversation?.title ?? null}
+        assistantName={boundAssistant?.name ?? null}
+        mode={mode}
+        messageCount={messages.length}
+        referenceCount={referenceCount}
+        provider={provider}
+        lastRunMs={lastRunMs}
+        planRun={planRun}
+        mcpConnections={mcpConnections}
+      />
+
+      {chunkPreview ? (
+        <div className="chunk-preview">
+          <div className="chunk-preview__head">
+            <span className="chunk-preview__path">
+              {chunkPreview.path} · 第 {chunkPreview.index + 1} 段
+            </span>
             <button
-              className="chat__send"
+              className="chunk-preview__close"
               type="button"
-              onClick={() => void window.pointstudio.chat.cancel(inflightId)}
+              onClick={() => setChunkPreview(null)}
             >
-              停止
+              关闭
             </button>
-          ) : (
-            <button
-              className="chat__send"
-              type="submit"
-              disabled={busy || draft.trim() === '' || !activeId}
-            >
-              发送
-            </button>
-          )}
-        </form>
-      </section>
+          </div>
+          <pre className="chunk-preview__text">{chunkPreview.text}</pre>
+        </div>
+      ) : null}
+
+      {drawer ? (
+        <>
+          <div className="drawer-mask" onClick={closeDrawer} />
+          <div className="drawer" role="dialog" aria-modal="true">
+            {drawer === 'settings' ? <SettingsPanel onClose={closeDrawer} /> : null}
+            {drawer === 'assistants' ? (
+              <AssistantPanel onClose={closeDrawer} onChanged={() => void refreshAssistants()} />
+            ) : null}
+            {drawer === 'workspace' ? <WorkspacePanel onClose={closeDrawer} /> : null}
+            {drawer === 'plan' ? (
+              planRun?.plan ? (
+                <PlanPanel
+                  plan={planRun.plan}
+                  status={planRun.status}
+                  details={planRun.details}
+                  onClose={() => setDrawer(null)}
+                  onConfirm={
+                    planRun.status === 'stopped' ? () => void confirmAndResume() : undefined
+                  }
+                />
+              ) : (
+                <div className="plan">
+                  <div className="plan__head">
+                    <span className="plan__goal">正在生成计划…</span>
+                    <button className="plan__close" type="button" onClick={() => setDrawer(null)}>
+                      关闭
+                    </button>
+                  </div>
+                  <p className="plan__note">
+                    模型正在拆解目标。进度与每一步的结果会同步到右侧检查器的「运行」。
+                  </p>
+                </div>
+              )
+            ) : null}
+          </div>
+        </>
+      ) : null}
     </div>
   )
 }

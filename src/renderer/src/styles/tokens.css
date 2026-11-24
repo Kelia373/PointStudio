@@ -1,0 +1,84 @@
+/* ============================================================
+   设计基线（黑白单色）
+   全站颜色、圆角、间距、动效必须从这里取；组件样式里不出现魔法值。
+   参考 D:/Project/PointStudio-ui/prototype/index.html 的 :root 段。
+   ============================================================ */
+:root {
+  /* ---- 布局尺寸 ---- */
+  --side-w: 260px;
+  --side-w-rail: 64px;
+  --insp-w: 320px;
+
+  /* ---- 圆角 ---- */
+  --rad-ctl: 6px;
+  --rad-card: 12px;
+
+  /* ---- 间距阶（4 的倍数，够用即止） ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* ---- 动效 token：Corporate 人格（200–400ms、无回弹）
+     只有 4 档时长，组件里禁止写裸的毫秒数 ---- */
+  --dur-1: 90ms;  /* hover / press 反馈 */
+  --dur-2: 140ms; /* 图标与控件状态切换 */
+  --dur-3: 220ms; /* 卡片、面板、消息入场 */
+  --dur-4: 320ms; /* 弹层、错误提示这类需要被看见的 */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in: cubic-bezier(0.3, 0, 1, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --stagger: 40ms;
+
+  /* ---- 字体 ---- */
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas, monospace;
+}
+
+/* 深色是默认：与原型 data-theme="dark" 一致 */
+:root,
+html[data-theme='dark'] {
+  --bg: #0a0a0b;
+  --panel: #101012;
+  --panel-2: #16161a;
+  --raise: #1a1a1d;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+  --fg: #f2f2f3;
+  --fg-2: rgba(255, 255, 255, 0.72);
+  --fg-3: rgba(255, 255, 255, 0.55);
+  --accent: #ffffff;
+  --on-accent: #0a0a0b;
+  --danger: #c0564b;
+  --hover: rgba(255, 255, 255, 0.05);
+}
+
+html[data-theme='light'] {
+  --bg: #fbfbfa;
+  --panel: #ffffff;
+  --panel-2: #f4f4f2;
+  --raise: #ffffff;
+  --line: rgba(0, 0, 0, 0.09);
+  --line-strong: rgba(0, 0, 0, 0.18);
+  --fg: #101012;
+  --fg-2: rgba(0, 0, 0, 0.72);
+  --fg-3: rgba(0, 0, 0, 0.52);
+  --accent: #0a0a0b;
+  --on-accent: #ffffff;
+  --danger: #b0453a;
+  --hover: rgba(0, 0, 0, 0.05);
+}
+
+/* 尊重系统「减少动效」偏好：不删功能，只把时长压到近 0 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 1ms;
+    --dur-2: 1ms;
+    --dur-3: 1ms;
+    --dur-4: 1ms;
+    --stagger: 0ms;
+  }
+}
