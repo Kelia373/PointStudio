@@ -1250,7 +1250,8 @@ select:focus {
 .annot-bar {
   position: fixed;
   left: 50%;
-  bottom: var(--sp-4);
+  /* 抬到输入区上方：输入框高度约 96px，压在框上会挡住「发送」。 */
+  bottom: 108px;
   transform: translateX(-50%);
   z-index: 42;
   display: flex;

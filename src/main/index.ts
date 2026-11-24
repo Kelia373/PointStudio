@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -54,6 +54,16 @@ function createWindow(): void {
       sandbox: false
     }
   })
+
+  // 菜单栏已移除，默认的 Ctrl+Shift+I / F12 也没了。
+  // 开发态自己留一个 F12，免得每次都要去翻 devtools 端口。
+  if (process.env.ELECTRON_RENDERER_URL) {
+    window.webContents.on('before-input-event', (_event, input) => {
+      if (input.type === 'keyDown' && input.key === 'F12') {
+        window.webContents.toggleDevTools()
+      }
+    })
+  }
 
   // 等首帧就绪再显示，避免看到白屏闪烁。
   window.on('ready-to-show', () => window.show())
@@ -150,6 +160,11 @@ function installCrashRecorder(
 }
 
 void app.whenReady().then(async () => {
+  // 去掉 Electron 默认菜单（File / Edit / View / Window）：
+  // 这是桌面工具，不是浏览器，菜单栏除了占一行没有任何用处。
+  // 代价是默认快捷键（Ctrl+R / Ctrl+Shift+I）一起没了，开发期用 F12 开调试台兜住。
+  Menu.setApplicationMenu(null)
+
   const services = buildServices()
 
   // 主进程未捕获异常落盘；宿主进程不可用时不阻断启动。
