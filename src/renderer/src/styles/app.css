@@ -102,7 +102,8 @@ select:focus {
 .side {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  /* 窄窗口下也不许被压成一条缝：最窄就是图标轨。 */
+  min-width: var(--side-w-rail);
   background: var(--panel);
   border-right: 1px solid var(--line);
   overflow: hidden;
@@ -1154,7 +1155,9 @@ select:focus {
   margin: var(--sp-2) var(--sp-4) 0;
 }
 
-@media (max-width: 1080px) {
+/* 窗口最小宽度是 1024（见 src/main/index.ts）。低于 900 才强制收纳，
+   留出主区可读空间；再往上都允许用户自己开合。 */
+@media (max-width: 900px) {
   .app,
   .app--side-rail,
   .app--insp-hidden,

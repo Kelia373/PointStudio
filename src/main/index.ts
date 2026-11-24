@@ -40,10 +40,15 @@ import { ProviderSettingsService } from './services/providerSettingsService.ts'
 
 function createWindow(): void {
   const window = new BrowserWindow({
-    width: 1100,
-    height: 720,
+    // 三栏（64 + 主区 + 320）在这个尺寸下才不会互相压扁；
+    // 再小就交给 CSS 折叠：侧栏变图标轨、检查器可收起。
+    width: 1280,
+    height: 800,
+    minWidth: 1024,
+    minHeight: 640,
     show: false,
-    backgroundColor: '#ffffff',
+    // 与默认深色主题一致，否则启动瞬间会闪一下白底。
+    backgroundColor: '#0a0a0b',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
