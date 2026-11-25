@@ -24,6 +24,7 @@ import Composer from './Composer'
 import EmptyState from './EmptyState'
 import Icon from './Icon'
 import Inspector, { type InspectorTab } from './Inspector'
+import SettingsPage from './SettingsPage'
 import MessageBubble from './MessageBubble'
 import PlanPanel from './PlanPanel'
 import SettingsPanel from './SettingsPanel'
@@ -80,6 +81,7 @@ export default function ChatPanel() {
   const [sideCollapsed, setSideCollapsed] = useState(false)
   const [inspCollapsed, setInspCollapsed] = useState(false)
   const [inspTab, setInspTab] = useState<InspectorTab>('context')
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(readTheme)
   const [provider, setProvider] = useState<ProviderSettingsViewDto | null>(null)
   const [mcpConnections, setMcpConnections] = useState<McpConnectionDto[]>([])
@@ -340,21 +342,6 @@ export default function ChatPanel() {
     await reloadConversations()
   }
 
-  async function exportConversation(): Promise<void> {
-    const conversationId = activeId
-    if (!conversationId) {
-      return
-    }
-    const result = await window.pointstudio.conversations.exportMarkdown(conversationId)
-    if (!result.ok) {
-      setError(describeError(result.code))
-      return
-    }
-    await copyText(result.value)
-    setError(null)
-    setInfo('已复制 Markdown 到剪贴板')
-  }
-
   async function openReference(chunkId: string): Promise<void> {
     const result = await window.pointstudio.workspace.readChunk(chunkId)
     if (!result.ok) {
@@ -554,10 +541,9 @@ export default function ChatPanel() {
             onSelect={setActiveId}
             onCreate={() => void createConversation()}
             onRemove={(id) => void removeConversation(id)}
+            assistants={assistants}
             onOpenAssistants={() => setDrawer('assistants')}
-            onOpenWorkspace={() => setDrawer('workspace')}
-            onOpenSettings={() => setDrawer('settings')}
-            onExport={() => void exportConversation()}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
 
           <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
@@ -765,6 +751,14 @@ export default function ChatPanel() {
         planRun={planRun}
         mcpConnections={mcpConnections}
       />
+
+      <footer className="appbar">
+        <span>引擎状态 · 待接</span>
+        <span className="appbar__spacer" />
+        <span>v0.0.0 · 占位</span>
+      </footer>
+
+      {settingsOpen ? <SettingsPage onClose={() => setSettingsOpen(false)} /> : null}
 
       {chunkPreview ? (
         <div className="chunk-preview">

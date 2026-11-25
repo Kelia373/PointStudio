@@ -88,7 +88,7 @@ select:focus {
   grid-template-columns: minmax(0, 1fr) var(--insp-w);
   /* 行高必须钉死：默认 auto 会被内容撑高，于是 .stream 永远没有溢出，
      长会话被 overflow:hidden 直接裁掉——表现为「聊天记录滚不动」。 */
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) var(--appbar-h);
   height: 100%;
   overflow: hidden;
   transition: grid-template-columns var(--dur-3) var(--ease-inout);
@@ -125,6 +125,11 @@ select:focus {
 /* 收起：整列归零，不再有图标轨 */
 .shell--collapsed .shell__body {
   grid-template-columns: 0 minmax(0, 1fr);
+}
+
+/* 收起：品牌条跟着收到内容宽度，右边缘紧贴按钮 */
+.shell--collapsed .shell__top {
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 
 .shell--collapsed .side {
@@ -810,6 +815,7 @@ select:focus {
 
 .composer__box:focus-within {
   border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px var(--halo);
 }
 
 .composer__input {
@@ -824,8 +830,11 @@ select:focus {
   line-height: 1.6;
 }
 
-.composer__input:focus {
+/* 聚焦提示只落在容器上：textarea 贴满容器，全局 outline-offset 会画到框外去 */
+.composer__input:focus,
+.composer__input:focus-visible {
   border: none;
+  outline: none;
 }
 
 .composer__bar {
@@ -1531,4 +1540,254 @@ select:focus {
 .annot-btn--main {
   background: var(--accent);
   color: var(--on-accent);
+}
+
+
+/* ------------------------------------------------------------ 底部贯穿功能条 */
+
+.appbar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: var(--appbar-h);
+  padding: 0 var(--sp-3);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  font-size: var(--fs-xs);
+  color: var(--fg-3);
+}
+
+.appbar__spacer {
+  flex: 1;
+}
+
+/* ------------------------------------------------------------ 侧栏分段 */
+
+.side__section {
+  flex: none;
+  padding: var(--sp-2) var(--sp-2) 0;
+}
+
+.side__section--grow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.side__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 24px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+.side__head-note {
+  margin-left: auto;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.side__plain {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.side__feat-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.side__feat,
+.side__row,
+.side__more {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 30px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-ctl);
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+  text-align: left;
+}
+
+.side__feat:hover,
+.side__row:hover,
+.side__more:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.side__feat-label,
+.side__row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side__feat-icon,
+.side__row-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--fg-3);
+}
+
+.side__soon {
+  margin-left: auto;
+  padding: 1px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--rad-xs);
+  font-size: 10px;
+  font-style: normal;
+  color: var(--fg-3);
+}
+
+.side__pin {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--rad-ctl);
+  color: var(--fg-3);
+  opacity: 0;
+  transition: opacity var(--dur-1), background var(--dur-1), color var(--dur-1);
+}
+
+.side__feat-row:hover .side__pin {
+  opacity: 1;
+}
+
+.side__pin[aria-pressed='true'] {
+  opacity: 1;
+  color: var(--fg);
+}
+
+.side__pin:hover {
+  background: var(--hover);
+}
+
+.side__more-icon {
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+.side__more-icon.is-open {
+  transform: rotate(180deg);
+}
+
+.side__section--grow .side__list {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ------------------------------------------------------------ 全屏设置页 */
+
+.settings-page {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  background: var(--bg);
+}
+
+/* 作者样式的 display 会盖掉 UA 的 [hidden]{display:none}，显式补回来 */
+.settings-page[hidden] {
+  display: none;
+}
+
+.settings-page__side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+}
+
+.settings-page__title {
+  display: flex;
+  align-items: center;
+  height: var(--row-h);
+  padding: 0 var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.settings-page__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--sp-2);
+}
+
+.settings-page__nav button {
+  height: 30px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-ctl);
+  text-align: left;
+  font-size: var(--fs-md);
+  color: var(--fg-2);
+}
+
+.settings-page__nav button:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.settings-page__nav button[aria-current='true'] {
+  background: var(--raise);
+  color: var(--fg);
+}
+
+.settings-page__main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.settings-page__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: var(--row-h);
+  padding: 0 var(--sp-4);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+
+.settings-page__head h2 {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.settings-page__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.settings-page__hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-3);
 }

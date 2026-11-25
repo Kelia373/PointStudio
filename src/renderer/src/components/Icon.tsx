@@ -14,6 +14,7 @@ import download from '../assets/icons/download.svg?raw'
 import folder from '../assets/icons/folder.svg?raw'
 import moon from '../assets/icons/moon.svg?raw'
 import panelRight from '../assets/icons/panel-right.svg?raw'
+import pin from '../assets/icons/pin.svg?raw'
 import plus from '../assets/icons/plus.svg?raw'
 import search from '../assets/icons/search.svg?raw'
 import settings from '../assets/icons/settings.svg?raw'
@@ -39,7 +40,8 @@ const PATHS = {
   'arrow-down': arrowDown,
   'pen-line': penLine,
   'square-arrow-left': squareArrowLeft,
-  'square-arrow-right': squareArrowRight
+  'square-arrow-right': squareArrowRight,
+  pin
 } as const
 
 export type IconName = keyof typeof PATHS
