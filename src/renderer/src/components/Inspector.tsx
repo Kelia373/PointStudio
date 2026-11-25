@@ -5,7 +5,6 @@ import type {
   ProviderSettingsViewDto
 } from '../../../shared/types/ipc.ts'
 import type { PlanRunState } from '../lib/planRunState'
-import Icon from './Icon'
 
 export type InspectorTab = 'context' | 'tools' | 'run'
 
@@ -34,7 +33,6 @@ export default function Inspector({
   tab,
   onTab,
   collapsed,
-  onToggleCollapsed,
   conversationTitle,
   assistantName,
   mode,
@@ -53,7 +51,6 @@ export default function Inspector({
   tab: InspectorTab
   onTab: (tab: InspectorTab) => void
   collapsed: boolean
-  onToggleCollapsed: () => void
   conversationTitle: string | null
   assistantName: string | null
   mode: 'live' | 'local' | null
@@ -89,16 +86,8 @@ export default function Inspector({
             {TAB_LABEL[key]}
           </button>
         ))}
+        {/* 收起键只在顶栏保留一处：这里再放一个会出现两个相邻的雪佛龙 */}
         <span style={{ flex: 1 }} />
-        <button
-          className="icon-btn"
-          type="button"
-          onClick={onToggleCollapsed}
-          title="收起检查器"
-          aria-label="收起检查器"
-        >
-          <Icon name="chevron-right" />
-        </button>
       </div>
 
       <div className="insp__body">

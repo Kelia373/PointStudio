@@ -86,6 +86,9 @@ select:focus {
 .app {
   display: grid;
   grid-template-columns: var(--side-w) minmax(0, 1fr) var(--insp-w);
+  /* 行高必须钉死：默认 auto 会被内容撑高，于是 .stream 永远没有溢出，
+     长会话被 overflow:hidden 直接裁掉——表现为「聊天记录滚不动」。 */
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
   transition: grid-template-columns var(--dur-3) var(--ease-inout);
@@ -115,6 +118,7 @@ select:focus {
   flex-direction: column;
   /* 窄窗口下也不许被压成一条缝：最窄就是图标轨。 */
   min-width: var(--side-w-rail);
+  min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--line);
   overflow: hidden;
@@ -323,6 +327,14 @@ select:focus {
   color: var(--danger);
 }
 
+/* 确认态文字比图标宽，别被 22px 卡住 */
+.side__item-remove.is-confirm {
+  width: auto;
+  padding: 0 var(--sp-1);
+  background: var(--danger);
+  color: #fff;
+}
+
 .side__empty {
   padding: var(--sp-3);
   color: var(--fg-3);
@@ -433,6 +445,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   background: var(--bg);
 }
 
@@ -507,8 +520,9 @@ select:focus {
 .icon-btn {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  /* 与 .chip / 下拉统一 26，避免顶栏出现 24/26/28 三档不齐 */
+  width: 26px;
+  height: 26px;
   flex: none;
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
@@ -617,6 +631,11 @@ select:focus {
 
 .msg--user {
   align-items: flex-end;
+}
+
+/* 助手气泡按内容收：flex 列默认 stretch 会把它拉成整条色带 */
+.msg--assistant {
+  align-items: flex-start;
 }
 
 .msg__head {
@@ -885,8 +904,9 @@ select:focus {
   border: 1px solid var(--line);
   border-radius: var(--rad-pill);
   background: transparent;
-  color: var(--fg-3);
-  font-size: var(--fs-xs);
+  /* fg-3 在浅色主题下几乎读不出来，提一档到 fg-2 */
+  color: var(--fg-2);
+  font-size: var(--fs-md);
   cursor: pointer;
   transition: border-color var(--dur-1), color var(--dur-1);
 }
@@ -950,6 +970,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
   overflow: hidden;
   background: var(--panel);
   border-left: 1px solid var(--line);
@@ -1333,10 +1354,12 @@ select:focus {
 
 /* 「回到最新」：用户上滚时暂停自动滚底，这里给一个回去的入口 */
 .jump-latest {
-  position: absolute;
-  left: 50%;
+  /* sticky 而不是 absolute：absolute 会跟着滚动容器一起滚走，
+     用户在往上翻的时候根本看不到这个按钮。 */
+  position: sticky;
   bottom: var(--sp-3);
-  transform: translateX(-50%);
+  width: fit-content;
+  margin: 0 auto var(--sp-2);
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
@@ -1429,7 +1452,8 @@ select:focus {
 .assistant-form {
   flex: none;
   display: grid;
-  grid-template-columns: 160px minmax(0, 1fr) auto;
+  /* 名称 / 提示词 / 保存 / 取消 */
+  grid-template-columns: 160px minmax(0, 1fr) auto auto;
   gap: var(--sp-2);
   margin: var(--sp-2) var(--sp-4) 0;
 }

@@ -691,7 +691,7 @@ export default function ChatPanel() {
                   setPinnedToBottom(true)
                 }}
               >
-                <Icon name="chevron-right" size={12} />
+                <Icon name="arrow-down" size={13} />
                 回到最新
               </button>
             ) : null}
@@ -731,7 +731,6 @@ export default function ChatPanel() {
         tab={inspTab}
         onTab={setInspTab}
         collapsed={inspCollapsed}
-        onToggleCollapsed={() => setInspCollapsed(true)}
         conversationTitle={activeConversation?.title ?? null}
         assistantName={boundAssistant?.name ?? null}
         mode={mode}

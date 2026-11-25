@@ -4,6 +4,7 @@
 // 没用到的留在工作区 `.lucide-static/`（不入库，见 .gitignore）。
 // 每个图标以 `?raw` 导入，只取内部标记，外层由这里统一给出：
 // 颜色跟随文字（currentColor），尺寸由 size 控制。
+import arrowDown from '../assets/icons/arrow-down.svg?raw'
 import chevronLeft from '../assets/icons/chevron-left.svg?raw'
 import compass from '../assets/icons/compass.svg?raw'
 import penLine from '../assets/icons/pen-line.svg?raw'
@@ -33,6 +34,7 @@ const PATHS = {
   settings,
   x,
   compass,
+  'arrow-down': arrowDown,
   'pen-line': penLine
 } as const
 
