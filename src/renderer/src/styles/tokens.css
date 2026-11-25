@@ -1,7 +1,7 @@
 /* ============================================================
    设计基线（黑白单色）
-   全站颜色、圆角、间距、动效必须从这里取；组件样式里不出现魔法值。
-   参考 D:/Project/PointStudio-ui/prototype/index.html 的 :root 段。
+   全站颜色、圆角、间距、字号、动效必须从这里取；
+   组件样式里不出现魔法值。评审单见 _local/notes/ui-design-review.md。
    ============================================================ */
 :root {
   /* ---- 布局尺寸 ---- */
@@ -9,11 +9,13 @@
   --side-w-rail: 64px;
   --insp-w: 320px;
 
-  /* ---- 圆角 ---- */
+  /* ---- 圆角阶梯（替代组件里的 4px / 99px / 999px 裸值） ---- */
+  --rad-xs: 4px;
   --rad-ctl: 6px;
   --rad-card: 12px;
+  --rad-pill: 999px;
 
-  /* ---- 间距阶（4 的倍数，够用即止） ---- */
+  /* ---- 间距阶（4 的倍数） ---- */
   --sp-1: 4px;
   --sp-2: 8px;
   --sp-3: 12px;
@@ -21,12 +23,21 @@
   --sp-5: 24px;
   --sp-6: 32px;
 
+  /* ---- 字号阶梯 ---- */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-body: 14px;
+  --fs-hero: 24px;
+
   /* ---- 动效 token：Corporate 人格（200–400ms、无回弹）
-     只有 4 档时长，组件里禁止写裸的毫秒数 ---- */
+     分级只用 4 档，全站不再出现散落的魔法数字 ---- */
   --dur-1: 90ms;  /* hover / press 反馈 */
   --dur-2: 140ms; /* 图标与控件状态切换 */
   --dur-3: 220ms; /* 卡片、面板、消息入场 */
   --dur-4: 320ms; /* 弹层、错误提示这类需要被看见的 */
+  --dur-pulse: 1600ms;
+  --dur-blink: 1000ms;
   --ease-out: cubic-bezier(0.2, 0, 0, 1);
   --ease-in: cubic-bezier(0.3, 0, 1, 1);
   --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
@@ -41,35 +52,55 @@
 /* 深色是默认：与原型 data-theme="dark" 一致 */
 :root,
 html[data-theme='dark'] {
+  color-scheme: dark;
   --bg: #0a0a0b;
   --panel: #101012;
   --panel-2: #16161a;
-  --raise: #1a1a1d;
+  --raise: #1e1e24;
   --line: rgba(255, 255, 255, 0.08);
-  --line-strong: rgba(255, 255, 255, 0.16);
+  --line-strong: rgba(255, 255, 255, 0.18);
   --fg: #f2f2f3;
-  --fg-2: rgba(255, 255, 255, 0.72);
-  --fg-3: rgba(255, 255, 255, 0.55);
+  --fg-2: rgba(255, 255, 255, 0.74);
+  --fg-3: rgba(255, 255, 255, 0.5);
   --accent: #ffffff;
   --on-accent: #0a0a0b;
-  --danger: #c0564b;
+  /* 用户气泡不再用纯白：避免深底上的高亮白块抢走发送键的视觉权重 */
+  --bubble-user-bg: #222228;
+  --bubble-user-fg: #f4f4f6;
+  --bubble-user-line: rgba(255, 255, 255, 0.14);
+  --danger: #d0584e;
+  --warn: #d4943a;
+  --ok: #4ca87a;
   --hover: rgba(255, 255, 255, 0.05);
+  --mask-bg: rgba(0, 0, 0, 0.48);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.42);
+  --shadow-composer: 0 4px 20px rgba(0, 0, 0, 0.24);
 }
 
 html[data-theme='light'] {
-  --bg: #fbfbfa;
-  --panel: #ffffff;
-  --panel-2: #f4f4f2;
-  --raise: #ffffff;
-  --line: rgba(0, 0, 0, 0.09);
+  color-scheme: light;
+  --bg: #f6f6f4;
+  --panel: #fcfcfa;
+  --panel-2: #efefec;
+  /* raise 必须比 panel 更深一档，否则选中态在白底上完全看不见 */
+  --raise: #e4e4e0;
+  --line: rgba(0, 0, 0, 0.08);
   --line-strong: rgba(0, 0, 0, 0.18);
   --fg: #101012;
-  --fg-2: rgba(0, 0, 0, 0.72);
-  --fg-3: rgba(0, 0, 0, 0.52);
-  --accent: #0a0a0b;
+  --fg-2: rgba(0, 0, 0, 0.74);
+  --fg-3: rgba(0, 0, 0, 0.5);
+  --accent: #101012;
   --on-accent: #ffffff;
-  --danger: #b0453a;
+  --bubble-user-bg: #18181b;
+  --bubble-user-fg: #fafafa;
+  --bubble-user-line: transparent;
+  --danger: #b84237;
+  --warn: #b87822;
+  --ok: #2e8558;
   --hover: rgba(0, 0, 0, 0.05);
+  --mask-bg: rgba(16, 16, 18, 0.28);
+  --shadow-pop: 0 12px 28px rgba(16, 16, 18, 0.12);
+  --shadow-composer: 0 2px 12px rgba(16, 16, 18, 0.06);
 }
 
 /* 尊重系统「减少动效」偏好：不删功能，只把时长压到近 0 */

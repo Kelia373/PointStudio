@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 
 import { EFFORT_LABEL, type Effort } from '../lib/modelOptions'
+import Icon from './Icon'
 
 export default function Composer({
   draft,
@@ -116,7 +117,8 @@ export default function Composer({
             disabled={busy || draft.trim() === ''}
             title="把这句话交给 Agent 生成执行计划"
           >
-            🧭 计划
+            <Icon name="compass" size={14} />
+            计划
           </button>
           {busy ? (
             <button className="btn-stop" type="button" onClick={onStop}>

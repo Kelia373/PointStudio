@@ -4,6 +4,7 @@
 // 读源 / 落盘 / 登记全在主进程，界面不碰文件系统。
 import { useCallback, useEffect, useState } from 'react'
 
+import ConfirmButton from './ConfirmButton'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import type { WorkspaceFileDto } from '../../../shared/types/ipc.ts'
 import { formatBytes } from '../../../shared/utils/format.ts'
@@ -61,14 +62,13 @@ export default function WorkspacePanel({ onClose }: { onClose: () => void }) {
               {file.path}
             </span>
             <span className="workspace__size">{formatBytes(file.sizeBytes)}</span>
-            <button
+            <ConfirmButton
               className="workspace__remove"
-              type="button"
-              aria-label="移除文件"
-              onClick={() => void remove(file.id)}
-            >
-              ×
-            </button>
+              ariaLabel="移除文件"
+              title="移除文件"
+              confirmLabel="移除?"
+              onConfirm={() => void remove(file.id)}
+            />
           </li>
         ))}
         {files.length === 0 ? (

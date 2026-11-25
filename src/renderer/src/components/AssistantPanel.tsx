@@ -4,6 +4,7 @@
 // 组件只做显示与转发，读写都在主进程。
 import { useCallback, useEffect, useState } from 'react'
 
+import ConfirmButton from './ConfirmButton'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import type { AssistantDto } from '../../../shared/types/ipc.ts'
 
@@ -116,14 +117,13 @@ export default function AssistantPanel({
                 >
                   编辑
                 </button>
-                <button
+                <ConfirmButton
                   className="assistants__remove"
-                  type="button"
-                  aria-label="删除助手"
-                  onClick={() => void remove(assistant.id)}
-                >
-                  ×
-                </button>
+                  ariaLabel="删除助手"
+                  title="删除助手"
+                  confirmLabel="删?"
+                  onConfirm={() => void remove(assistant.id)}
+                />
               </>
             )}
           </li>

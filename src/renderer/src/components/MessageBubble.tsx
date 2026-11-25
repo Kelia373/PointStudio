@@ -1,5 +1,7 @@
 // 单条消息。纯展示组件：只有 props，没有状态、没有副作用。
 // 渲染层的硬规则——组件不碰存储、网络、模型。
+import ConfirmButton from './ConfirmButton'
+
 export type BubbleRole = 'user' | 'assistant'
 
 export default function MessageBubble({
@@ -76,9 +78,13 @@ export default function MessageBubble({
           </button>
         ) : null}
         {onDelete ? (
-          <button className="msg__act msg__act--danger" type="button" onClick={onDelete}>
-            删除
-          </button>
+          <ConfirmButton
+            className="msg__act msg__act--danger"
+            label="删除"
+            confirmLabel="删整轮?"
+            title="删除这一轮问答"
+            onConfirm={onDelete}
+          />
         ) : null}
       </div>
     </article>

@@ -58,6 +58,10 @@ export default function ChatPanel() {
   const [mode, setMode] = useState<ChatMode | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  // 上下文裁剪只是提醒，不是错误——用单独的 warn 通道，别染成红色
+  const [warn, setWarn] = useState<string | null>(null)
+  // 用户往上滚时暂停自动滚底，否则生成过程中根本读不了前文
+  const [pinnedToBottom, setPinnedToBottom] = useState(true)
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
   const [drafting, setDrafting] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
@@ -159,7 +163,7 @@ export default function ChatPanel() {
     })
 
     const offNotice = window.pointstudio.chat.onNotice(({ droppedCount }) => {
-      setError(`已省略较早的 ${droppedCount} 条消息（超出上下文窗口）`)
+      setWarn(`已省略较早的 ${droppedCount} 条消息（超出上下文窗口）`)
     })
 
     const offError = window.pointstudio.chat.onError(({ id, code }) => {
@@ -208,10 +212,41 @@ export default function ChatPanel() {
 
   useEffect(() => {
     const list = listRef.current
-    if (list) {
+    if (list && pinnedToBottom) {
       list.scrollTop = list.scrollHeight
     }
-  }, [messages])
+  }, [messages, pinnedToBottom])
+
+  // info 只是「做成了」的提示，3 秒自己消失，不用人点
+  useEffect(() => {
+    if (info === null) {
+      return
+    }
+    const timer = window.setTimeout(() => setInfo(null), 3000)
+    return () => window.clearTimeout(timer)
+  }, [info])
+
+  // Esc：关抽屉 / 关引用预览 / 收起内联助手表单
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key !== 'Escape') {
+        return
+      }
+      if (drawer !== null) {
+        setDrawer(null)
+        return
+      }
+      if (chunkPreview !== null) {
+        setChunkPreview(null)
+        return
+      }
+      if (drafting) {
+        setDrafting(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [drawer, chunkPreview, drafting])
 
   async function submit(textOverride?: string): Promise<void> {
     const text = (textOverride ?? draft).trim()
@@ -457,7 +492,7 @@ export default function ChatPanel() {
             title="快速新建助手"
             aria-label="快速新建助手"
           >
-            ＋
+            <Icon name="plus" />
           </button>
 
           <span
@@ -485,7 +520,7 @@ export default function ChatPanel() {
             title={annotate ? '退出标注模式' : '标注模式：点界面元素写意见'}
             aria-label="切换标注模式"
           >
-            ✎
+            <Icon name="pen-line" />
           </button>
 
           <button
@@ -524,11 +559,41 @@ export default function ChatPanel() {
             <button className="btn-send" type="button" onClick={() => void createAssistant()}>
               保存
             </button>
+            <button
+              className="msg__act"
+              type="button"
+              onClick={() => setDrafting(false)}
+              title="取消（Esc）"
+            >
+              取消
+            </button>
           </div>
         ) : null}
 
-        {info ? <div className="banner banner--info">{info}</div> : null}
-        {error ? <div className="banner banner--error">{error}</div> : null}
+        {info ? (
+          <div className="banner banner--info">
+            <span className="banner__text">{info}</span>
+            <button className="banner__close" type="button" aria-label="关闭提示" onClick={() => setInfo(null)}>
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+        ) : null}
+        {warn ? (
+          <div className="banner banner--warn">
+            <span className="banner__text">{warn}</span>
+            <button className="banner__close" type="button" aria-label="关闭提示" onClick={() => setWarn(null)}>
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+        ) : null}
+        {error ? (
+          <div className="banner banner--error">
+            <span className="banner__text">{error}</span>
+            <button className="banner__close" type="button" aria-label="关闭提示" onClick={() => setError(null)}>
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+        ) : null}
 
         {messages.length === 0 ? (
           <div className="stream stream--empty">
@@ -561,7 +626,15 @@ export default function ChatPanel() {
             </div>
           </div>
         ) : (
-          <div className="stream" ref={listRef}>
+          <div
+            className="stream"
+            ref={listRef}
+            onScroll={(event) => {
+              const el = event.currentTarget
+              const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+              setPinnedToBottom(nearBottom)
+            }}
+          >
             <div className="stream__inner">
               <div
                 className="stream__resize"
@@ -606,6 +679,22 @@ export default function ChatPanel() {
                 />
               ))}
             </div>
+            {!pinnedToBottom ? (
+              <button
+                className="jump-latest"
+                type="button"
+                onClick={() => {
+                  const el = listRef.current
+                  if (el) {
+                    el.scrollTop = el.scrollHeight
+                  }
+                  setPinnedToBottom(true)
+                }}
+              >
+                <Icon name="chevron-right" size={12} />
+                回到最新
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -649,7 +738,12 @@ export default function ChatPanel() {
         messageCount={messages.length}
         referenceCount={referenceCount}
         provider={provider}
+        effectiveModel={activeConversation?.model ?? provider?.model ?? ''}
+        effectiveMaxTokens={activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens}
+        modelFromSession={(activeConversation?.model ?? '') !== ''}
         lastRunMs={lastRunMs}
+        onOpenPlan={() => setDrawer('plan')}
+        onConfirmPlan={() => void confirmAndResume()}
         planRun={planRun}
         mcpConnections={mcpConnections}
       />

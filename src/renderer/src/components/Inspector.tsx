@@ -5,6 +5,7 @@ import type {
   ProviderSettingsViewDto
 } from '../../../shared/types/ipc.ts'
 import type { PlanRunState } from '../lib/planRunState'
+import Icon from './Icon'
 
 export type InspectorTab = 'context' | 'tools' | 'run'
 
@@ -40,9 +41,14 @@ export default function Inspector({
   messageCount,
   referenceCount,
   provider,
+  effectiveModel,
+  effectiveMaxTokens,
+  modelFromSession,
   lastRunMs,
   planRun,
-  mcpConnections
+  mcpConnections,
+  onOpenPlan,
+  onConfirmPlan
 }: {
   tab: InspectorTab
   onTab: (tab: InspectorTab) => void
@@ -54,9 +60,17 @@ export default function Inspector({
   messageCount: number
   referenceCount: number
   provider: ProviderSettingsViewDto | null
+  /** 当前会话真正生效的模型（会话覆盖优先于全局）。 */
+  effectiveModel: string
+  /** 当前会话真正生效的输出上限；undefined 表示没设置。 */
+  effectiveMaxTokens: number | undefined
+  /** 模型是否来自会话级覆盖。 */
+  modelFromSession: boolean
   lastRunMs: number | null
   planRun: PlanRunState | null
   mcpConnections: McpConnectionDto[]
+  onOpenPlan: () => void
+  onConfirmPlan: () => void
 }) {
   const params = provider?.params ?? {}
   const details = planRun?.details ?? []
@@ -83,7 +97,7 @@ export default function Inspector({
           title="收起检查器"
           aria-label="收起检查器"
         >
-          »
+          <Icon name="chevron-right" />
         </button>
       </div>
 
@@ -126,8 +140,9 @@ export default function Inspector({
               </div>
               <div className="kv">
                 <span className="kv__k">模型名</span>
-                <span className="kv__v" title={provider?.model ?? ''}>
-                  {provider?.model || '默认'}
+                <span className="kv__v" title={effectiveModel}>
+                  {effectiveModel || '默认'}
+                  {modelFromSession ? ' · 会话' : ''}
                 </span>
               </div>
               <div className="kv">
@@ -140,7 +155,7 @@ export default function Inspector({
               </div>
               <div className="kv">
                 <span className="kv__k">最大长度</span>
-                <span className="kv__v">{params.maxTokens ?? '未设置'}</span>
+                <span className="kv__v">{effectiveMaxTokens ?? '未设置'}</span>
               </div>
               <div className="kv">
                 <span className="kv__k">Token</span>
@@ -251,6 +266,20 @@ export default function Inspector({
                       </span>
                     </div>
                   ))}
+                  <div className="insp__actions">
+                    <button className="insp__action" type="button" onClick={onOpenPlan}>
+                      打开计划面板
+                    </button>
+                    {planRun.status === 'stopped' ? (
+                      <button
+                        className="insp__action insp__action--main"
+                        type="button"
+                        onClick={onConfirmPlan}
+                      >
+                        确认并继续
+                      </button>
+                    ) : null}
+                  </div>
                 </>
               ) : (
                 <p className="insp__empty">

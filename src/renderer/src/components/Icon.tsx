@@ -5,6 +5,9 @@
 // 每个图标以 `?raw` 导入，只取内部标记，外层由这里统一给出：
 // 颜色跟随文字（currentColor），尺寸由 size 控制。
 import chevronLeft from '../assets/icons/chevron-left.svg?raw'
+import compass from '../assets/icons/compass.svg?raw'
+import penLine from '../assets/icons/pen-line.svg?raw'
+import x from '../assets/icons/x.svg?raw'
 import chevronRight from '../assets/icons/chevron-right.svg?raw'
 import download from '../assets/icons/download.svg?raw'
 import folder from '../assets/icons/folder.svg?raw'
@@ -27,7 +30,10 @@ const PATHS = {
   user,
   folder,
   download,
-  settings
+  settings,
+  x,
+  compass,
+  'pen-line': penLine
 } as const
 
 export type IconName = keyof typeof PATHS

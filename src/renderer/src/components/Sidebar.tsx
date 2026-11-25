@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConversationDto } from '../../../shared/types/ipc.ts'
 import { filterConversations } from '../lib/filterConversations'
+import ConfirmButton from './ConfirmButton'
 import Icon from './Icon'
 
 export default function Sidebar({
@@ -134,14 +135,23 @@ export default function Sidebar({
               >
                 {conversation.title}
               </button>
-              <button
+              <ConfirmButton
                 className="side__item-remove"
-                type="button"
-                aria-label="删除会话"
+                ariaLabel="删除会话"
                 title="删除会话"
-                onClick={() => onRemove(conversation.id)}
+                confirmLabel="删?"
+                onConfirm={() => onRemove(conversation.id)}
               >
-                ×
+                <Icon name="x" size={12} />
+              </ConfirmButton>
+              <button
+                className="side__item-badge"
+                type="button"
+                onClick={() => onSelect(conversation.id)}
+                title={conversation.title}
+                aria-label={conversation.title}
+              >
+                {conversation.title.trim().slice(0, 1) || '对'}
               </button>
             </div>
           </li>

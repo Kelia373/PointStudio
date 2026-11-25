@@ -18,7 +18,7 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font);
-  font-size: 14px;
+  font-size: var(--fs-body);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
@@ -30,6 +30,12 @@ button {
   background: none;
   border: none;
   cursor: pointer;
+}
+
+/* 键盘可达性：只对键盘聚焦画环，鼠标点击不画 */
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 1.5px solid var(--line-strong);
+  outline-offset: 2px;
 }
 
 button:disabled {
@@ -69,7 +75,7 @@ select:focus {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--line-strong);
-  border-radius: 99px;
+  border-radius: var(--rad-pill);
 }
 ::-webkit-scrollbar-track {
   background: transparent;
@@ -133,13 +139,13 @@ select:focus {
   border-radius: var(--rad-ctl);
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .side__name {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -194,7 +200,7 @@ select:focus {
   padding: 0;
   border: none;
   background: none;
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 
 .side__search-input:focus {
@@ -207,11 +213,11 @@ select:focus {
 
 .side__key {
   flex: none;
-  padding: 0 4px;
+  padding: 0 var(--sp-1);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--rad-xs);
   color: var(--fg-3);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   line-height: 16px;
 }
 
@@ -286,7 +292,7 @@ select:focus {
   min-width: 0;
   padding: var(--sp-2) var(--sp-2);
   text-align: left;
-  font-size: 13px;
+  font-size: var(--fs-md);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -320,7 +326,7 @@ select:focus {
 .side__empty {
   padding: var(--sp-3);
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .side__foot {
@@ -339,7 +345,7 @@ select:focus {
   padding: 0 var(--sp-2);
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   text-align: left;
   transition: background var(--dur-1), color var(--dur-1);
 }
@@ -388,6 +394,34 @@ select:focus {
   justify-content: center;
 }
 
+/* 收起态没有标题可显示，用首字徽标保住切换功能与视觉锚点 */
+.side__item-badge {
+  display: none;
+}
+
+.side--rail .side__item-badge {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 2px auto;
+  border-radius: var(--rad-ctl);
+  color: var(--fg-2);
+  font-size: var(--fs-md);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+
+.side--rail .side__item-badge:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.side--rail .side__item--active .side__item-badge {
+  background: var(--raise);
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+}
+
 .side--rail .side__act {
   justify-content: center;
   padding: 0;
@@ -414,7 +448,7 @@ select:focus {
 
 .topbar__title {
   margin: 0;
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -434,9 +468,9 @@ select:focus {
   padding: 0 var(--sp-2);
   flex: none;
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--rad-pill);
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   white-space: nowrap;
 }
 
@@ -448,7 +482,7 @@ select:focus {
 .chip__dot {
   width: 5px;
   height: 5px;
-  border-radius: 99px;
+  border-radius: var(--rad-pill);
   background: var(--fg-3);
 }
 
@@ -457,7 +491,7 @@ select:focus {
 }
 
 .chip--busy .chip__dot {
-  animation: pulse 1.6s var(--ease-inout) infinite;
+  animation: pulse var(--dur-pulse) var(--ease-inout) infinite;
 }
 
 @keyframes pulse {
@@ -492,17 +526,47 @@ select:focus {
 }
 
 .banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   flex: none;
   margin: var(--sp-2) var(--sp-4) 0;
   padding: var(--sp-2) var(--sp-3);
   border-radius: var(--rad-ctl);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   animation: rise var(--dur-4) var(--ease-out);
+}
+
+.banner__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.banner__close {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  border-radius: var(--rad-xs);
+  color: inherit;
+  opacity: 0.6;
+  transition: opacity var(--dur-1), background var(--dur-1);
+}
+
+.banner__close:hover {
+  opacity: 1;
+  background: var(--hover);
 }
 
 .banner--info {
   background: var(--panel-2);
   color: var(--fg-2);
+}
+
+.banner--warn {
+  border: 1px solid var(--warn);
+  color: var(--warn);
 }
 
 .banner--error {
@@ -524,6 +588,7 @@ select:focus {
 /* ------------------------------------------------------------ 消息流 */
 
 .stream {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -558,7 +623,7 @@ select:focus {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-3);
 }
 
@@ -571,9 +636,10 @@ select:focus {
 }
 
 .msg--user .msg__body {
-  background: var(--accent);
-  color: var(--on-accent);
-  border-bottom-right-radius: var(--rad-ctl);
+  background: var(--bubble-user-bg);
+  color: var(--bubble-user-fg);
+  border: 1px solid var(--bubble-user-line);
+  border-bottom-right-radius: var(--rad-xs);
 }
 
 .msg--assistant .msg__body {
@@ -593,7 +659,7 @@ select:focus {
   margin-left: 2px;
   vertical-align: -0.15em;
   background: currentColor;
-  animation: blink 1s steps(2, start) infinite;
+  animation: blink var(--dur-blink) steps(2, start) infinite;
 }
 
 @keyframes blink {
@@ -607,16 +673,16 @@ select:focus {
   flex-wrap: wrap;
   gap: var(--sp-1);
   align-items: center;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-3);
 }
 
 .msg__ref {
   padding: 1px var(--sp-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--rad-pill);
   color: var(--fg-2);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   transition: border-color var(--dur-1), color var(--dur-1);
 }
 
@@ -641,7 +707,7 @@ select:focus {
   padding: 2px var(--sp-2);
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   transition: background var(--dur-1), color var(--dur-1);
 }
 
@@ -716,7 +782,7 @@ select:focus {
 
 .empty__title {
   margin: 0;
-  font-size: 26px;
+  font-size: var(--fs-hero);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
@@ -724,7 +790,7 @@ select:focus {
 .empty__sub {
   margin: 0;
   color: var(--fg-3);
-  font-size: 13px;
+  font-size: var(--fs-md);
   max-width: 52ch;
 }
 
@@ -753,13 +819,13 @@ select:focus {
 }
 
 .card-ask__title {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 500;
 }
 
 .card-ask__hint {
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 /* ------------------------------------------------------------ 输入区 */
@@ -812,14 +878,15 @@ select:focus {
 }
 
 .composer__pick select {
-  height: 24px;
+  height: 26px;
   max-width: 180px;
-  padding: 0 var(--sp-2);
+  /* 右侧留出原生箭头的位置，避免箭头贴着边框 */
+  padding: 0 var(--sp-3) 0 var(--sp-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--rad-pill);
   background: transparent;
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   cursor: pointer;
   transition: border-color var(--dur-1), color var(--dur-1);
 }
@@ -836,7 +903,7 @@ select:focus {
 
 .composer__hint {
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .composer__spacer {
@@ -852,7 +919,7 @@ select:focus {
   border-radius: var(--rad-ctl);
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 500;
   transition: opacity var(--dur-1), transform var(--dur-1) var(--ease-out);
 }
@@ -869,7 +936,7 @@ select:focus {
   padding: 0 var(--sp-4);
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-ctl);
-  font-size: 13px;
+  font-size: var(--fs-md);
   animation: rise var(--dur-3) var(--ease-out);
 }
 
@@ -903,7 +970,7 @@ select:focus {
   padding: 0 var(--sp-2);
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: background var(--dur-1), color var(--dur-1);
 }
 
@@ -934,7 +1001,7 @@ select:focus {
 
 .insp__label {
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -944,7 +1011,7 @@ select:focus {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--sp-2);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .kv__k {
@@ -962,7 +1029,7 @@ select:focus {
 
 .insp__empty {
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
 }
 
@@ -973,7 +1040,7 @@ select:focus {
   padding: var(--sp-2);
   border: 1px solid var(--line);
   border-radius: var(--rad-ctl);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .insp__row-head {
@@ -992,8 +1059,35 @@ select:focus {
 
 .insp__row-meta {
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-family: var(--mono);
+}
+
+.insp__actions {
+  display: flex;
+  gap: var(--sp-1);
+  margin-top: var(--sp-1);
+}
+
+.insp__action {
+  height: 26px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-ctl);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  transition: border-color var(--dur-1), color var(--dur-1), background var(--dur-1);
+}
+
+.insp__action:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.insp__action--main {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 
 .insp__row--failed {
@@ -1006,7 +1100,7 @@ select:focus {
   position: fixed;
   inset: 0;
   z-index: 20;
-  background: rgba(0, 0, 0, 0.42);
+  background: var(--mask-bg);
   animation: fade var(--dur-2) var(--ease-out);
 }
 
@@ -1055,7 +1149,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: var(--sp-3);
-  font-size: 13px;
+  font-size: var(--fs-md);
 }
 
 .settings__row {
@@ -1066,7 +1160,7 @@ select:focus {
 
 .settings__label {
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .settings__input,
@@ -1103,7 +1197,7 @@ select:focus {
   border-radius: var(--rad-ctl);
   background: var(--accent);
   color: var(--on-accent);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .settings__clear,
@@ -1119,7 +1213,7 @@ select:focus {
   padding: 0 var(--sp-2);
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: background var(--dur-1), color var(--dur-1);
 }
 
@@ -1144,7 +1238,7 @@ select:focus {
 .assistants__title,
 .workspace__title,
 .plan__goal {
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-weight: 600;
   flex: 1;
   min-width: 0;
@@ -1156,7 +1250,7 @@ select:focus {
 .workspace__message,
 .plan__note {
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .settings__row--backup {
@@ -1198,7 +1292,7 @@ select:focus {
 .plan__status,
 .plan__detail {
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-family: var(--mono);
 }
 
@@ -1226,7 +1320,7 @@ select:focus {
 .plan__needs,
 .plan__stops {
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   margin: 0;
   padding-left: var(--sp-4);
 }
@@ -1234,7 +1328,44 @@ select:focus {
 .assistants__empty,
 .workspace__empty {
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
+}
+
+/* 「回到最新」：用户上滚时暂停自动滚底，这里给一个回去的入口 */
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: var(--sp-3);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 28px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-pill);
+  background: var(--panel-2);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  box-shadow: var(--shadow-pop);
+  animation: rise var(--dur-3) var(--ease-out);
+  z-index: 3;
+}
+
+.jump-latest:hover {
+  color: var(--fg);
+}
+
+/* 行内二次确认：第一次点变红问一句，三秒回落 */
+.msg__act.is-confirm,
+.annot-btn.is-confirm {
+  background: var(--danger);
+  color: #fff;
+}
+
+.is-confirm:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 /* 引用原文预览 */
@@ -1251,7 +1382,7 @@ select:focus {
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-card);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--shadow-pop);
   animation: rise var(--dur-3) var(--ease-out);
   overflow: hidden;
 }
@@ -1262,7 +1393,7 @@ select:focus {
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--fg-3);
 }
 
@@ -1277,7 +1408,7 @@ select:focus {
 
 .chunk-preview__close {
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .chunk-preview__close:hover {
@@ -1289,7 +1420,7 @@ select:focus {
   padding: var(--sp-3);
   overflow: auto;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   line-height: 1.7;
   white-space: pre-wrap;
 }
@@ -1343,14 +1474,14 @@ select:focus {
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-card);
   background: var(--panel);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.36);
+  box-shadow: var(--shadow-pop);
   pointer-events: auto;
   animation: rise var(--dur-3) var(--ease-out);
 }
 
 .annot-pop__target {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   color: var(--fg-3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1366,9 +1497,9 @@ select:focus {
 .annot-chip {
   padding: 2px var(--sp-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--rad-pill);
   color: var(--fg-3);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   transition: background var(--dur-1), color var(--dur-1), border-color var(--dur-1);
 }
 
@@ -1386,7 +1517,7 @@ select:focus {
 .annot-pop__note {
   width: 100%;
   resize: vertical;
-  font-size: 12px;
+  font-size: var(--fs-sm);
 }
 
 .annot-pop__actions {
@@ -1407,15 +1538,15 @@ select:focus {
   gap: var(--sp-2);
   padding: var(--sp-1) var(--sp-2) var(--sp-1) var(--sp-3);
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: var(--rad-pill);
   background: var(--panel-2);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  box-shadow: var(--shadow-pop);
   pointer-events: auto;
   animation: rise var(--dur-3) var(--ease-out);
 }
 
 .annot-bar__count {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--fg-2);
   white-space: nowrap;
 }
@@ -1425,7 +1556,7 @@ select:focus {
   padding: 0 var(--sp-2);
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   transition: background var(--dur-1), color var(--dur-1);
 }
 

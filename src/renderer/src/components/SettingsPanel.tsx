@@ -4,6 +4,7 @@
 // 样式是占位，等设计稿来了整体换皮。
 import { useEffect, useState } from 'react'
 
+import ConfirmButton from './ConfirmButton'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import type { ProviderIdDto, ProviderSettingsViewDto } from '../../../shared/types/ipc.ts'
 
@@ -205,9 +206,13 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
         <button className="settings__save" type="button" onClick={() => void save()}>
           保存
         </button>
-        <button className="settings__clear" type="button" onClick={() => void clear()}>
-          清除
-        </button>
+        <ConfirmButton
+          className="settings__clear"
+          label="清除"
+          confirmLabel="确认清除?"
+          title="清除已保存的 API Key"
+          onConfirm={() => void clear()}
+        />
         <button className="settings__close" type="button" onClick={onClose}>
           收起
         </button>
@@ -222,9 +227,13 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
         <button className="settings__clear" type="button" onClick={() => void importBackup('merge')}>
           合并导入
         </button>
-        <button className="settings__clear" type="button" onClick={() => void importBackup('replace')}>
-          整体恢复
-        </button>
+        <ConfirmButton
+          className="settings__clear"
+          label="整体恢复"
+          confirmLabel="确认覆盖?"
+          title="用备份覆盖当前全部数据"
+          onConfirm={() => void importBackup('replace')}
+        />
       </div>
 
       <p className="settings__note">
