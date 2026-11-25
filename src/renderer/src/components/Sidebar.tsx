@@ -53,46 +53,8 @@ export default function Sidebar({
   }, [collapsed, onToggleCollapse])
 
   return (
-    <aside className={`side${collapsed ? ' side--rail' : ''}`}>
-      <div className="side__brand">
-        <span className="side__logo" aria-hidden="true">
-          P
-        </span>
-        <span className="side__name">PointStudio</span>
-        <button
-          className="side__collapse"
-          type="button"
-          onClick={onToggleCollapse}
-          title={collapsed ? '展开侧栏' : '收起侧栏'}
-          aria-label={collapsed ? '展开侧栏' : '收起侧栏'}
-        >
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} />
-        </button>
-      </div>
-
-      {collapsed ? (
-        <div className="side__rail-tools">
-          <button
-            className="side__rail-btn"
-            type="button"
-            onClick={onToggleCollapse}
-            title="搜索会话"
-            aria-label="搜索会话"
-          >
-            <Icon name="search" />
-          </button>
-          <button
-            className="side__rail-btn"
-            type="button"
-            onClick={onCreate}
-            title="新建会话"
-            aria-label="新建会话"
-          >
-            <Icon name="plus" />
-          </button>
-        </div>
-      ) : (
-        <div className="side__search">
+    <aside className="side">
+      <div className="side__search">
           <Icon name="search" className="side__search-icon" />
           <input
             ref={inputRef}
@@ -119,7 +81,6 @@ export default function Sidebar({
             <Icon name="plus" />
           </button>
         </div>
-      )}
 
       <ul className="side__list">
         {visible.map((conversation) => (
@@ -144,15 +105,6 @@ export default function Sidebar({
               >
                 <Icon name="x" size={12} />
               </ConfirmButton>
-              <button
-                className="side__item-badge"
-                type="button"
-                onClick={() => onSelect(conversation.id)}
-                title={conversation.title}
-                aria-label={conversation.title}
-              >
-                {conversation.title.trim().slice(0, 1) || '对'}
-              </button>
             </div>
           </li>
         ))}

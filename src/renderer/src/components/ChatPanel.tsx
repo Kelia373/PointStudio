@@ -445,28 +445,28 @@ export default function ChatPanel() {
   const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
   return (
-    <div
-      className={`app${sideCollapsed ? ' app--side-rail' : ''}${
-        inspCollapsed ? ' app--insp-hidden' : ''
-      }`}
-    >
-      <Sidebar
-        conversations={conversations}
-        activeId={activeId}
-        collapsed={sideCollapsed}
-        onToggleCollapse={() => setSideCollapsed((value) => !value)}
-        onSelect={setActiveId}
-        onCreate={() => void createConversation()}
-        onRemove={(id) => void removeConversation(id)}
-        onOpenAssistants={() => setDrawer('assistants')}
-        onOpenWorkspace={() => setDrawer('workspace')}
-        onOpenSettings={() => setDrawer('settings')}
-        onExport={() => void exportConversation()}
-      />
+    <div className={`app${inspCollapsed ? ' app--insp-hidden' : ''}`}>
+      <div className={`shell${sideCollapsed ? ' shell--collapsed' : ''}`}>
+        <div className="shell__top">
+          <div className="brand">
+            <span className="brand__logo" aria-hidden="true">
+              P
+            </span>
+            <span className="brand__name">PointStudio</span>
+            <button
+              className="brand__toggle"
+              type="button"
+              onClick={() => setSideCollapsed((value) => !value)}
+              title={sideCollapsed ? '展开侧栏' : '收起侧栏'}
+              aria-label={sideCollapsed ? '展开侧栏' : '收起侧栏'}
+              aria-expanded={!sideCollapsed}
+            >
+              <Icon name={sideCollapsed ? 'square-arrow-left' : 'square-arrow-right'} />
+            </button>
+          </div>
 
-      <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
-        <header className="topbar">
-          <h1 className="topbar__title">{activeConversation?.title ?? 'PointStudio'}</h1>
+          <header className="topbar">
+            <h1 className="topbar__title">{activeConversation?.title ?? 'PointStudio'}</h1>
           <span className="topbar__spacer" />
 
           <select
@@ -542,8 +542,25 @@ export default function ChatPanel() {
           >
             <Icon name={inspCollapsed ? 'chevron-left' : 'chevron-right'} />
           </button>
-        </header>
+          </header>
+        </div>
 
+        <div className="shell__body">
+          <Sidebar
+            conversations={conversations}
+            activeId={activeId}
+            collapsed={sideCollapsed}
+            onToggleCollapse={() => setSideCollapsed((value) => !value)}
+            onSelect={setActiveId}
+            onCreate={() => void createConversation()}
+            onRemove={(id) => void removeConversation(id)}
+            onOpenAssistants={() => setDrawer('assistants')}
+            onOpenWorkspace={() => setDrawer('workspace')}
+            onOpenSettings={() => setDrawer('settings')}
+            onExport={() => void exportConversation()}
+          />
+
+          <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
         {drafting ? (
           <div className="assistant-form">
             <input
@@ -726,6 +743,8 @@ export default function ChatPanel() {
           onPlan={() => void runPlan()}
         />
       </main>
+        </div>
+      </div>
 
       <Inspector
         tab={inspTab}

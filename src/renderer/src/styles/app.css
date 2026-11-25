@@ -85,7 +85,7 @@ select:focus {
 
 .app {
   display: grid;
-  grid-template-columns: var(--side-w) minmax(0, 1fr) var(--insp-w);
+  grid-template-columns: minmax(0, 1fr) var(--insp-w);
   /* 行高必须钉死：默认 auto 会被内容撑高，于是 .stream 永远没有溢出，
      长会话被 overflow:hidden 直接裁掉——表现为「聊天记录滚不动」。 */
   grid-template-rows: minmax(0, 1fr);
@@ -94,16 +94,41 @@ select:focus {
   transition: grid-template-columns var(--dur-3) var(--ease-inout);
 }
 
-.app--side-rail {
-  grid-template-columns: var(--side-w-rail) minmax(0, 1fr) var(--insp-w);
-}
-
 .app--insp-hidden {
-  grid-template-columns: var(--side-w) minmax(0, 1fr) 0;
+  grid-template-columns: minmax(0, 1fr) 0;
 }
 
-.app--side-rail.app--insp-hidden {
-  grid-template-columns: var(--side-w-rail) minmax(0, 1fr) 0;
+/* 左半区：上面是一条永不变化的品牌/顶栏行，下面是可整列收掉的侧栏与主区。
+   品牌行独立成行，所以折叠时它三个元素的位置不会动。 */
+.shell {
+  display: grid;
+  grid-template-rows: var(--row-h) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+.shell__top {
+  display: grid;
+  grid-template-columns: var(--brand-w) minmax(0, 1fr);
+  min-width: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.shell__body {
+  display: grid;
+  grid-template-columns: var(--side-w) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  transition: grid-template-columns var(--dur-3) var(--ease-inout);
+}
+
+/* 收起：整列归零，不再有图标轨 */
+.shell--collapsed .shell__body {
+  grid-template-columns: 0 minmax(0, 1fr);
+}
+
+.shell--collapsed .side {
+  display: none;
 }
 
 /* ------------------------------------------------------------ 侧栏 */
@@ -116,25 +141,29 @@ select:focus {
 .side {
   display: flex;
   flex-direction: column;
-  /* 窄窗口下也不许被压成一条缝：最窄就是图标轨。 */
-  min-width: var(--side-w-rail);
+  grid-column: 1;
+  min-width: 0;
   min-height: 0;
   background: var(--panel);
   border-right: 1px solid var(--line);
   overflow: hidden;
 }
 
-.side__brand {
+/* 品牌条：行高与右侧顶栏一致，宽度固定；
+   折叠时这一行不参与任何重排，所以三个元素不会移动。 */
+.brand {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  height: 52px;
+  grid-column: 1;
+  height: var(--row-h);
   padding: 0 var(--sp-3);
-  border-bottom: 1px solid var(--line);
-  flex: none;
+  border-right: 1px solid var(--line);
+  background: var(--panel);
+  min-width: 0;
 }
 
-.side__logo {
+.brand__logo {
   display: grid;
   place-items: center;
   width: 26px;
@@ -148,26 +177,29 @@ select:focus {
   letter-spacing: -0.02em;
 }
 
-.side__name {
+.brand__name {
   font-size: var(--fs-md);
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.side__collapse {
-  margin-left: auto;
+/* 不用 margin-left:auto —— 那样折叠时会跟着列宽滑动 */
+.brand__toggle {
   display: grid;
   place-items: center;
   width: 26px;
   height: 26px;
   flex: none;
+  margin-left: var(--sp-1);
   border-radius: var(--rad-ctl);
   color: var(--fg-3);
   transition: background var(--dur-1), color var(--dur-1);
 }
 
-.side__collapse:hover {
+.brand__toggle:hover {
   background: var(--hover);
   color: var(--fg);
 }
@@ -237,31 +269,6 @@ select:focus {
 }
 
 .side__search-add:hover {
-  background: var(--hover);
-  color: var(--fg);
-}
-
-/* 收起态的工具位：搜索与新建各一个图标 */
-.side__rail-tools {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sp-1);
-  margin: var(--sp-2) 0;
-  flex: none;
-}
-
-.side__rail-btn {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--rad-ctl);
-  color: var(--fg-3);
-  transition: background var(--dur-1), color var(--dur-1);
-}
-
-.side__rail-btn:hover {
   background: var(--hover);
   color: var(--fg);
 }
@@ -373,77 +380,14 @@ select:focus {
   flex: none;
 }
 
-/* 收起态：变成 64px 图标轨，不留空白 */
-.side--rail .side__name,
-.side--rail .side__item-main,
-.side--rail .side__item-remove,
-.side--rail .side__act-label,
-.side--rail .side__empty {
-  display: none;
-}
-
-/* 收起态：logo 与折叠键上下排布 */
-/* 收起态：logo 与折叠键上下排布，但 logo 的横向位置必须和展开态一致——
-   之前用 justify-content: center 会把它先推到中间再移回来，看着像抖了一下。 */
-.side--rail .side__brand {
-  flex-direction: column;
-  align-items: flex-start;
-  height: auto;
-  padding: 13px var(--sp-3) var(--sp-2);
-  gap: var(--sp-2);
-  justify-content: flex-start;
-}
-
-.side--rail .side__collapse {
-  margin-left: 0;
-}
-
-.side--rail .side__list {
-  padding: 0 var(--sp-2) var(--sp-2);
-}
-
-.side--rail .side__item {
-  justify-content: center;
-}
-
-/* 收起态没有标题可显示，用首字徽标保住切换功能与视觉锚点 */
-.side__item-badge {
-  display: none;
-}
-
-.side--rail .side__item-badge {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin: 2px auto;
-  border-radius: var(--rad-ctl);
-  color: var(--fg-2);
-  font-size: var(--fs-md);
-  transition: background var(--dur-1), color var(--dur-1);
-}
-
-.side--rail .side__item-badge:hover {
-  background: var(--hover);
-  color: var(--fg);
-}
-
-.side--rail .side__item--active .side__item-badge {
-  background: var(--raise);
-  border: 1px solid var(--line-strong);
-  color: var(--fg);
-}
-
-.side--rail .side__act {
-  justify-content: center;
-  padding: 0;
-}
-
 /* ------------------------------------------------------------ 主区 */
 
 .main {
   display: flex;
   flex-direction: column;
+  /* 必须显式占第 2 列：侧栏 display:none 后不再参与自动排布，
+     主区会被挤进第 1 列（宽 0），表现为"折叠后内容整片消失"。 */
+  grid-column: 2;
   min-width: 0;
   min-height: 0;
   background: var(--bg);
@@ -453,10 +397,11 @@ select:focus {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  height: 52px;
+  grid-column: 2;
+  height: var(--row-h);
   flex: none;
   padding: 0 var(--sp-4);
-  border-bottom: 1px solid var(--line);
+  min-width: 0;
 }
 
 .topbar__title {
@@ -1460,14 +1405,8 @@ select:focus {
 
 /* 窗口最小宽度是 1024（见 src/main/index.ts）。低于 900 才强制收纳，
    留出主区可读空间；再往上都允许用户自己开合。 */
-@media (max-width: 900px) {
-  .app,
-  .app--side-rail,
-  .app--insp-hidden,
-  .app--side-rail.app--insp-hidden {
-    grid-template-columns: var(--side-w-rail) minmax(0, 1fr) 0;
-  }
-}
+/* 窗口最小宽度是 1024（见 src/main/index.ts），低于 900 的强制收纳分支
+   已随「图标轨」方案一起删除：现在窄屏也由用户点品牌行那颗按钮决定。 */
 
 /* ------------------------------------------------------------ 标注模式 */
 

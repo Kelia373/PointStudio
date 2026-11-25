@@ -17,6 +17,8 @@ import panelRight from '../assets/icons/panel-right.svg?raw'
 import plus from '../assets/icons/plus.svg?raw'
 import search from '../assets/icons/search.svg?raw'
 import settings from '../assets/icons/settings.svg?raw'
+import squareArrowLeft from '../assets/icons/square-arrow-left.svg?raw'
+import squareArrowRight from '../assets/icons/square-arrow-right.svg?raw'
 import sun from '../assets/icons/sun.svg?raw'
 import user from '../assets/icons/user.svg?raw'
 
@@ -35,7 +37,9 @@ const PATHS = {
   x,
   compass,
   'arrow-down': arrowDown,
-  'pen-line': penLine
+  'pen-line': penLine,
+  'square-arrow-left': squareArrowLeft,
+  'square-arrow-right': squareArrowRight
 } as const
 
 export type IconName = keyof typeof PATHS
