@@ -138,3 +138,20 @@ export function useStudioSlice<T>(
   }
   return cache.current.value
 }
+
+/**
+ * 把 state 字段当 useState 用：返回 [值, 设值函数]，调用点不用改。
+ * 设值函数支持直接给值或给 updater，与 React 的 setState 语义一致。
+ */
+export function useField<K extends keyof StudioState>(
+  key: K
+): readonly [StudioState[K], (next: StudioState[K] | ((prev: StudioState[K]) => StudioState[K])) => void] {
+  const value = useStudioSlice((state) => state[key])
+  const setValue = (next: StudioState[K] | ((prev: StudioState[K]) => StudioState[K])): void => {
+    studioStore.setState((state) => {
+      const resolved = typeof next === 'function' ? (next as (prev: StudioState[K]) => StudioState[K])(state[key]) : next
+      return { [key]: resolved } as Partial<StudioState>
+    })
+  }
+  return [value, setValue] as const
+}

@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type {
-  AssistantDto,
-  ChatMode,
-  ConversationDto,
-  McpConnectionDto,
-  ProviderSettingsViewDto
-} from '../../../shared/types/ipc.ts'
+import type { ConversationDto } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
+import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import { copyToClipboard } from '../lib/clipboard'
 import {
@@ -17,7 +12,7 @@ import {
   type Effort
 } from '../lib/modelOptions'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
-import { reduceAgentEvent, type PlanRunState } from '../lib/planRunState'
+import { reduceAgentEvent } from '../lib/planRunState'
 import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import AssistantPanel from './AssistantPanel'
@@ -51,20 +46,19 @@ function formatMs(value: number): string {
  * 组件只保留一个「正在流式」的临时气泡。这样界面永远不会和数据分叉。
  */
 export default function ChatPanel() {
-  const [conversations, setConversations] = useState<ConversationDto[]>([])
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<UiMessage[]>([])
+  const [conversations, setConversations] = useField('conversations')
+  const [activeId, setActiveId] = useField('activeId')
   const [draft, setDraft] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [inflightId, setInflightId] = useState<string | null>(null)
-  const [mode, setMode] = useState<ChatMode | null>(null)
+  const [busy, setBusy] = useField('busy')
+  const [inflightId, setInflightId] = useField('inflightId')
+  const [mode, setMode] = useField('mode')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   // 上下文裁剪只是提醒，不是错误——用单独的 warn 通道，别染成红色
   const [warn, setWarn] = useState<string | null>(null)
   // 用户往上滚时暂停自动滚底，否则生成过程中根本读不了前文
   const [pinnedToBottom, setPinnedToBottom] = useState(true)
-  const [assistants, setAssistants] = useState<AssistantDto[]>([])
+  const [assistants, setAssistants] = useField('assistants')
   const [drafting, setDrafting] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
   const [chunkPreview, setChunkPreview] = useState<{
@@ -72,7 +66,7 @@ export default function ChatPanel() {
     index: number
     text: string
   } | null>(null)
-  const [planRun, setPlanRun] = useState<PlanRunState | null>(null)
+  const [planRun, setPlanRun] = useField('planRun')
   const [assistantName, setAssistantName] = useState('')
   const [assistantPrompt, setAssistantPrompt] = useState('')
   // 标注模式：开关就是顶栏那个按钮，注释掉就能整块移除（见下方 ANNOTATE 注释）
@@ -84,14 +78,31 @@ export default function ChatPanel() {
   const [inspTab, setInspTab] = useState<InspectorTab>('context')
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [theme, setTheme] = useState<Theme>(readTheme)
-  const [provider, setProvider] = useState<ProviderSettingsViewDto | null>(null)
-  const [mcpConnections, setMcpConnections] = useState<McpConnectionDto[]>([])
-  const [lastRunMs, setLastRunMs] = useState<number | null>(null)
+  const [provider, setProvider] = useField('provider')
+  const [mcpConnections, setMcpConnections] = useField('mcpConnections')
+  const [lastRunMs, setLastRunMs] = useField('lastRunMs')
   // 内容列宽：消息流与输入框共用，拖拽右边界调整，存 local storage。
   const [contentWidth, setContentWidth] = useState<number>(() => {
     const stored = Number(window.localStorage.getItem('pointstudio.contentWidth'))
     return Number.isFinite(stored) && stored >= 480 && stored <= 1400 ? stored : 720
   })
+  const historyMessages = useStudioSlice((state) => state.historyMessages)
+  const inflightMessage = useStudioSlice((state) => state.inflightMessage)
+  const messages = useMemo(
+    () => (inflightMessage ? [...historyMessages, inflightMessage] : historyMessages),
+    [historyMessages, inflightMessage]
+  )
+  const setMessages = (next: UiMessage[] | ((prev: UiMessage[]) => UiMessage[])): void => {
+    const state = studioStore.getState()
+    const current =
+      state.inflightMessage === null
+        ? state.historyMessages
+        : [...state.historyMessages, state.inflightMessage]
+    const resolved = typeof next === 'function' ? next(current) : next
+    const split = splitMessages(resolved, state.inflightId)
+    studioStore.setState({ historyMessages: split.history, inflightMessage: split.inflight })
+  }
+
   const runStartedAt = useRef<number | null>(null)
   const resizeStart = useRef<{ x: number; width: number } | null>(null)
 
