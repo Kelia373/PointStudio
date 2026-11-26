@@ -108,7 +108,15 @@ export function createStudioStore(initial: Partial<StudioState> = {}): StudioSto
     },
     replaceMessages(messages, inflightId) {
       const split = splitMessages(messages, inflightId)
-      store.setState({ historyMessages: split.history, inflightMessage: split.inflight })
+      // 内容没变就复用旧数组：引用一变，整条历史列表都会重渲染。
+      const previous = state.historyMessages
+      const reused =
+        previous.length === split.history.length &&
+        previous.every((item, index) => item === split.history[index])
+      store.setState({
+        historyMessages: reused ? previous : split.history,
+        inflightMessage: split.inflight
+      })
     }
   }
 

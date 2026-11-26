@@ -1794,3 +1794,26 @@ select:focus {
   font-size: var(--fs-sm);
   color: var(--fg-3);
 }
+
+/* 侧栏功能项选中态（注册表页面） */
+.side__feat--active {
+  background: var(--raise);
+  color: var(--fg);
+}
+
+/* 插件/内置页面占位 */
+.page-placeholder {
+  padding: var(--sp-6);
+}
+
+.page-placeholder__title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.page-placeholder__hint {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--fg-3);
+}

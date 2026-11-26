@@ -4,17 +4,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConversationDto } from '../../../shared/types/ipc.ts'
 import { filterConversations } from '../lib/filterConversations'
-import { Slot } from '../runtime/SlotRenderer'
-import ConfirmButton from './ConfirmButton'
+import { registry } from '../runtime/registry'
+import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
-
-type FeatureKey = 'board' | 'prompts'
-
-// 目前只有两个真正预留的功能位；更多里放未固定项。
-const FEATURES: { key: FeatureKey; label: string; icon: 'compass' | 'pen-line'; soon: boolean }[] = [
-  { key: 'board', label: '任务看板', icon: 'compass', soon: true },
-  { key: 'prompts', label: '提示词管理', icon: 'pen-line', soon: true }
-]
+import SessionItem from './SessionItem'
 
 export default function Sidebar({
   conversations,
@@ -26,7 +19,9 @@ export default function Sidebar({
   onCreate,
   onRemove,
   onOpenAssistants,
-  onOpenSettings
+  onOpenSettings,
+  activePage,
+  onNavigate
 }: {
   conversations: ConversationDto[]
   assistants: { id: string; name: string }[]
@@ -38,11 +33,14 @@ export default function Sidebar({
   onRemove: (id: string) => void
   onOpenAssistants: () => void
   onOpenSettings: () => void
+  /** 当前主舞台页面，用于高亮功能项。 */
+  activePage: string
+  onNavigate: (pageId: string) => void
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
-  // 固定到侧栏的功能；未固定的收进「更多」。
-  const [pinned, setPinned] = useState<Record<FeatureKey, boolean>>({ board: true, prompts: false })
+  // 固定到侧栏的功能；未固定的收进「更多」。缺省值来自页面自身的 defaultPinned。
+  const [pinned, setPinned] = useState<Record<string, boolean>>({})
   const inputRef = useRef<HTMLInputElement>(null)
   const visible = useMemo(() => filterConversations(conversations, keyword), [conversations, keyword])
 
@@ -61,7 +59,11 @@ export default function Sidebar({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [collapsed, onToggleCollapse])
 
-  const features = FEATURES.filter((item) => pinned[item.key] || moreOpen)
+  const version = useRegistryVersion()
+  const pages = useMemo(() => registry.getPages(), [version])
+  const features = pages.filter(
+    (entry) => (pinned[entry.def.id] ?? entry.def.defaultPinned ?? false) || moreOpen
+  )
 
   return (
     <aside className="side">
@@ -95,26 +97,34 @@ export default function Sidebar({
 
       <section className="side__section">
         <ul className="side__plain">
-          {features.map((item) => (
-            <li className="side__feat-row" key={item.key}>
-              <button className="side__feat" type="button" title={item.soon ? `${item.label}（占位）` : item.label}>
-                <Icon name={item.icon} className="side__feat-icon" />
-                <span className="side__feat-label">{item.label}</span>
-                {item.soon ? <em className="side__soon">待接</em> : null}
-              </button>
-              <button
-                className="side__pin"
-                type="button"
-                aria-pressed={pinned[item.key]}
-                title={pinned[item.key] ? '取消固定' : '固定到侧栏'}
-                aria-label={pinned[item.key] ? '取消固定' : '固定到侧栏'}
-                onClick={() => setPinned((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
-              >
-                <Icon name="pin" size={13} />
-              </button>
-            </li>
-          ))}
-          <Slot name="sidebar.features" props={{ activePage: 'chat', navigate: () => undefined }} />
+          {features.map((entry) => {
+            const page = entry.def
+            const isPinned = pinned[page.id] ?? page.defaultPinned ?? false
+            return (
+              <li className="side__feat-row" key={page.id}>
+                <button
+                  className={`side__feat${entry.def.id === activePage ? ' side__feat--active' : ''}`}
+                  type="button"
+                  title={page.title}
+                  onClick={() => onNavigate(page.id)}
+                >
+                  <Icon name={(page.icon as 'compass' | 'pen-line') ?? 'compass'} className="side__feat-icon" />
+                  <span className="side__feat-label">{page.title}</span>
+                </button>
+                <button
+                  className="side__pin"
+                  type="button"
+                  aria-pressed={isPinned}
+                  title={isPinned ? '取消固定' : '固定到侧栏'}
+                  aria-label={isPinned ? '取消固定' : '固定到侧栏'}
+                  onClick={() => setPinned((prev) => ({ ...prev, [page.id]: !isPinned }))}
+                >
+                  <Icon name="pin" size={13} />
+                </button>
+              </li>
+            )
+          })}
+          <Slot name="sidebar.features" props={{ activePage, navigate: onNavigate }} />
           <li>
             <button
               className="side__more"
@@ -166,27 +176,16 @@ export default function Sidebar({
         <ul className="side__list">
           {visible.map((conversation) => (
             <li key={conversation.id}>
-              <div
-                className={`side__item${conversation.id === activeId ? ' side__item--active' : ''}`}
-              >
-                <button
-                  className="side__item-main"
-                  type="button"
-                  onClick={() => onSelect(conversation.id)}
-                  title={conversation.title}
-                >
-                  {conversation.title}
-                </button>
-                <ConfirmButton
-                  className="side__item-remove"
-                  ariaLabel="删除会话"
-                  title="删除会话"
-                  confirmLabel="删?"
-                  onConfirm={() => onRemove(conversation.id)}
-                >
-                  <Icon name="x" size={12} />
-                </ConfirmButton>
-              </div>
+              <Overridable
+                name="sidebar.sessionItem"
+                fallback={SessionItem}
+                props={{
+                  conversation,
+                  active: conversation.id === activeId,
+                  onSelect: () => onSelect(conversation.id),
+                  onRemove: () => onRemove(conversation.id)
+                }}
+              />
             </li>
           ))}
           {visible.length === 0 && conversations.length > 0 ? (

@@ -13,6 +13,11 @@ import {
 } from '../lib/modelOptions'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import { reduceAgentEvent } from '../lib/planRunState'
+import type { ComponentType } from 'react'
+
+import { registerBuiltinPages } from '../runtime/builtinPages'
+import { PluginErrorBoundary } from '../runtime/guard'
+import { registry } from '../runtime/registry'
 import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import AssistantPanel from './AssistantPanel'
@@ -77,6 +82,17 @@ export default function ChatPanel() {
   const [inspCollapsed, setInspCollapsed] = useState(false)
   const [inspTab, setInspTab] = useState<InspectorTab>('context')
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // 主舞台页面：'chat' 或注册表里的页面 id（插件页 / 内置功能页）
+  const [activePage, setActivePage] = useState('chat')
+
+  useEffect(() => {
+    registerBuiltinPages()
+  }, [])
+
+  const activePageEntry = activePage === 'chat' ? null : registry.getPage(activePage)
+  const ActivePageComponent = activePageEntry
+    ? (activePageEntry.def.component as ComponentType<{ navigate: (pageId: string) => void }>)
+    : null
   const [theme, setTheme] = useState<Theme>(readTheme)
   const [provider, setProvider] = useField('provider')
   const [mcpConnections, setMcpConnections] = useField('mcpConnections')
@@ -558,9 +574,17 @@ export default function ChatPanel() {
             assistants={assistants}
             onOpenAssistants={() => setDrawer('assistants')}
             onOpenSettings={() => setSettingsOpen(true)}
+            activePage={activePage}
+            onNavigate={setActivePage}
           />
 
           <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
+        {ActivePageComponent && activePageEntry ? (
+          <PluginErrorBoundary pluginId={activePageEntry.pluginId}>
+            <ActivePageComponent navigate={setActivePage} />
+          </PluginErrorBoundary>
+        ) : (
+          <>
         {drafting ? (
           <div className="assistant-form">
             <input
@@ -754,6 +778,8 @@ export default function ChatPanel() {
           onPlan: () => void runPlan()
           }}
         />
+          </>
+        )}
       </main>
         </div>
       </div>
