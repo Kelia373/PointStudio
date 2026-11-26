@@ -2184,3 +2184,76 @@ select:focus {
   background: var(--raise);
   color: var(--fg);
 }
+
+/* ------------------------------------------------------------ 路由徽章 */
+
+.route-badge {
+  position: relative;
+  display: inline-flex;
+}
+
+.route-badge__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-pill);
+  font-size: var(--fs-xs);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.route-badge__chip:hover {
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+
+.route-badge__mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.route-badge__pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 41;
+  width: 260px;
+  padding: var(--sp-2);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-card);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  font-size: var(--fs-xs);
+  color: var(--fg-2);
+}
+
+.route-badge__row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: 2px 0;
+}
+
+.route-badge__ladder {
+  margin: var(--sp-2) 0 0;
+  padding-left: var(--sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.route-badge__ladder li {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: space-between;
+}
+
+.composer__route {
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}

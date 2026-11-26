@@ -17,6 +17,7 @@ export default function Composer({
   onSend,
   onStop,
   onPlan,
+  routePreview,
   onModelChange,
   onEffortChange
 }: {
@@ -33,6 +34,8 @@ export default function Composer({
   onSend: () => void
   onStop: () => void
   onPlan: () => void
+  /** 发送前的路由预判文案；null 表示不显示。 */
+  routePreview?: string | null
   onModelChange: (model: string) => void
   onEffortChange: (effort: Effort) => void
 }) {
@@ -110,6 +113,7 @@ export default function Composer({
             </select>
           </label>
 
+          {routePreview ? <span className="composer__route">{routePreview}</span> : null}
           <Slot name="chat.composer.toolbar" props={{ draft, busy }} />
 
           <span className="composer__spacer" />

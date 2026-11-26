@@ -22,7 +22,9 @@ import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import DispatchPill from './DispatchPill'
 import MemoryWakeBar from './MemoryWakeBar'
+import RouteBadge from './RouteBadge'
 import TimelineRail from './TimelineRail'
+import { estimateDifficulty } from '../lib/pandaRouter'
 import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
@@ -165,7 +167,8 @@ export default function ChatPanel() {
         role: message.role,
         content: message.content,
         status: message.status,
-        references: message.references
+        references: message.references,
+        route: message.route ?? null
       }))
     )
   }, [])
@@ -462,11 +465,23 @@ export default function ChatPanel() {
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
 
   // 私域记忆：钉入后 memoryTick 变化，唤醒条立刻刷新。
+  const lastRouteDecision = useStudioSlice((state) => state.lastRouteDecision)
   const [memoryTick, setMemoryTick] = useState(0)
   const [wakeDismissed, setWakeDismissed] = useState(false)
   useEffect(() => {
     setWakeDismissed(false)
   }, [activeId])
+  // 最近一次路由决策：优先取消息上记录的，其次取 store 里的。
+  const lastRoute = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const route = messages[index].route
+      if (route) {
+        return route
+      }
+    }
+    return lastRouteDecision
+  }, [messages, lastRouteDecision])
+
   const wakeMemories = useMemo(
     () => matchActiveMemories(loadMemories(), boundAssistant?.id ?? null, null, draft),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -566,6 +581,8 @@ export default function ChatPanel() {
           >
             <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
           </button>
+
+          <RouteBadge decision={lastRoute} />
 
           <Slot name="topbar.right" props={{ sessionId: activeId }} />
 
@@ -814,7 +831,8 @@ export default function ChatPanel() {
               void window.pointstudio.chat.cancel(inflightId)
             }
           },
-          onPlan: () => void runPlan()
+          onPlan: () => void runPlan(),
+          routePreview: draft.trim() === '' ? null : `预计 L${estimateDifficulty(draft).level} · ${estimateDifficulty(draft).category}`
           }}
         />
           </>

@@ -6,6 +6,8 @@
 //
 // 约定：所有函数**返回新数组**，不修改入参——React 靠引用变化判断是否重渲染。
 
+import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
+
 export type UiMessageStatus = 'complete' | 'error' | 'streaming'
 
 export interface UiMessage {
@@ -14,6 +16,8 @@ export interface UiMessage {
   content: string
   status: UiMessageStatus
   references?: Array<{ chunkId: string; source: string }>
+  /** 主进程返回的路由决策；没有就是没记录。 */
+  route?: RouteDecisionDto | null
 }
 
 /** 开始一轮对话：用户消息立刻上屏，助手气泡先占位（id 用请求 id）。 */
