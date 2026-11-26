@@ -34,6 +34,8 @@
 
 | 文档 | 说明 |
 | --- | --- |
+| [插件开发指南（设计规格）](./references/plugin-development.md) | 参照 DSH 的 bundle 模型，但**只保留我们需要的部分**： |
+| [渲染层整改施工单（为插件化铺路）](./references/ui-remediation.md) | 已经**具备**的好底子（不要推翻）： |
 | [主进程目录结构与依赖规则（`src/main`）](./references/architecture/main-architecture.md) | 本文是 `src/main/` 目录分类与依赖方向的权威参考：每个目录是什么、靠什么规则阻止它蔓延、新能力往哪放。 |
 | [渲染进程结构（`src/renderer`）](./references/architecture/renderer.md) | 渲染层的目录约定、组件组织方式，以及「界面不碰数据」这条硬规则。 |
 | [共享层（`src/shared`）](./references/architecture/shared-layer.md) | 跨进程共享代码放在哪、什么时候才值得建，以及「只放类型和纯函数」的约束。 |
