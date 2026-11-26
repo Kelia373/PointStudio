@@ -572,6 +572,9 @@ select:focus {
 }
 
 .msg {
+  /* 长会话视口裁剪：Chromium 原生，不引虚拟列表 */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 88px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
