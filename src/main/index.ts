@@ -93,6 +93,9 @@ interface Services {
 }
 
 /** 数据落在 userData 目录：不进仓库，也不需要用户选路径。 */
+/** 延迟写盘的 store 必须在退出前冲刷，否则最后 200ms 的修改会丢。 */
+const storesToFlush: Array<() => Promise<void>> = []
+
 function buildServices(): Services {
   const paths = buildDataPaths(app.getPath('userData'))
   const deps = { newId: () => randomUUID(), now: () => new Date().toISOString() }
@@ -106,9 +109,15 @@ function buildServices(): Services {
     }
   })
 
-  const conversationStore = new JsonFileStore<Conversation>(paths.conversations)
-  const messageStore = new JsonFileStore<Message>(paths.messages)
-  const assistantStore = new JsonFileStore<Assistant>(paths.assistants)
+  // 延迟写盘：界面操作不再同步等磁盘；退出前统一 flush（见 before-quit）。
+  const conversationStore = new JsonFileStore<Conversation>(paths.conversations, { immediate: false })
+  const messageStore = new JsonFileStore<Message>(paths.messages, { immediate: false })
+  const assistantStore = new JsonFileStore<Assistant>(paths.assistants, { immediate: false })
+  storesToFlush.push(
+    () => conversationStore.flush(),
+    () => messageStore.flush(),
+    () => assistantStore.flush()
+  )
 
   return {
     backup: new BackupService(conversationStore, messageStore, assistantStore, {
@@ -220,6 +229,19 @@ void app.whenReady().then(async () => {
   const mcpConnections = new McpConnections(tools)
   registerMcpIpc({ connections: mcpConnections })
   app.on('before-quit', () => mcpConnections.removeAll())
+
+  // 退出前把待写数据冲刷干净。preventDefault 一次，flush 完再真正退出。
+  let flushedOnQuit = false
+  app.on('before-quit', (event) => {
+    if (flushedOnQuit || storesToFlush.length === 0) {
+      return
+    }
+    event.preventDefault()
+    flushedOnQuit = true
+    void Promise.all(storesToFlush.map((flush) => flush()))
+      .catch(() => undefined)
+      .finally(() => app.quit())
+  })
   registerAssistantIpc({ assistants: services.assistants, conversations: services.conversations })
   registerSettingsIpc({
     settings: services.settings,
