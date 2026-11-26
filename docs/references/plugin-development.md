@@ -1,6 +1,7 @@
 # 插件开发指南（设计规格）
 
 > **状态：设计规格，尚未实现。**
+> 框架层面的决策（壳、注册表、状态外置、兜底）见 [ADR 0007](../adr/0007-壳-路由与插件框架.md)。
 > 本文定义「写一个 PointStudio 插件」的目标形态，以及宿主需要提供什么。
 > 实现进度见文末「实现状态」，请勿把未完成的部分当成可用能力。
 
@@ -121,12 +122,18 @@ interface RendererContext {
   }
 }
 
+// 插槽清单以 ADR 0007 为准；名字即契约，增删都要升 apiVersion
 type SlotName =
-  | 'sidebar.bottom'
-  | 'topbar.right'
-  | 'conversation.composer.dock'
-  | 'conversation.message.actions'
-  | 'shell.overlay'
+  | 'sidebar.features'                 // 侧栏功能位，配 { navigate }
+  | 'sidebar.bottom'                   // 侧栏四段之后，配 {}
+  | 'sidebar.agents.actions'           // Agent 段标题右侧，配 { agents }
+  | 'topbar.right'                     // 顶栏检查器键左侧，配 { conversation }
+  | 'appbar.left'                      // 全宽底栏左端，配 {}
+  | 'appbar.right'                     // 全宽底栏右端，配 {}
+  | 'conversation.composer.dock'       // 输入框上方，配 { draft, busy }
+  | 'conversation.banner'              // 消息流上方横幅区，配 { conversation }
+  | 'conversation.message.actions'     // 每条消息操作行，配 { message }
+  | 'shell.overlay'                    // 整页浮层，配 { close }
 
 type EventName =
   | 'session.created'
