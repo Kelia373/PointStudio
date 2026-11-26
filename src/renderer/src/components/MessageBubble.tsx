@@ -1,9 +1,11 @@
 // 单条消息。纯展示组件：只有 props，没有状态、没有副作用。
 // 渲染层的硬规则——组件不碰存储、网络、模型。
+import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
 import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
 import DualTrack from './DualTrack'
 import MemorySpark from './MemorySpark'
+import RouteBadge from './RouteBadge'
 
 export type BubbleRole = 'user' | 'assistant'
 
@@ -19,6 +21,8 @@ export default function MessageBubble({
   onDelete,
   onResend,
   onReference,
+  onEscalate,
+  route,
   memory
 }: {
   role: BubbleRole
@@ -35,6 +39,10 @@ export default function MessageBubble({
   /** 只有用户消息能「重发」。 */
   onResend?: () => void
   onReference?: (chunkId: string) => void
+  /** 有它就显示「⚡ 升档重试」：调用方只在确实还有更强一棒时才传。 */
+  onEscalate?: () => void
+  /** 这一轮的路由决策；没有就只显示普通气泡。 */
+  route?: RouteDecisionDto | null
   /** 有了它才显示「钉入记忆」：记忆是 Agent 私域，没绑定 Agent 就没有意义。 */
   memory?: {
     agentId: string | null
@@ -53,6 +61,7 @@ export default function MessageBubble({
         <span>{role === 'user' ? '你' : 'PointStudio'}</span>
         {at ? <span>{at}</span> : null}
         {failed ? <span>· 失败</span> : null}
+        {route ? <RouteBadge decision={route} /> : null}
       </div>
 
       {role === 'assistant' ? (
@@ -92,6 +101,16 @@ export default function MessageBubble({
         {onResend ? (
           <button className="msg__act" type="button" onClick={onResend} title="用这句话再发一次">
             重发
+          </button>
+        ) : null}
+        {onEscalate ? (
+          <button
+            className="msg__act msg__act--route"
+            type="button"
+            onClick={onEscalate}
+            title="换用更强的一档模型重发这一轮"
+          >
+            ⚡ 升档重试
           </button>
         ) : null}
         {onDelete ? (

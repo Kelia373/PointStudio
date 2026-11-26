@@ -20,15 +20,25 @@ export interface UiMessage {
   route?: RouteDecisionDto | null
 }
 
-/** 开始一轮对话：用户消息立刻上屏，助手气泡先占位（id 用请求 id）。 */
+/**
+ * 开始一轮对话：用户消息立刻上屏，助手气泡先占位（id 用请求 id）。
+ * 选了「🐼 Auto · 协同路由」时把这一轮的决策挂在助手气泡上，
+ * 徽章与「升档重试」都从这里读，不必等主进程回包。
+ */
 export function startTurn(
   messages: UiMessage[],
-  input: { requestId: string; text: string }
+  input: { requestId: string; text: string; route?: RouteDecisionDto | null }
 ): UiMessage[] {
   return [
     ...messages,
     { id: `local-${input.requestId}`, role: 'user', content: input.text, status: 'complete' },
-    { id: input.requestId, role: 'assistant', content: '', status: 'streaming' }
+    {
+      id: input.requestId,
+      role: 'assistant',
+      content: '',
+      status: 'streaming',
+      route: input.route ?? null
+    }
   ]
 }
 

@@ -6,9 +6,11 @@ import { splitMessages, studioStore, useField, useStudioSlice } from '../store/s
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import { copyToClipboard } from '../lib/clipboard'
 import {
+  AUTO_ROUTE_MODEL,
   EFFORT_MAX_TOKENS,
   effortFromMaxTokens,
   modelChoices,
+  modelSelectOptions,
   type Effort
 } from '../lib/modelOptions'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
@@ -22,10 +24,14 @@ import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import DispatchPill from './DispatchPill'
 import MemoryWakeBar from './MemoryWakeBar'
+import PlanLens from './PlanLens'
 import RouteBadge from './RouteBadge'
-import TimelineRail from './TimelineRail'
-import { estimateDifficulty } from '../lib/pandaRouter'
+import { estimateDifficulty, nextEscalation, planRoute } from '../lib/pandaRouter'
 import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
+import { appbarLeft, appbarRight } from '../lib/appbarStatus'
+import { downloadText, exportFileName } from '../lib/exportFile'
+import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
+import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
 import EmptyState from './EmptyState'
@@ -89,7 +95,9 @@ export default function ChatPanel() {
   const [inspTab, setInspTab] = useState<InspectorTab>('context')
   const [settingsOpen, setSettingsOpen] = useState(false)
   // 主舞台页面：'chat' 或注册表里的页面 id（插件页 / 内置功能页）
-  const [activePage, setActivePage] = useState('chat')
+  const [activePage, setActivePage] = useState(CHAT_PAGE)
+  // 输入栏选中的是「协同路由」这条策略，而不是某个真实模型名
+  const [autoRoute, setAutoRoute] = useState(false)
 
   useEffect(() => {
     registerBuiltinPages()
@@ -285,16 +293,40 @@ export default function ChatPanel() {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [drawer, chunkPreview, drafting])
 
-  async function submit(textOverride?: string): Promise<void> {
+  /**
+   * 发送一轮。
+   *
+   * routeOverride：升档重试时直接给定下一棒决策；
+   * 没给就看输入栏是不是选了 🐼 Auto，是就现场算一条本地启发式决策。
+   * 决策只挂在气泡与 store 上，不会写进会话的 model 字段。
+   */
+  async function submit(
+    textOverride?: string,
+    routeOverride?: RouteDecisionDto | null
+  ): Promise<void> {
     const text = (textOverride ?? draft).trim()
     const conversationId = activeId
     if (text === '' || busy || !conversationId) {
       return
     }
 
+    const route =
+      routeOverride ??
+      (autoRoute
+        ? planRoute(
+            text,
+            modelChoices(provider?.providerId ?? null, activeConversation?.model ?? null).filter(
+              (item) => item !== ''
+            )
+          )
+        : null)
+    if (route) {
+      studioStore.setState({ lastRouteDecision: route })
+    }
+
     const requestId = crypto.randomUUID()
     // 乐观渲染：用户消息与空气泡先上屏，chunk 到达即可追加。
-    setMessages((prev) => startTurn(prev, { requestId, text }))
+    setMessages((prev) => startTurn(prev, { requestId, text, route }))
     if (textOverride === undefined) {
       setDraft('')
     }
@@ -340,7 +372,7 @@ export default function ChatPanel() {
     setDraft('')
     setInspTab('run')
     setInspCollapsed(false)
-    setDrawer('plan')
+    // 不再弹遮罩抽屉：计划在消息流里原地展开，检查器要一直看得见
     const result = await window.pointstudio.agent.run({ id, goal, confirmedStepIds })
     if (!result.ok) {
       setPlanRun({ id, plan: null, status: 'failed' })
@@ -407,6 +439,44 @@ export default function ChatPanel() {
     await loadMessages(activeId)
   }
 
+  /** 导出当前会话 Markdown：主进程只回文本，落盘交给系统下载目录。 */
+  async function exportConversation(): Promise<void> {
+    if (!activeId) {
+      return
+    }
+    const result = await window.pointstudio.conversations.exportMarkdown(activeId)
+    if (!result.ok) {
+      setError(describeError(result.code))
+      return
+    }
+    const title = conversations.find((item) => item.id === activeId)?.title ?? null
+    if (!downloadText(exportFileName(title), result.value)) {
+      setError('导出失败（下载不可用）')
+      return
+    }
+    setError(null)
+    setInfo('已导出当前会话（Markdown）')
+  }
+
+  /** ⚡ 升档重试：拿这一轮的用户提问，换更强的一棒重发。 */
+  async function escalateFrom(index: number): Promise<void> {
+    const next = nextEscalation(messages[index]?.route ?? null)
+    if (!next) {
+      return
+    }
+    let prompt = ''
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+      if (messages[cursor].role === 'user') {
+        prompt = messages[cursor].content
+        break
+      }
+    }
+    if (prompt.trim() === '') {
+      return
+    }
+    await submit(prompt, next)
+  }
+
   async function createAssistant(): Promise<void> {
     const name = assistantName.trim()
     if (name === '') {
@@ -438,6 +508,8 @@ export default function ChatPanel() {
     }
     await reloadConversations()
     setActiveId(created.value.id)
+    // 新建即回聊天：否则新会话建在功能页背后，用户根本看不见
+    setActivePage(pageAfterSessionPick())
   }
 
   async function removeConversation(id: string): Promise<void> {
@@ -512,13 +584,25 @@ export default function ChatPanel() {
           </div>
 
           <header className="topbar">
-            <h1 className="topbar__title">{activeConversation?.title ?? 'PointStudio'}</h1>
-          <span className="topbar__spacer" />
+            {activePageEntry ? (
+              <button
+                className="topbar__back"
+                type="button"
+                onClick={() => setActivePage(pageAfterSessionPick())}
+                title="返回对话"
+              >
+                <Icon name="chevron-left" />
+                返回对话
+              </button>
+            ) : null}
+            <h1 className="topbar__title">
+              {pageTitleOf(activePageEntry?.def ?? null, activeConversation?.title ?? null)}
+            </h1>
+            <span className="topbar__spacer" />
 
           <DispatchPill
             agentName={boundAssistant?.name ?? null}
             projectName={null}
-            modeLabel={modeLabel}
             agents={assistants.map((assistant) => ({ id: assistant.id, name: assistant.name }))}
             activeAgentId={activeConversation?.assistantId ?? null}
             onPickAgent={(agentId) => {
@@ -528,7 +612,7 @@ export default function ChatPanel() {
               void (async () => {
                 await bindAssistant(agentId ?? '')
                 const picked = assistants.find((assistant) => assistant.id === agentId)
-                setInfo(picked ? `已交接给 ${picked.name} 继续处理` : '已退回裸聊')
+                setInfo(picked ? `已交接给 ${picked.name} 继续处理` : '已退回默认对话')
               })()
             }}
             onOpenProject={() => setDrawer('workspace')}
@@ -559,6 +643,17 @@ export default function ChatPanel() {
               {formatMs(lastRunMs)}
             </span>
           ) : null}
+
+          <button
+            className="icon-btn"
+            type="button"
+            onClick={() => void exportConversation()}
+            disabled={activeId === null}
+            title="导出当前会话为 Markdown"
+            aria-label="导出当前会话"
+          >
+            <Icon name="download" />
+          </button>
 
           {/* ANNOTATE：标注模式开关。要关掉这个功能，注释掉下面这一个按钮即可 */}
           <button
@@ -604,12 +699,17 @@ export default function ChatPanel() {
             activeId={activeId}
             collapsed={sideCollapsed}
             onToggleCollapse={() => setSideCollapsed((value) => !value)}
-            onSelect={setActiveId}
+            onSelect={(id) => {
+              setActiveId(id)
+              // 点会话永远回聊天：主舞台不能停在功能页
+              setActivePage(pageAfterSessionPick())
+            }}
             onCreate={() => void createConversation()}
             onRemove={(id) => void removeConversation(id)}
             assistants={assistants}
             onOpenAssistants={() => setDrawer('assistants')}
             onOpenSettings={() => setSettingsOpen(true)}
+            onOpenWorkspace={() => setDrawer('workspace')}
             activePage={activePage}
             onNavigate={setActivePage}
             inflightId={inflightId}
@@ -711,7 +811,6 @@ export default function ChatPanel() {
           </div>
         ) : (
           <>
-          <TimelineRail conversations={conversations} activeId={activeId} onSelect={setActiveId} />
           <div
             className="stream"
             ref={listRef}
@@ -765,6 +864,10 @@ export default function ChatPanel() {
                     ...(message.role === 'user'
                       ? { onResend: () => void submit(message.content) }
                       : {}),
+                    route: message.route ?? null,
+                    ...(nextEscalation(message.route ?? null)
+                      ? { onEscalate: () => void escalateFrom(index) }
+                      : {}),
                     memory: {
                       agentId: boundAssistant?.id ?? null,
                       workspaceId: null,
@@ -796,6 +899,8 @@ export default function ChatPanel() {
           </>
         )}
 
+        <PlanLens run={planRun} elapsedMs={lastRunMs} onConfirm={() => void confirmAndResume()} />
+
         {wakeDismissed ? null : (
           <MemoryWakeBar
             agentName={boundAssistant?.name ?? null}
@@ -812,9 +917,10 @@ export default function ChatPanel() {
           draft,
           busy,
           canSend: !busy && draft.trim() !== '' && activeId !== null,
-          model:
-            activeConversation?.model ?? provider?.model ?? '',
-          models: modelChoices(
+          model: autoRoute
+            ? AUTO_ROUTE_MODEL
+            : (activeConversation?.model ?? provider?.model ?? ''),
+          models: modelSelectOptions(
             provider?.providerId ?? null,
             activeConversation?.model ?? provider?.model ?? null
           ),
@@ -822,7 +928,15 @@ export default function ChatPanel() {
             activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens
           ),
           onDraftChange: setDraft,
-          onModelChange: (next: string) => void applyModel({ model: next === '' ? null : next }),
+          onModelChange: (next: string) => {
+            if (next === AUTO_ROUTE_MODEL) {
+              // 协同路由是策略不是模型：不落库，只影响这一轮怎么走
+              setAutoRoute(true)
+              return
+            }
+            setAutoRoute(false)
+            void applyModel({ model: next === '' ? null : next })
+          },
           onEffortChange: (level: Effort) =>
             void applyModel({ params: { maxTokens: EFFORT_MAX_TOKENS[level] } }),
           onSend: () => void submit(),
@@ -866,10 +980,20 @@ export default function ChatPanel() {
       />
       <Slot name="shell.overlay" props={{}} />
 
+      {/* 底栏：内置状态项由宿主渲染，插槽留给插件追加——没装插件时这里也不空 */}
       <footer className="appbar">
+        <span className="appbar__item">
+          {appbarLeft({ mode: mode ?? '', busy, model: activeConversation?.model ?? provider?.model ?? '' })}
+        </span>
         <Slot name="appbar.left" props={{ mode, busy }} />
         <span className="appbar__spacer" />
         <Slot name="appbar.right" props={{}} />
+        <span className="appbar__item appbar__item--right">
+          {appbarRight({
+            sessionCount: conversations.length,
+            version: `Electron ${window.pointstudio.electronVersion}`
+          })}
+        </span>
       </footer>
 
       {settingsOpen ? <SettingsPage onClose={() => setSettingsOpen(false)} /> : null}

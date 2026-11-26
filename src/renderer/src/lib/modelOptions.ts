@@ -28,10 +28,31 @@ export function effortFromMaxTokens(maxTokens: number | undefined): Effort | nul
   return found ?? null
 }
 
+/**
+ * 「🐼 Auto · 协同路由」的哨兵值。
+ * 它不是真实模型名：选中时由渲染层算出一条路由决策，绝不写进会话的 model 字段。
+ */
+export const AUTO_ROUTE_MODEL = 'auto:panda'
+
+/** 下拉里的中文标签；没登记的原样显示模型名。 */
+export const MODEL_LABEL: Record<string, string> = {
+  [AUTO_ROUTE_MODEL]: '🐼 Auto · 协同路由'
+}
+
 /** 各平台常见模型名。只用于下拉建议，不限制手输。 */
 const MODELS_BY_PROVIDER: Record<string, string[]> = {
   deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   ollama: ['llama3.1', 'qwen2.5', 'mistral']
+}
+
+/**
+ * 输入栏下拉的完整选项：Auto 协同路由固定排在最前，其余是当前值 + 平台预设。
+ */
+export function modelSelectOptions(
+  providerId: string | null,
+  current: string | null | undefined
+): string[] {
+  return [AUTO_ROUTE_MODEL, ...modelChoices(providerId, current)]
 }
 
 /**

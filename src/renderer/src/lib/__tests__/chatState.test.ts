@@ -10,6 +10,16 @@ import {
   type UiMessage
 } from '../chatState.ts'
 
+const ROUTE = {
+  traceId: 't-1',
+  chosenModel: 'deepseek-chat',
+  decidedBy: 'heuristic:local',
+  confidence: 0.6,
+  difficulty: { level: 1, category: 'chat' },
+  attempt: 0,
+  escalationLadder: [{ model: 'deepseek-chat', pSuccess: 0.6 }]
+}
+
 function messages(): UiMessage[] {
   return [
     { id: 'u1', role: 'user', content: '你好', status: 'complete' },
@@ -58,6 +68,17 @@ test('错误但有内容时保留已产出的部分', () => {
   let next = appendChunk(messages(), 'a1', '半句')
   next = markStatus(next, 'a1', 'error')
   assert.equal(next[1].content, '半句')
+})
+
+test('startTurn 可以带上这一轮的路由决策，只挂在助手气泡上', () => {
+  const next = startTurn([], { requestId: 'r1', text: '你好', route: ROUTE })
+  assert.equal(next[0].route, undefined)
+  assert.equal(next[1].route?.chosenModel, 'deepseek-chat')
+})
+
+test('没给决策时气泡上留 null，界面不显示徽章', () => {
+  const next = startTurn([], { requestId: 'r2', text: '你好' })
+  assert.equal(next[1].route, null)
 })
 
 test('removeMessage 按 id 移除，重复调用幂等', () => {

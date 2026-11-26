@@ -1,9 +1,10 @@
-// 侧栏四段：搜索 / 关键功能 / Agent Beach / Project。
+// 侧栏四段：搜索 / 关键功能 / Agent Bench（驻场工位）/ Project。
 // 收起态不再做图标轨，整列由 .shell--collapsed 收掉。
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConversationDto } from '../../../shared/types/ipc.ts'
 import { computeAgentBenchStatus, filterSessionsByAxis } from '../lib/dispatchFilter'
+import { CHAT_PAGE, nextActivePage } from '../lib/pageNav'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
@@ -20,6 +21,7 @@ export default function Sidebar({
   onRemove,
   onOpenAssistants,
   onOpenSettings,
+  onOpenWorkspace,
   activePage,
   onNavigate,
   inflightId
@@ -34,6 +36,8 @@ export default function Sidebar({
   onRemove: (id: string) => void
   onOpenAssistants: () => void
   onOpenSettings: () => void
+  /** 打开工作区面板：导入文件供检索引用。 */
+  onOpenWorkspace: () => void
   /** 当前主舞台页面，用于高亮功能项。 */
   activePage: string
   onNavigate: (pageId: string) => void
@@ -115,7 +119,8 @@ export default function Sidebar({
                   className={`side__feat${entry.def.id === activePage ? ' side__feat--active' : ''}`}
                   type="button"
                   title={page.title}
-                  onClick={() => onNavigate(page.id)}
+                  // toggle：已经在那一页，再点一次回聊天，否则用户会被功能页困住
+                  onClick={() => onNavigate(nextActivePage(activePage, page.id))}
                 >
                   <Icon name={(page.icon as 'compass' | 'pen-line') ?? 'compass'} className="side__feat-icon" />
                   <span className="side__feat-label">{page.title}</span>
@@ -150,7 +155,7 @@ export default function Sidebar({
 
       <section className="side__section">
         <div className="side__head">
-          Agent Beach
+          Agent Bench
           <span className="side__head-note">{assistants.length}</span>
           <Slot name="sidebar.agents.header" props={{ count: assistants.length }} />
         </div>
@@ -208,11 +213,24 @@ export default function Sidebar({
             {projectAxis === 'unmounted' ? '主聊天' : '未归类'}
           </span>
           <Slot name="sidebar.projects.header" props={{ count: conversations.length }} />
+          <button
+            className="side__head-act"
+            type="button"
+            title="管理工作区文件"
+            aria-label="管理工作区文件"
+            onClick={onOpenWorkspace}
+          >
+            <Icon name="folder" size={13} />
+          </button>
         </div>
         <button
           className={`side__row side__row--axis${projectAxis === 'unmounted' ? ' side__row--active' : ''}`}
           type="button"
-          onClick={() => setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')}
+          onClick={() => {
+            setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')
+            // 回到对话：主舞台停在功能页时，这一行也会被点到
+            onNavigate(CHAT_PAGE)
+          }}
         >
           <Icon name="folder" className="side__row-icon" />
           <span>主聊天（未挂载项目）</span>

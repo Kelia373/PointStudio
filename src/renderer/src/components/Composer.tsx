@@ -2,7 +2,7 @@
 // 左侧带模型与思考等级选择：它们表示「这一次执行用什么」，所以放在输入栏。
 import { useEffect, useRef } from 'react'
 
-import { EFFORT_LABEL, type Effort } from '../lib/modelOptions'
+import { EFFORT_LABEL, MODEL_LABEL, type Effort } from '../lib/modelOptions'
 import { Slot } from '../runtime/SlotRenderer'
 import Icon from './Icon'
 
@@ -88,7 +88,7 @@ export default function Composer({
               {models.length === 0 ? <option value="">默认模型</option> : null}
               {models.map((item) => (
                 <option key={item} value={item}>
-                  {item}
+                  {MODEL_LABEL[item] ?? item}
                 </option>
               ))}
             </select>

@@ -3,6 +3,8 @@
 // 先按启发式判断这一题有多难，再给出「从便宜模型到强模型」的阶梯。
 // 纯函数：不碰网络、不碰 store，方便单测与将来搬到主进程。
 
+import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
+
 export type DifficultyLevel = 1 | 2 | 3
 export type DifficultyCategory = 'chat' | 'code' | 'reasoning'
 
@@ -72,4 +74,65 @@ export interface RouteTickInput {
 export function formatRouteTick(input: RouteTickInput): string {
   const percent = Math.round(input.confidence * 100)
   return `L${input.level} · ${input.category} · ${input.model} · ${percent}%`
+}
+
+export interface PlanRouteOptions {
+  traceId?: string
+}
+
+/**
+ * 本地启发式路由：算出这一轮的决策对象（RouteDecisionDto）。
+ *
+ * 首棒永远用候选列表里最便宜的模型，阶梯长度 = 难度等级；
+ * 失败后由 nextEscalation 往上一棒走。没有候选模型时不编造模型名。
+ */
+export function planRoute(
+  text: string,
+  models: string[],
+  options: PlanRouteOptions = {}
+): RouteDecisionDto {
+  const difficulty = estimateDifficulty(text)
+  const ladder = buildEscalationLadder(difficulty.level, models)
+  const first = ladder[0]
+
+  return {
+    traceId: options.traceId ?? crypto.randomUUID(),
+    chosenModel: first?.model ?? '',
+    decidedBy: 'heuristic:local',
+    confidence: first ? first.pSuccess : 0,
+    difficulty: { level: difficulty.level, category: difficulty.category },
+    ...(first?.estCostUsd !== undefined ? { estCostUsd: first.estCostUsd } : {}),
+    attempt: 0,
+    escalationLadder: ladder.map((step) => ({
+      model: step.model,
+      pSuccess: step.pSuccess,
+      ...(step.estCostUsd !== undefined ? { estCostUsd: step.estCostUsd } : {})
+    }))
+  }
+}
+
+/**
+ * 下一棒：还有更强的一档就返回新决策（attempt +1、记下从谁升上来），
+ * 已经没有下一棒、或这条消息本来就没记阶梯，返回 null——界面据此决定
+ * 要不要显示「⚡ 升档重试」。
+ */
+export function nextEscalation(route: RouteDecisionDto | null | undefined): RouteDecisionDto | null {
+  if (!route) {
+    return null
+  }
+  const ladder = route.escalationLadder ?? []
+  const attempt = route.attempt ?? 0
+  const next = ladder[attempt + 1]
+  if (!next) {
+    return null
+  }
+
+  return {
+    ...route,
+    chosenModel: next.model,
+    confidence: next.pSuccess,
+    ...(next.estCostUsd !== undefined ? { estCostUsd: next.estCostUsd } : {}),
+    attempt: attempt + 1,
+    escalatedFrom: route.chosenModel
+  }
 }

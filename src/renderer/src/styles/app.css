@@ -409,6 +409,25 @@ select:focus {
   min-width: 0;
 }
 
+.topbar__back {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-pill);
+  font-size: var(--fs-xs);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+
+.topbar__back:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
 .topbar__title {
   margin: 0;
   font-size: var(--fs-md);
@@ -1566,6 +1585,24 @@ select:focus {
   flex: 1;
 }
 
+/* 底栏内置状态项：没有插件时也不是一条空黑条 */
+.appbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.appbar__item--right {
+  max-width: 40%;
+  justify-content: flex-end;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ------------------------------------------------------------ 侧栏分段 */
 
 .side__section {
@@ -1598,6 +1635,22 @@ select:focus {
   text-transform: none;
 }
 
+.side__head-act {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--rad-ctl);
+  color: var(--fg-3);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+
+.side__head-act:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
 .side__plain {
   list-style: none;
   margin: 0;
@@ -1613,10 +1666,17 @@ select:focus {
   gap: 2px;
 }
 
+/* 横向行里的行按钮仍然要占满剩余宽度（覆盖上面共享的 flex: none） */
+.side__feat-row .side__feat {
+  flex: 1;
+  width: auto;
+}
+
 .side__feat,
 .side__row,
 .side__more {
-  flex: 1;
+  flex: none;
+  width: 100%;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -1656,7 +1716,7 @@ select:focus {
   padding: 1px 4px;
   border: 1px solid var(--line);
   border-radius: var(--rad-xs);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-style: normal;
   color: var(--fg-3);
 }
@@ -1852,12 +1912,8 @@ select:focus {
   white-space: nowrap;
 }
 
-.dispatch-pill__mode {
-  padding: 0 var(--sp-2);
+.dispatch-pill__seg + .dispatch-pill__seg {
   border-left: 1px solid var(--line);
-  color: var(--fg-3);
-  font-size: var(--fs-xs);
-  white-space: nowrap;
 }
 
 .dispatch-pill__mask {
@@ -1879,7 +1935,7 @@ select:focus {
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-card);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-pop);
 }
 
 .dispatch-pill__item {
@@ -1917,6 +1973,7 @@ select:focus {
 
 .side__agent-row .side__row {
   flex: 1;
+  width: auto;
 }
 
 .side__row--active {
@@ -1951,7 +2008,9 @@ select:focus {
 }
 
 .side__row--axis {
+  flex: none;
   width: 100%;
+  height: 30px;
   margin-bottom: 2px;
 }
 
@@ -2000,7 +2059,7 @@ select:focus {
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-card);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-pop);
 }
 
 .spark-panel__text {
@@ -2136,52 +2195,113 @@ select:focus {
   margin-top: 0;
 }
 
-/* ------------------------------------------------------------ 全局时间线 */
+/* ------------------------------------------------------------ 计划透镜 */
 
-.timeline-rail {
+/* 折叠态只占一行；展开时在消息流里就地长出步骤列表，不遮右侧检查器 */
+.plan-lens {
+  flex: none;
+  margin: 0 var(--sp-4) var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-card);
+  background: var(--panel);
+}
+
+.plan-lens__bar {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-3);
-  overflow-x: auto;
-  border-bottom: 1px solid var(--line);
+  padding: var(--sp-1) var(--sp-2);
+}
+
+.plan-lens__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 26px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--rad-ctl);
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.plan-lens__main:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.plan-lens__goal {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+}
+
+.plan-lens__meta,
+.plan-lens__toggle {
+  flex: none;
+  font-size: var(--fs-xs);
+  color: var(--fg-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-lens__confirm {
+  flex: none;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-pill);
+  font-size: var(--fs-xs);
+  color: var(--fg);
+}
+
+.plan-lens__confirm:hover {
+  background: var(--raise);
+}
+
+.plan-lens__steps {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-2) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.plan-lens__step {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+
+.plan-lens__action {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-lens__tool,
+.plan-lens__dur,
+.plan-lens__code {
+  flex: none;
+  font-family: var(--mono);
   font-size: var(--fs-xs);
   color: var(--fg-3);
 }
 
-.timeline-rail__head {
-  flex: none;
-  height: 20px;
-  padding: 0 var(--sp-1);
-  border: 1px solid var(--line);
-  border-radius: var(--rad-pill);
-  color: var(--fg-3);
+.plan-lens__code,
+.plan-lens__step--failed .plan-lens__action {
+  color: var(--danger);
 }
 
-.timeline-rail__day {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  flex: none;
-}
-
-.timeline-rail__item {
-  height: 20px;
-  max-width: 120px;
-  padding: 0 var(--sp-1);
-  border-radius: var(--rad-pill);
-  color: var(--fg-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.timeline-rail__item:hover {
-  background: var(--hover);
-}
-
-.timeline-rail__item.is-active {
-  background: var(--raise);
+.plan-lens__step--success .plan-lens__action {
   color: var(--fg);
 }
 
@@ -2226,7 +2346,7 @@ select:focus {
   background: var(--panel);
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-card);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--shadow-pop);
   font-size: var(--fs-xs);
   color: var(--fg-2);
 }
@@ -2250,6 +2370,10 @@ select:focus {
   display: flex;
   gap: var(--sp-2);
   justify-content: space-between;
+}
+
+.msg__act--route {
+  border-color: var(--line-strong);
 }
 
 .composer__route {

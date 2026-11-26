@@ -1,4 +1,5 @@
 // 内置页面注册：内置功能与插件走同一张表（ADR 0007 的硬规则）。
+import { AUTO_ROUTE_MODEL } from '../lib/modelOptions'
 import { registry } from './registry'
 
 function Placeholder({ title }: { title: string }) {
@@ -26,6 +27,13 @@ export function registerBuiltinPages(): void {
     order: 10,
     defaultPinned: true,
     component: () => <Placeholder title="任务看板" />
+  })
+
+  // 协同路由不是某一家模型，而是一套「先算难度、再按阶梯升档」的策略；
+  // 注册进同一张路由器表，插件与内置走同一个入口。
+  registry.registerRouter('builtin', {
+    id: AUTO_ROUTE_MODEL,
+    label: '🐼 Auto · 协同路由'
   })
 
   registry.registerPage('builtin', {
