@@ -2,6 +2,7 @@
 // 渲染层的硬规则——组件不碰存储、网络、模型。
 import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
+import DualTrack from './DualTrack'
 import MemorySpark from './MemorySpark'
 
 export type BubbleRole = 'user' | 'assistant'
@@ -54,10 +55,15 @@ export default function MessageBubble({
         {failed ? <span>· 失败</span> : null}
       </div>
 
-      <div className="msg__body">
-        {content}
-        {streaming ? <span className="msg__caret" /> : null}
-      </div>
+      {role === 'assistant' ? (
+        // 长回答走双轨：同一块地方在「结论 / 过程」之间原地换镜头。
+        <DualTrack content={content} streaming={streaming} />
+      ) : (
+        <div className="msg__body">
+          {content}
+          {streaming ? <span className="msg__caret" /> : null}
+        </div>
+      )}
 
       {references.length > 0 ? (
         <div className="msg__refs">

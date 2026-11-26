@@ -22,6 +22,7 @@ import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import DispatchPill from './DispatchPill'
 import MemoryWakeBar from './MemoryWakeBar'
+import TimelineRail from './TimelineRail'
 import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
@@ -692,6 +693,8 @@ export default function ChatPanel() {
             </div>
           </div>
         ) : (
+          <>
+          <TimelineRail conversations={conversations} activeId={activeId} onSelect={setActiveId} />
           <div
             className="stream"
             ref={listRef}
@@ -773,6 +776,7 @@ export default function ChatPanel() {
               </button>
             ) : null}
           </div>
+          </>
         )}
 
         {wakeDismissed ? null : (
