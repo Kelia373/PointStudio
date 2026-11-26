@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConversationDto } from '../../../shared/types/ipc.ts'
-import { filterConversations } from '../lib/filterConversations'
+import { computeAgentBenchStatus, filterSessionsByAxis } from '../lib/dispatchFilter'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
@@ -21,7 +21,8 @@ export default function Sidebar({
   onOpenAssistants,
   onOpenSettings,
   activePage,
-  onNavigate
+  onNavigate,
+  inflightId
 }: {
   conversations: ConversationDto[]
   assistants: { id: string; name: string }[]
@@ -36,13 +37,21 @@ export default function Sidebar({
   /** 当前主舞台页面，用于高亮功能项。 */
   activePage: string
   onNavigate: (pageId: string) => void
+  /** 正在流式输出的会话 id，用于驻场状态。 */
+  inflightId: string | null
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
   // 固定到侧栏的功能；未固定的收进「更多」。缺省值来自页面自身的 defaultPinned。
   const [pinned, setPinned] = useState<Record<string, boolean>>({})
   const inputRef = useRef<HTMLInputElement>(null)
-  const visible = useMemo(() => filterConversations(conversations, keyword), [conversations, keyword])
+  // 双轴：点 Agent 行 = 只看它跨项目的记录；点项目 = 看该项目下所有 Agent。
+  const [agentAxis, setAgentAxis] = useState<string | null>(null)
+  const [projectAxis, setProjectAxis] = useState<string | null | 'unmounted'>(null)
+  const visible = useMemo(
+    () => filterSessionsByAxis(conversations, { agentId: agentAxis, workspaceId: projectAxis, keyword }),
+    [conversations, agentAxis, projectAxis, keyword]
+  )
 
   // Ctrl/⌘ + F 聚焦搜索：界面上那个 ⌘F 标记得是真的。
   useEffect(() => {
@@ -149,14 +158,39 @@ export default function Sidebar({
           {assistants.length === 0 ? (
             <li className="side__empty">还没有 Agent</li>
           ) : (
-            assistants.map((assistant) => (
-              <li key={assistant.id}>
-                <button className="side__row" type="button" onClick={onOpenAssistants} title={assistant.name}>
-                  <Icon name="user" className="side__row-icon" />
-                  <span>{assistant.name}</span>
-                </button>
-              </li>
-            ))
+            assistants.map((assistant) => {
+              const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId)
+              const active = agentAxis === assistant.id
+              return (
+                <li key={assistant.id}>
+                  <div className="side__agent-row">
+                    <button
+                      className={`side__row${active ? ' side__row--active' : ''}`}
+                      type="button"
+                      title={bench.lastTitle ?? assistant.name}
+                      onClick={() => setAgentAxis(active ? null : assistant.id)}
+                    >
+                      <Icon name="user" className="side__row-icon" />
+                      <span>{assistant.name}</span>
+                      <span
+                        className={`side__status${bench.state === 'working' ? ' side__status--working' : ''}`}
+                        title={bench.state === 'working' ? bench.lastTitle ?? '执行中' : '空闲待命'}
+                      />
+                      <span className="side__status-count">{bench.activeCount}</span>
+                    </button>
+                    <button
+                      className="side__pin"
+                      type="button"
+                      title="管理 Agent"
+                      aria-label="管理 Agent"
+                      onClick={onOpenAssistants}
+                    >
+                      <Icon name="settings" size={13} />
+                    </button>
+                  </div>
+                </li>
+              )
+            })
           )}
           <li>
             <button className="side__row" type="button" onClick={onOpenAssistants}>
@@ -170,9 +204,19 @@ export default function Sidebar({
       <section className="side__section side__section--grow">
         <div className="side__head">
           Project
-          <span className="side__head-note">未归类</span>
+          <span className="side__head-note">
+            {projectAxis === 'unmounted' ? '主聊天' : '未归类'}
+          </span>
           <Slot name="sidebar.projects.header" props={{ count: conversations.length }} />
         </div>
+        <button
+          className={`side__row side__row--axis${projectAxis === 'unmounted' ? ' side__row--active' : ''}`}
+          type="button"
+          onClick={() => setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')}
+        >
+          <Icon name="folder" className="side__row-icon" />
+          <span>主聊天（未挂载项目）</span>
+        </button>
         <ul className="side__list">
           {visible.map((conversation) => (
             <li key={conversation.id}>

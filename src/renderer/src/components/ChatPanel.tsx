@@ -20,6 +20,7 @@ import { PluginErrorBoundary } from '../runtime/guard'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
+import DispatchPill from './DispatchPill'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
 import EmptyState from './EmptyState'
@@ -484,21 +485,24 @@ export default function ChatPanel() {
             <h1 className="topbar__title">{activeConversation?.title ?? 'PointStudio'}</h1>
           <span className="topbar__spacer" />
 
-          <select
-            className="chip"
-            value={activeConversation?.assistantId ?? ''}
-            onChange={(event) => void bindAssistant(event.target.value)}
-            disabled={!activeId}
-            title="当前会话使用的助手"
-            style={{ height: 26 }}
-          >
-            <option value="">不使用助手</option>
-            {assistants.map((assistant) => (
-              <option key={assistant.id} value={assistant.id}>
-                {assistant.name}
-              </option>
-            ))}
-          </select>
+          <DispatchPill
+            agentName={boundAssistant?.name ?? null}
+            projectName={null}
+            modeLabel={modeLabel}
+            agents={assistants.map((assistant) => ({ id: assistant.id, name: assistant.name }))}
+            activeAgentId={activeConversation?.assistantId ?? null}
+            onPickAgent={(agentId) => {
+              if (!activeId) {
+                return
+              }
+              void (async () => {
+                await bindAssistant(agentId ?? '')
+                const picked = assistants.find((assistant) => assistant.id === agentId)
+                setInfo(picked ? `已交接给 ${picked.name} 继续处理` : '已退回裸聊')
+              })()
+            }}
+            onOpenProject={() => setDrawer('workspace')}
+          />
 
           <button
             className="icon-btn"
@@ -576,6 +580,7 @@ export default function ChatPanel() {
             onOpenSettings={() => setSettingsOpen(true)}
             activePage={activePage}
             onNavigate={setActivePage}
+            inflightId={inflightId}
           />
 
           <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
