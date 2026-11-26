@@ -21,6 +21,8 @@ import { registry } from '../runtime/registry'
 import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import DispatchPill from './DispatchPill'
+import MemoryWakeBar from './MemoryWakeBar'
+import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
 import EmptyState from './EmptyState'
@@ -457,6 +459,18 @@ export default function ChatPanel() {
   const activeConversation = conversations.find((item) => item.id === activeId) ?? null
   const boundAssistant =
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
+
+  // 私域记忆：钉入后 memoryTick 变化，唤醒条立刻刷新。
+  const [memoryTick, setMemoryTick] = useState(0)
+  const [wakeDismissed, setWakeDismissed] = useState(false)
+  useEffect(() => {
+    setWakeDismissed(false)
+  }, [activeId])
+  const wakeMemories = useMemo(
+    () => matchActiveMemories(loadMemories(), boundAssistant?.id ?? null, null, draft),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memoryTick, boundAssistant, draft]
+  )
   const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
   const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
@@ -730,7 +744,14 @@ export default function ChatPanel() {
                     onDelete: () => void removeTurn(message.id),
                     ...(message.role === 'user'
                       ? { onResend: () => void submit(message.content) }
-                      : {})
+                      : {}),
+                    memory: {
+                      agentId: boundAssistant?.id ?? null,
+                      workspaceId: null,
+                      sessionId: activeId,
+                      agentName: boundAssistant?.name ?? 'PointStudio',
+                      onChanged: () => setMemoryTick((value) => value + 1)
+                    }
                   }}
                 />
               ))}
@@ -752,6 +773,15 @@ export default function ChatPanel() {
               </button>
             ) : null}
           </div>
+        )}
+
+        {wakeDismissed ? null : (
+          <MemoryWakeBar
+            agentName={boundAssistant?.name ?? null}
+            memories={wakeMemories}
+            onManage={() => setDrawer('assistants')}
+            onDismiss={() => setWakeDismissed(true)}
+          />
         )}
 
         <Overridable

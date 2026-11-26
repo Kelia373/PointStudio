@@ -2,6 +2,7 @@
 // 渲染层的硬规则——组件不碰存储、网络、模型。
 import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
+import MemorySpark from './MemorySpark'
 
 export type BubbleRole = 'user' | 'assistant'
 
@@ -16,7 +17,8 @@ export default function MessageBubble({
   onCopy,
   onDelete,
   onResend,
-  onReference
+  onReference,
+  memory
 }: {
   role: BubbleRole
   content: string
@@ -32,6 +34,14 @@ export default function MessageBubble({
   /** 只有用户消息能「重发」。 */
   onResend?: () => void
   onReference?: (chunkId: string) => void
+  /** 有了它才显示「钉入记忆」：记忆是 Agent 私域，没绑定 Agent 就没有意义。 */
+  memory?: {
+    agentId: string | null
+    workspaceId: string | null
+    sessionId: string | null
+    agentName: string
+    onChanged: () => void
+  }
 }) {
   return (
     <article
@@ -85,6 +95,16 @@ export default function MessageBubble({
             confirmLabel="删整轮?"
             title="删除这一轮问答"
             onConfirm={onDelete}
+          />
+        ) : null}
+        {role === 'assistant' && memory ? (
+          <MemorySpark
+            agentId={memory.agentId}
+            workspaceId={memory.workspaceId}
+            sessionId={memory.sessionId}
+            agentName={memory.agentName}
+            content={content}
+            onChanged={memory.onChanged}
           />
         ) : null}
         <Slot name="chat.message.actions" props={{ role, content, at: at ?? null }} />
