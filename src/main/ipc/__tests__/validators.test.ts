@@ -77,3 +77,11 @@ test('isWorkspaceImportPath：只接受非空字符串', () => {
   assert.equal(isWorkspaceImportPath(42), false)
   assert.equal(isWorkspaceImportPath(null), false)
 })
+
+test('isAssistantDraft：enabled 可选，但给了就必须是布尔', () => {
+  assert.equal(isAssistantDraft({ name: 'x' }), true)
+  assert.equal(isAssistantDraft({ name: 'x', enabled: true }), true)
+  assert.equal(isAssistantDraft({ name: 'x', enabled: false }), true)
+  assert.equal(isAssistantDraft({ name: 'x', enabled: 'no' }), false)
+  assert.equal(isAssistantDraft({ name: 'x', enabled: 0 }), false)
+})

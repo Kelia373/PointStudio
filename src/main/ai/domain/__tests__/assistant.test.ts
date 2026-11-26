@@ -78,3 +78,37 @@ test('构建前必须先通过校验（非法输入直接抛错）', () => {
     buildAssistant({ name: '' }, { id: 'x', now: '2026-01-01T00:00:00.000Z' })
   )
 })
+
+test('默认启用：草稿里没写 enabled 就按启用处理', () => {
+  const result = validateAssistantDraft({ name: '默认启用' })
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.value.enabled, true)
+  }
+})
+
+test('显式停用会被保留，不会被每次更新重置回启用', () => {
+  const result = validateAssistantDraft({ name: '停用的', enabled: false })
+  assert.equal(result.ok, true)
+  if (result.ok) {
+    assert.equal(result.value.enabled, false)
+  }
+})
+
+test('enabled 只认布尔值', () => {
+  const result = validateAssistantDraft({ name: '类型不对', enabled: 'no' as unknown as boolean })
+  assert.equal(result.ok, false)
+  if (!result.ok) {
+    assert.ok(result.errors.includes('E_ENABLED_INVALID'))
+  }
+})
+
+test('构建实体带上 enabled：缺省启用，显式停用保留', () => {
+  const enabled = buildAssistant({ name: '甲' }, { id: 'id-1', now: '2026-01-01T00:00:00.000Z' })
+  const disabled = buildAssistant(
+    { name: '乙', enabled: false },
+    { id: 'id-2', now: '2026-01-01T00:00:00.000Z' }
+  )
+  assert.equal(enabled.enabled, true)
+  assert.equal(disabled.enabled, false)
+})

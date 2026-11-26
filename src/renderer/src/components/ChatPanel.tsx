@@ -29,6 +29,7 @@ import RouteBadge from './RouteBadge'
 import { estimateDifficulty, nextEscalation, planRoute } from '../lib/pandaRouter'
 import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
 import { appbarLeft, appbarRight } from '../lib/appbarStatus'
+import { copyAgentName, uniqueAgentName, type AgentClipPayload } from '../lib/agentClipboard'
 import { downloadText, exportFileName } from '../lib/exportFile'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
 import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
@@ -98,6 +99,8 @@ export default function ChatPanel() {
   const [activePage, setActivePage] = useState(CHAT_PAGE)
   // 输入栏选中的是「协同路由」这条策略，而不是某个真实模型名
   const [autoRoute, setAutoRoute] = useState(false)
+  // 从右键菜单点「智能体设置」时要定位到的 Agent
+  const [agentFocus, setAgentFocus] = useState<string | null>(null)
 
   useEffect(() => {
     registerBuiltinPages()
@@ -439,6 +442,67 @@ export default function ChatPanel() {
     await loadMessages(activeId)
   }
 
+  /**
+   * 改一个 Agent 的局部字段：update 是整条替换，所以其余字段要原样带回去，
+   * 否则「改个名字」会把提示词与参数一起清空。
+   */
+  async function updateAgent(
+    id: string,
+    patch: { name?: string; enabled?: boolean }
+  ): Promise<string | null> {
+    const current = assistants.find((item) => item.id === id)
+    if (!current) {
+      return 'E_NOT_FOUND'
+    }
+    const result = await window.pointstudio.assistants.update(id, {
+      name: patch.name ?? current.name,
+      systemPrompt: current.systemPrompt,
+      providerId: current.providerId,
+      modelId: current.modelId,
+      params: current.params,
+      enabled: patch.enabled ?? current.enabled ?? true
+    })
+    if (!result.ok) {
+      setError(describeError(result.code))
+      return result.code
+    }
+    setError(null)
+    await refreshAssistants()
+    return null
+  }
+
+  async function removeAgent(id: string): Promise<void> {
+    const result = await window.pointstudio.assistants.remove(id)
+    if (!result.ok) {
+      setError(describeError(result.code))
+      return
+    }
+    setError(null)
+    await refreshAssistants()
+  }
+
+  /** 粘贴：名字先按「xx 副本」去重，建好后由侧栏接着让用户改名。 */
+  async function pasteAgent(payload: AgentClipPayload): Promise<{ id: string; name: string } | null> {
+    const name = uniqueAgentName(
+      copyAgentName(payload.name),
+      assistants.map((item) => item.name)
+    )
+    const created = await window.pointstudio.assistants.create({
+      name,
+      systemPrompt: payload.systemPrompt,
+      providerId: payload.providerId,
+      modelId: payload.modelId,
+      params: payload.params
+    })
+    if (!created.ok) {
+      setError(describeError(created.code))
+      return null
+    }
+    setError(null)
+    await refreshAssistants()
+    return { id: created.value.id, name: created.value.name }
+  }
+
   /** 导出当前会话 Markdown：主进程只回文本，落盘交给系统下载目录。 */
   async function exportConversation(): Promise<void> {
     if (!activeId) {
@@ -535,6 +599,7 @@ export default function ChatPanel() {
     if (drawer === 'settings') {
       void refreshProvider()
     }
+    setAgentFocus(null)
     setDrawer(null)
   }
 
@@ -609,7 +674,10 @@ export default function ChatPanel() {
           <DispatchPill
             agentName={boundAssistant?.name ?? null}
             projectName={null}
-            agents={assistants.map((assistant) => ({ id: assistant.id, name: assistant.name }))}
+            // 停用的 Agent 不再进派发候选，但仍在侧栏里看得到、可重新启用
+            agents={assistants
+              .filter((assistant) => assistant.enabled !== false)
+              .map((assistant) => ({ id: assistant.id, name: assistant.name }))}
             activeAgentId={activeConversation?.assistantId ?? null}
             onPickAgent={(agentId) => {
               if (!activeId) {
@@ -713,7 +781,16 @@ export default function ChatPanel() {
             onCreate={() => void createConversation()}
             onRemove={(id) => void removeConversation(id)}
             assistants={assistants}
-            onOpenAssistants={() => setDrawer('assistants')}
+            onAgentSettings={(id) => {
+              setAgentFocus(id)
+              setDrawer('assistants')
+            }}
+            onRenameAgent={(id, name) => updateAgent(id, { name })}
+            onSetAgentEnabled={async (id, enabled) => {
+              await updateAgent(id, { enabled })
+            }}
+            onRemoveAgent={removeAgent}
+            onPasteAgent={pasteAgent}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenWorkspace={() => setDrawer('workspace')}
             activePage={activePage}
@@ -1031,7 +1108,11 @@ export default function ChatPanel() {
           <div className="drawer" role="dialog" aria-modal="true">
             {drawer === 'settings' ? <SettingsPanel onClose={closeDrawer} /> : null}
             {drawer === 'assistants' ? (
-              <AssistantPanel onClose={closeDrawer} onChanged={() => void refreshAssistants()} />
+              <AssistantPanel
+                focusAgentId={agentFocus}
+                onClose={closeDrawer}
+                onChanged={() => void refreshAssistants()}
+              />
             ) : null}
             {drawer === 'workspace' ? <WorkspacePanel onClose={closeDrawer} /> : null}
             {drawer === 'plan' ? (

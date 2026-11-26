@@ -2,7 +2,15 @@
 // 收起态不再做图标轨，整列由 .shell--collapsed 收掉。
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ConversationDto } from '../../../shared/types/ipc.ts'
+import type { AssistantDto, ConversationDto } from '../../../shared/types/ipc.ts'
+import {
+  AGENT_CLIPBOARD_KEY,
+  isAgentNameTaken,
+  parseAgentClip,
+  serializeAgentClip,
+  type AgentClipPayload
+} from '../lib/agentClipboard'
+import { buildAgentMenuItems, type AgentMenuAction } from '../lib/agentMenu'
 import { computeAgentBenchStatus, filterSessionsByAxis } from '../lib/dispatchFilter'
 import { CHAT_PAGE, nextActivePage } from '../lib/pageNav'
 import { registry } from '../runtime/registry'
@@ -19,7 +27,11 @@ export default function Sidebar({
   onSelect,
   onCreate,
   onRemove,
-  onOpenAssistants,
+  onAgentSettings,
+  onRenameAgent,
+  onSetAgentEnabled,
+  onRemoveAgent,
+  onPasteAgent,
   onOpenSettings,
   onOpenWorkspace,
   activePage,
@@ -27,14 +39,21 @@ export default function Sidebar({
   inflightId
 }: {
   conversations: ConversationDto[]
-  assistants: { id: string; name: string }[]
+  assistants: AssistantDto[]
   activeId: string | null
   collapsed: boolean
   onToggleCollapse: () => void
   onSelect: (id: string) => void
   onCreate: () => void
   onRemove: (id: string) => void
-  onOpenAssistants: () => void
+  /** 打开某个 Agent 的设置（抽屉）。 */
+  onAgentSettings: (id: string) => void
+  /** 改名；返回错误码，null 表示成功。 */
+  onRenameAgent: (id: string, name: string) => Promise<string | null>
+  onSetAgentEnabled: (id: string, enabled: boolean) => Promise<void>
+  onRemoveAgent: (id: string) => Promise<void>
+  /** 粘贴：创建成功后返回新 Agent，界面据此直接进入重命名。 */
+  onPasteAgent: (payload: AgentClipPayload) => Promise<{ id: string; name: string } | null>
   onOpenSettings: () => void
   /** 打开工作区面板：导入文件供检索引用。 */
   onOpenWorkspace: () => void
@@ -51,6 +70,113 @@ export default function Sidebar({
   const inputRef = useRef<HTMLInputElement>(null)
   // 双轴：点 Agent 行 = 只看它跨项目的记录；点项目 = 看该项目下所有 Agent。
   const [agentAxis, setAgentAxis] = useState<string | null>(null)
+  // 工位区：整段可折叠、行上右键出菜单、改名在行内完成
+  const [agentsOpen, setAgentsOpen] = useState(true)
+  const [menu, setMenu] = useState<{ agentId: string; x: number; y: number } | null>(null)
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameError, setRenameError] = useState<string | null>(null)
+  // 应用内剪贴板：只存配置，不存 id 与时间戳
+  const [clipboard, setClipboard] = useState<AgentClipPayload | null>(() =>
+    parseAgentClip(window.localStorage.getItem(AGENT_CLIPBOARD_KEY))
+  )
+
+  const menuAgent = menu ? (assistants.find((item) => item.id === menu.agentId) ?? null) : null
+
+  function startRename(agent: AssistantDto): void {
+    setRenamingId(agent.id)
+    setRenameValue(agent.name)
+    setRenameError(null)
+    setMenu(null)
+  }
+
+  function cancelRename(): void {
+    setRenamingId(null)
+    setRenameError(null)
+  }
+
+  async function commitRename(): Promise<void> {
+    if (!renamingId) {
+      return
+    }
+    const name = renameValue.trim()
+    if (name === '') {
+      setRenameError('名字不能为空')
+      return
+    }
+    const others = assistants.filter((item) => item.id !== renamingId).map((item) => item.name)
+    if (isAgentNameTaken(name, others)) {
+      setRenameError('已存在同名智能体')
+      return
+    }
+    const error = await onRenameAgent(renamingId, name)
+    if (error) {
+      setRenameError(error)
+      return
+    }
+    setRenamingId(null)
+    setRenameError(null)
+  }
+
+  async function runMenuAction(action: AgentMenuAction): Promise<void> {
+    const agent = menuAgent
+    if (!agent) {
+      return
+    }
+    switch (action) {
+      case 'rename':
+        startRename(agent)
+        return
+      case 'settings':
+        onAgentSettings(agent.id)
+        setMenu(null)
+        return
+      case 'copy': {
+        const payload: AgentClipPayload = {
+          name: agent.name,
+          systemPrompt: agent.systemPrompt,
+          providerId: agent.providerId,
+          modelId: agent.modelId,
+          params: agent.params
+        }
+        window.localStorage.setItem(AGENT_CLIPBOARD_KEY, serializeAgentClip(payload))
+        setClipboard(payload)
+        setMenu(null)
+        return
+      }
+      case 'paste': {
+        if (!clipboard) {
+          return
+        }
+        const created = await onPasteAgent(clipboard)
+        setMenu(null)
+        if (created) {
+          // 粘贴完直接进入重命名：粘出来的是副本，名字必须由人定
+          setRenamingId(created.id)
+          setRenameValue(created.name)
+          setRenameError(null)
+        }
+        return
+      }
+      case 'toggle-enabled':
+        await onSetAgentEnabled(agent.id, agent.enabled === false)
+        setMenu(null)
+        return
+      case 'remove':
+        if (confirmRemoveId === agent.id) {
+          await onRemoveAgent(agent.id)
+          setConfirmRemoveId(null)
+          setMenu(null)
+          return
+        }
+        // 删除不可撤销：第一下只把这一项变成确认
+        setConfirmRemoveId(agent.id)
+        return
+      default:
+        return
+    }
+  }
   const [projectAxis, setProjectAxis] = useState<string | null | 'unmounted'>(null)
   const visible = useMemo(
     () => filterSessionsByAxis(conversations, { agentId: agentAxis, workspaceId: projectAxis, keyword }),
@@ -154,57 +280,146 @@ export default function Sidebar({
       </section>
 
       <section className="side__section">
-        <div className="side__head">
-          Agent Bench
-          <span className="side__head-note">{assistants.length}</span>
+        <div className="side__head side__head--lg">
+          <button
+            className="side__head-btn"
+            type="button"
+            aria-expanded={agentsOpen}
+            title={agentsOpen ? '收起全部 Agent' : '展开 Agent 列表'}
+            onClick={() => setAgentsOpen((value) => !value)}
+          >
+            <Icon name="user" className="side__head-icon" size={13} />
+            <span className="side__head-title">Agent Bench</span>
+            <span className="side__head-note">{assistants.length}</span>
+            <Icon
+              name="arrow-down"
+              className={`side__head-caret${agentsOpen ? ' is-open' : ''}`}
+              size={13}
+            />
+          </button>
           <Slot name="sidebar.agents.header" props={{ count: assistants.length }} />
         </div>
-        <ul className="side__plain">
-          {assistants.length === 0 ? (
-            <li className="side__empty">还没有 Agent</li>
-          ) : (
-            assistants.map((assistant) => {
-              const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId)
-              const active = agentAxis === assistant.id
-              return (
-                <li key={assistant.id}>
-                  <div className="side__agent-row">
+
+        {agentsOpen ? (
+          <ul className="side__plain">
+            {assistants.length === 0 ? (
+              <li className="side__empty">还没有 Agent</li>
+            ) : (
+              assistants.map((assistant) => {
+                const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId)
+                const active = agentAxis === assistant.id
+                const disabled = assistant.enabled === false
+
+                if (renamingId === assistant.id) {
+                  return (
+                    <li key={assistant.id}>
+                      <input
+                        className={`side__row-input${renameError ? ' side__row-input--bad' : ''}`}
+                        value={renameValue}
+                        autoFocus
+                        aria-label="重命名智能体"
+                        onChange={(event) => {
+                          setRenameValue(event.target.value)
+                          setRenameError(null)
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            void commitRename()
+                          }
+                          if (event.key === 'Escape') {
+                            event.preventDefault()
+                            cancelRename()
+                          }
+                        }}
+                        onBlur={() => void commitRename()}
+                      />
+                      {renameError ? <span className="side__row-hint">{renameError}</span> : null}
+                    </li>
+                  )
+                }
+
+                return (
+                  <li key={assistant.id}>
                     <button
-                      className={`side__row${active ? ' side__row--active' : ''}`}
+                      className={`side__row${active ? ' side__row--active' : ''}${
+                        disabled ? ' side__row--disabled' : ''
+                      }`}
                       type="button"
-                      title={bench.lastTitle ?? assistant.name}
+                      title={`${bench.lastTitle ?? assistant.name}${
+                        disabled ? '（已停用）' : ''
+                      } · 右键打开菜单`}
                       onClick={() => setAgentAxis(active ? null : assistant.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault()
+                        setConfirmRemoveId(null)
+                        // 贴边右键时把菜单推回视口内，别让它跑到屏幕外
+                        setMenu({
+                          agentId: assistant.id,
+                          x: Math.min(event.clientX, window.innerWidth - 184),
+                          y: Math.min(event.clientY, window.innerHeight - 216)
+                        })
+                      }}
                     >
                       <Icon name="user" className="side__row-icon" />
                       <span>{assistant.name}</span>
                       <span
-                        className={`side__status${bench.state === 'working' ? ' side__status--working' : ''}`}
-                        title={bench.state === 'working' ? bench.lastTitle ?? '执行中' : '空闲待命'}
+                        className={`side__status${
+                          bench.state === 'working' && !disabled ? ' side__status--working' : ''
+                        }`}
+                        title={
+                          disabled
+                            ? '已停用'
+                            : bench.state === 'working'
+                              ? bench.lastTitle ?? '执行中'
+                              : '空闲待命'
+                        }
                       />
                       <span className="side__status-count">{bench.activeCount}</span>
                     </button>
-                    <button
-                      className="side__pin"
-                      type="button"
-                      title="管理 Agent"
-                      aria-label="管理 Agent"
-                      onClick={onOpenAssistants}
-                    >
-                      <Icon name="settings" size={13} />
-                    </button>
-                  </div>
-                </li>
-              )
-            })
-          )}
-          <li>
-            <button className="side__row" type="button" onClick={onOpenAssistants}>
-              <Icon name="settings" className="side__row-icon" />
-              <span>调整 Agent</span>
-            </button>
-          </li>
-        </ul>
+                  </li>
+                )
+              })
+            )}
+          </ul>
+        ) : null}
       </section>
+
+      {menu && menuAgent ? (
+        <>
+          <span
+            className="ctx-mask"
+            role="presentation"
+            onClick={() => setMenu(null)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setMenu(null)
+            }}
+          />
+          <div className="ctx-menu" style={{ left: menu.x, top: menu.y }} role="menu">
+            <span className="ctx-menu__head">{menuAgent.name}</span>
+            {buildAgentMenuItems({
+              enabled: menuAgent.enabled !== false,
+              canPaste: clipboard !== null
+            }).map((item) => (
+              <button
+                key={item.action}
+                className={`ctx-menu__item${
+                  item.action === 'remove' ? ' ctx-menu__item--danger' : ''
+                }`}
+                type="button"
+                role="menuitem"
+                disabled={item.disabled === true}
+                onClick={() => void runMenuAction(item.action)}
+              >
+                {item.action === 'remove' && confirmRemoveId === menuAgent.id
+                  ? '再点一次确认删除'
+                  : item.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : null}
 
       <section className="side__section side__section--grow">
         <div className="side__head">

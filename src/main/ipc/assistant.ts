@@ -23,6 +23,8 @@ function toDto(assistant: Assistant): AssistantDto {
     providerId: assistant.providerId,
     modelId: assistant.modelId,
     params: assistant.params,
+    // 旧记录没有这个字段：缺省即启用，不是「未知」
+    enabled: assistant.enabled !== false,
     createdAt: assistant.createdAt,
     updatedAt: assistant.updatedAt
   }

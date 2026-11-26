@@ -217,12 +217,16 @@ export interface AssistantDto {
   providerId: string | null
   modelId: string | null
   params: { temperature: number; maxTokens: number; topP: number }
+  /** 停用后不再出现在派发候选里。老数据没有这个字段时视为启用。 */
+  enabled?: boolean
   createdAt: string
   updatedAt: string
 }
 
 export interface AssistantDraftRequest {
   name: string
+  /** 省略表示「不动」：新建按启用处理，更新时保留原状态。 */
+  enabled?: boolean
   systemPrompt?: string
   modelId?: string | null
   providerId?: string | null

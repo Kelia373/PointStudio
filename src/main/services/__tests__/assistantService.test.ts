@@ -126,3 +126,63 @@ test('get 能按 id 取回助手，不存在时返回 null', async () => {
     assert.equal(await service.get('missing'), null)
   })
 })
+
+test('创建出来默认启用；停用后重启仍是停用', async () => {
+  await withTempService(async ({ service, reopen }) => {
+    const created = await service.create({ name: '甲' })
+    assert.equal(created.ok, true)
+    if (!created.ok) {
+      return
+    }
+    assert.equal(created.value.enabled, true)
+
+    const updated = await service.update(created.value.id, { name: '甲', enabled: false })
+    assert.equal(updated.ok, true)
+    if (!updated.ok) {
+      return
+    }
+    assert.equal(updated.value.enabled, false)
+
+    // 落盘之后重新打开：停用不是内存里的标记
+    const afterRestart = await reopen().list()
+    assert.equal(afterRestart[0].enabled, false)
+  })
+})
+
+test('重新启用时身份字段不变', async () => {
+  await withTempService(async ({ service }) => {
+    const created = await service.create({ name: '乙', enabled: false })
+    assert.equal(created.ok, true)
+    if (!created.ok) {
+      return
+    }
+
+    const back = await service.update(created.value.id, { name: '乙', enabled: true })
+    assert.equal(back.ok, true)
+    if (!back.ok) {
+      return
+    }
+    assert.equal(back.value.enabled, true)
+    assert.equal(back.value.id, created.value.id)
+    assert.equal(back.value.createdAt, created.value.createdAt)
+  })
+})
+
+test('更新时没传 enabled：停用状态不会被悄悄清掉', async () => {
+  await withTempService(async ({ service }) => {
+    const created = await service.create({ name: '丙', enabled: false })
+    assert.equal(created.ok, true)
+    if (!created.ok) {
+      return
+    }
+
+    // 只有名字和提示词的编辑表单保存一次，也应该保住停用状态
+    const renamed = await service.update(created.value.id, { name: '丙改' })
+    assert.equal(renamed.ok, true)
+    if (!renamed.ok) {
+      return
+    }
+    assert.equal(renamed.value.name, '丙改')
+    assert.equal(renamed.value.enabled, false)
+  })
+})

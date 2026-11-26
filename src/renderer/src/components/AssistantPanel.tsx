@@ -10,11 +10,14 @@ import type { AssistantDto } from '../../../shared/types/ipc.ts'
 
 export default function AssistantPanel({
   onClose,
-  onChanged
+  onChanged,
+  focusAgentId = null
 }: {
   onClose: () => void
   /** 助手变动后通知父组件刷新下拉。 */
   onChanged: () => void
+  /** 从右键菜单进来时，直接展开这个 Agent 的编辑区。 */
+  focusAgentId?: string | null
 }) {
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -36,6 +39,18 @@ export default function AssistantPanel({
     setSystemPrompt(assistant.systemPrompt)
     setMessage(null)
   }
+
+  // 从右键菜单进来：列表到了就直接进入这个 Agent 的编辑态
+  useEffect(() => {
+    if (!focusAgentId || editingId === focusAgentId) {
+      return
+    }
+    const found = assistants.find((item) => item.id === focusAgentId)
+    if (found) {
+      startEdit(found)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusAgentId, assistants])
 
   async function save(): Promise<void> {
     if (!editingId) {

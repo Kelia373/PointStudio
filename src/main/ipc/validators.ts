@@ -74,6 +74,9 @@ export function isAssistantDraft(value: unknown): value is AssistantDraft {
   if (value.params !== undefined && !isObject(value.params)) {
     return false
   }
+  if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
+    return false
+  }
   return true
 }
 

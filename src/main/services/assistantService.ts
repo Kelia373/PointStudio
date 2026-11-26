@@ -60,8 +60,15 @@ export class AssistantService {
       return { ok: false, errors: ['E_NOT_FOUND'] }
     }
 
+    // 更新是「整条替换」，所以没传的 enabled 必须先填回原值——
+    // 否则在那张只有名字和提示词的编辑表单里保存一次，停用状态就被悄悄清掉了。
+    const merged: AssistantDraft = {
+      ...draft,
+      enabled: draft.enabled ?? items[index].enabled ?? true
+    }
+
     // id 与 createdAt 属于身份，不允许被一次更新改掉。
-    const rebuilt = buildAssistant(draft, { id, now: this.deps.now() })
+    const rebuilt = buildAssistant(merged, { id, now: this.deps.now() })
     const updated: Assistant = {
       ...rebuilt,
       createdAt: items[index].createdAt,

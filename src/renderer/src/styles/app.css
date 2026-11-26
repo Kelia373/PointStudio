@@ -1635,6 +1635,146 @@ select:focus {
   text-transform: none;
 }
 
+/* 工位区标题是一整块可点的折叠头：比项目段高一头，图标 / 标题 / 计数 / 箭头一行排开 */
+.side__head--lg {
+  height: 32px;
+  padding: 0 var(--sp-2) 0 var(--sp-1);
+}
+
+.side__head-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 26px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--rad-ctl);
+  text-align: left;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  transition: background var(--dur-1), color var(--dur-1);
+}
+
+.side__head-btn:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.side__head-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.side__head-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side__head-caret {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  margin-left: var(--sp-1);
+  transition: transform var(--dur-2) var(--ease-out);
+}
+
+.side__head-caret.is-open {
+  transform: rotate(180deg);
+}
+
+/* 行内改名：直接在列表原来的位置长出输入框，不弹对话框 */
+.side__row-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-ctl);
+  background: var(--panel-2);
+  color: var(--fg);
+  font-size: var(--fs-md);
+}
+
+.side__row-input--bad {
+  border-color: var(--danger);
+}
+
+.side__row-hint {
+  display: block;
+  padding: 2px var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--danger);
+}
+
+/* 停用的 Agent：留在列表里但明显退后一档 */
+.side__row--disabled {
+  opacity: 0.55;
+}
+
+.side__row--disabled .side__status {
+  background: var(--fg-3);
+  animation: none;
+}
+
+/* 右键菜单：自绘一层，跟着主题走，也不会挡住整块界面 */
+.ctx-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.ctx-menu {
+  position: fixed;
+  z-index: 51;
+  min-width: 168px;
+  padding: var(--sp-1);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.ctx-menu__head {
+  margin-bottom: var(--sp-1);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-xs);
+  color: var(--fg-3);
+}
+
+.ctx-menu__item {
+  height: 26px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-ctl);
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--fg-2);
+}
+
+.ctx-menu__item:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.ctx-menu__item:disabled {
+  opacity: 0.45;
+  color: var(--fg-3);
+}
+
+.ctx-menu__item--danger {
+  color: var(--danger);
+}
+
 .side__head-act {
   flex: none;
   width: 22px;

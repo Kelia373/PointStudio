@@ -18,6 +18,8 @@ export interface Assistant {
   /** 绑定的模型；null 表示用全局默认。 */
   modelId: string | null
   params: ModelParams
+  /** 停用后不参与派发。旧数据可能没有这个字段（视为启用）。 */
+  enabled?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -25,6 +27,8 @@ export interface Assistant {
 /** 用户输入（来自界面），字段可缺省。 */
 export interface AssistantDraft {
   name: string
+  /** 省略表示「不动」：新建按启用，更新时由服务层填回原值。 */
+  enabled?: boolean
   systemPrompt?: string
   providerId?: string | null
   modelId?: string | null
@@ -33,6 +37,7 @@ export interface AssistantDraft {
 
 export interface AssistantInput {
   name: string
+  enabled: boolean
   systemPrompt: string
   providerId: string | null
   modelId: string | null
@@ -94,6 +99,11 @@ export function validateAssistantDraft(draft: AssistantDraft): ValidationResult 
     errors.push('E_PARAM_RANGE')
   }
 
+  // enabled 只认布尔：'false' 这种字符串一旦混进去，「停用」会变成永远不生效
+  if (draft.enabled !== undefined && typeof draft.enabled !== 'boolean') {
+    errors.push('E_ENABLED_INVALID')
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors }
   }
@@ -102,6 +112,7 @@ export function validateAssistantDraft(draft: AssistantDraft): ValidationResult 
     ok: true,
     value: {
       name,
+      enabled: draft.enabled ?? true,
       systemPrompt: draft.systemPrompt ?? '',
       providerId: draft.providerId ?? null,
       modelId: draft.modelId ?? null,
