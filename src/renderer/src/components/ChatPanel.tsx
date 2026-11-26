@@ -474,6 +474,12 @@ export default function ChatPanel() {
     if (prompt.trim() === '') {
       return
     }
+    // 真的换一棒再发：chat.send 的契约里没有 model 参数，模型只能落在会话上。
+    // 不写这一步，「升档重试」就只是个换了徽章的假动作。
+    if (next.chosenModel !== '') {
+      await applyModel({ model: next.chosenModel })
+      setAutoRoute(false)
+    }
     await submit(prompt, next)
   }
 
