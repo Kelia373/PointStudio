@@ -1,311 +1,286 @@
-# 插件开发指南（设计规格）
+# PointStudio 插件开发指南（架构规格）
 
-> **状态：设计规格，尚未实现。**
-> 框架层面的决策（壳、注册表、状态外置、兜底）见 [ADR 0007](../adr/0007-壳-路由与插件框架.md)。
-> 本文定义「写一个 PointStudio 插件」的目标形态，以及宿主需要提供什么。
-> 实现进度见文末「实现状态」，请勿把未完成的部分当成可用能力。
+> **状态：设计规格（P0 底座落地中）。**
+> 总体架构决策见 [ADR 0007](../adr/0007-壳-路由与插件框架.md)，渲染层改造步骤见 [ui-remediation.md](./ui-remediation.md)。
 
 ---
 
-## 1. 这个插件模型长什么样
+## 1. 设计哲学：全权开放 + 宿主自愈
 
-参照 DSH 的 bundle 模型，但**只保留我们需要的部分**：
+PointStudio 的插件体系参考 DSH 的双端整合思路，遵循两条基本原则：
 
-| 概念 | 是什么 |
-| --- | --- |
-| **bundle** | 一个目录（通常是一个 npm 包），含 `manifest` 与两个入口 |
-| **Host 入口** | 跑在主进程（Node）的 `apply(ctx)`：注册工具、IPC、命令、事件监听 |
-| **Renderer 入口** | 跑在渲染进程的 `apply(ctx)`：注册页面、插槽内容、覆盖内置组件 |
-| **注册表** | 宿主维护的挂载点集合；内置实现与插件实现走同一张表 |
-| **Context** | 宿主传给插件的唯一对象；插件不许直接摸 `window.pointstudio` 或 `require('electron')` |
-
-**能力边界由插件自己决定，安装即信任。** 这是刻意的选择：自由度优先。
-宿主只保留三条硬边界（见 §7），以及崩溃后的兜底（见 §8）。
+1. **安装即信任，能力不阉割**：插件一旦由用户启用，即可在渲染层注册整页功能、往任意插槽塞微件、**直接替换客户端内置组件**、读取并订阅全量 Store 状态、调用主进程桥以及注入自定义协同路由器（如 PandaOrchestrator）。
+2. **故障绝不陪葬**：插件注册的一切资源（UI、样式、事件、路由器）全部返回 `Disposer` 并由宿主强制托管。插件组件若在渲染时抛错，宿主的 `PluginErrorBoundary` 会**当场将其无缝回退为内置默认组件**；连续报错自动隔离（`quarantined`）；启动死锁由主进程 `boot.lock` 看门狗自动切入安全模式（Safe Mode）。
 
 ---
 
-## 2. bundle 目录结构
+## 2. 插件包（Bundle）目录结构
+
+一个插件是一个独立目录（开发期可放在本地 `plugins/<plugin-id>/`，或用户数据目录 `userData/plugins/<plugin-id>/`）：
 
 ```
-my-plugin/
-├── package.json          # 名字、版本、两个入口 + contributes 声明
-├── main.js               # Host 入口（可选）
-├── renderer.js           # Renderer 入口（可选）
-├── icon.svg              # 插件图标（导航与列表用）
+pointstudio-plugin-panda-router/
+├── package.json          # 插件清单（含 pointstudio 字段）
+├── renderer.js           # 渲染进程入口：导出 apply(ctx)
+├── main.js               # 主进程入口（可选）：导出 apply(hostCtx)
+├── icon.svg              # 插件图标（24x24 线条 SVG）
 └── README.md
 ```
 
-`package.json` 的关键字段：
+### `package.json` 清单规范
 
 ```json
 {
-  "name": "pointstudio-plugin-graph",
+  "name": "pointstudio-plugin-panda-router",
   "version": "1.0.0",
   "pointstudio": {
     "apiVersion": 1,
-    "displayName": "会话拓扑",
-    "main": "./main.js",
+    "displayName": "Panda 协同路由",
+    "description": "31MB 本地任务画像 + 模型能力卡匹配 + 失败自动升档梯队",
     "renderer": "./renderer.js",
+    "main": "./main.js",
     "icon": "./icon.svg",
     "contributes": {
       "pages": [
-        { "id": "graph", "title": "会话拓扑", "icon": "share-2", "order": 20 }
-      ],
-      "commands": [
-        { "id": "graph.open", "title": "打开会话拓扑" }
+        { "id": "panda.studio", "title": "协同路由看板", "icon": "compass", "order": 15 }
       ]
     }
   }
 }
 ```
 
-| 字段 | 必填 | 说明 |
-| --- | --- | --- |
-| `pointstudio.apiVersion` | ✅ | 宿主 API 版本，见 §6 |
-| `displayName` | ✅ | 插件列表与导航里显示的名字 |
-| `main` / `renderer` | 至少一个 | 两个入口可以只写一个 |
-| `contributes.pages` | 否 | 声明的页面；实现必须在 `renderer` 里注册同名 id |
-| `contributes.commands` | 否 | 命令面板项 |
+---
+
+## 3. 共享运行时（严禁自带第二份 React）
+
+插件在渲染进程中与宿主共用同一个 React 实例。宿主在启动时将运行时挂载到全局：
+
+```ts
+// window.__POINTSTUDIO_RUNTIME__
+interface PointStudioRuntime {
+  React: typeof import('react')
+  ReactDOM: typeof import('react-dom/client')
+  jsxRuntime: typeof import('react/jsx-runtime')
+}
+```
+
+- 插件构建时**必须**将 `react`、`react-dom`、`react/jsx-runtime` 指向 `window.__POINTSTUDIO_RUNTIME__`，不得把第二份 React 打包进 `renderer.js`（否则 Hooks 会立刻报错并被宿主 `PluginErrorBoundary` 拦截隔离）。
+- 样式必须优先使用宿主 `tokens.css` 中的 CSS 变量（`--bg`、`--panel`、`--fg`、`--line`、`--rad-ctl`、`--dur-2` 等），天然兼容深浅双主题。
 
 ---
 
-## 3. Renderer Context API
+## 4. 渲染层插件上下文（`RendererPluginContext`）
+
+`renderer.js` 默认导出 `export default function apply(ctx: RendererPluginContext): void | Disposer`：
 
 ```ts
-interface RendererContext {
-  /** 页面：会出现在导航里，由壳渲染内容区 */
-  pages: {
-    register(def: {
+export type Disposer = () => void
+
+export interface RendererPluginContext {
+  readonly pluginId: string
+
+  /** 1. UI 扩展：整页、插槽、内置组件覆盖、样式注入 */
+  ui: {
+    /** 注册独立功能页（自动出现在侧栏「关键功能」区，点击后在主舞台中央渲染） */
+    registerPage(def: {
       id: string
       title: string
       icon?: string
       order?: number
-      render: (mount: HTMLElement) => () => void   // 返回卸载函数
-    }): () => void
+      defaultPinned?: boolean
+      component: React.ComponentType<{ navigate: (pageId: string) => void }>
+    }): Disposer
+
+    /** 往客户端预留的 10 个插槽之一塞入组件（按 order 升序排列） */
+    registerSlot<S extends SlotName>(
+      slot: S,
+      component: React.ComponentType<SlotPropsMap[S]>,
+      order?: number
+    ): Disposer
+
+    /** 直接替换客户端内置的核心组件（若渲染抛错，宿主自动回退为内置实现） */
+    overrideComponent<K extends OverrideKey>(
+      key: K,
+      component: React.ComponentType<OverridePropsMap[K]>
+    ): Disposer
+
+    /** 注入插件专属 CSS（禁用插件时宿主自动移除对应 <style> 标签） */
+    injectStyle(cssText: string): Disposer
   }
 
-  /** 插槽：往宿主预留的位置塞组件 */
-  slots: {
-    register(slot: SlotName, render: (mount: HTMLElement) => () => void): () => void
-  }
-
-  /** 覆盖内置组件（键名见 §5） */
-  components: {
-    override(key: ComponentKey, factory: () => Promise<{ default: ComponentType<any> }>): void
-  }
-
-  /** 只读数据快照：一次拿全量关系，不要逐条问 */
-  data: {
-    snapshot(options?: {
-      include?: Array<'sessions' | 'agents' | 'workspaces' | 'runs'>
-    }): Promise<GraphSnapshot>
-  }
-
-  /** 事件订阅（返回解绑函数） */
-  events: {
-    on(events: Array<EventName>, fn: (payload: unknown) => void): () => void
-  }
-
-  /** 插件私有存储（宿主负责落盘与清理，插件不碰数据目录） */
-  storage: {
-    get(key: string): Promise<unknown>
-    set(key: string, value: unknown): Promise<void>
-    delete(key: string): Promise<void>
-  }
-
-  /** 主题 token 只读快照，用来跟随宿主观感 */
-  theme: { tokens: Record<string, string> }
-
-  /** 主进程侧能力（经宿主转发，不是直接 IPC） */
-  host: {
-    invoke(channel: HostChannel, payload: unknown): Promise<unknown>
-  }
-}
-
-// 插槽清单以 ADR 0007 为准；名字即契约，增删都要升 apiVersion
-type SlotName =
-  | 'sidebar.features'                 // 侧栏功能位，配 { navigate }
-  | 'sidebar.bottom'                   // 侧栏四段之后，配 {}
-  | 'sidebar.agents.actions'           // Agent 段标题右侧，配 { agents }
-  | 'topbar.right'                     // 顶栏检查器键左侧，配 { conversation }
-  | 'appbar.left'                      // 全宽底栏左端，配 {}
-  | 'appbar.right'                     // 全宽底栏右端，配 {}
-  | 'conversation.composer.dock'       // 输入框上方，配 { draft, busy }
-  | 'conversation.banner'              // 消息流上方横幅区，配 { conversation }
-  | 'conversation.message.actions'     // 每条消息操作行，配 { message }
-  | 'shell.overlay'                    // 整页浮层，配 { close }
-
-type EventName =
-  | 'session.created'
-  | 'session.deleted'
-  | 'run.started'
-  | 'run.finished'
-  | 'plan.step'
-  | 'chat.done'
-```
-
-**`data.snapshot()` 的形状**（这是"会话-拓扑图"这类插件真正需要的东西）：
-
-```ts
-interface GraphSnapshot {
-  sessions: Array<{
-    id: string
-    title: string
-    agentId: string | null
-    workspaceId: string | null
-    state: 'idle' | 'running' | 'failed'
-    updatedAt: string
-  }>
-  agents: Array<{ id: string; name: string; model: string | null }>
-  workspaces: Array<{ id: string; path: string }>
-  runs: Array<{ id: string; sessionId: string; status: string; startedAt: string }>
-}
-```
-
----
-
-## 4. Host Context API
-
-```ts
-interface HostContext {
-  tools: {
-    register(def: {
-      name: string
-      description: string
-      params: Record<string, { type: 'string' | 'number' | 'boolean'; required?: boolean }>
-      sideEffect: 'none' | 'local' | 'external'
-      handler(input: unknown): Promise<{ ok: boolean; value?: unknown; code?: string }>
-    }): () => void
-  }
-
-  commands: { register(id: string, title: string, run: () => void | Promise<void>): () => void }
-
-  /** 自建 IPC 通道：通道名会自动加 `plugin:<pluginId>:` 前缀，避免与其他插件/内核撞名 */
-  ipc: { handle(name: string, fn: (payload: unknown) => Promise<unknown>): () => void }
-
-  /** 订阅宿主事件（数据层级别，不是 UI 事件） */
-  events: { on(event: string, fn: (payload: unknown) => void): () => void }
-
-  log: { info(msg: string): void; warn(msg: string): void; error(msg: string): void }
-}
-```
-
-主进程侧插件**可以**直接 `import` Node 内置模块（`fs`、`child_process` 等）——这与"安装即信任"一致。
-但它**不许**直接写 PointStudio 的数据目录结构（会话、消息、设置集合），要经宿主 API，
-否则卸载后留下孤儿数据，且我们无法做一致性校验。
-
----
-
-## 5. 组件注册表与 props 契约
-
-内置组件与插件组件挂在同一张表上，键名固定：
-
-| 键 | 位置 | props 契约 |
-| --- | --- | --- |
-| `chat.bubble` | 消息气泡 | `{ role, content, streaming, failed, references, onCopy, onDelete, onResend, onReference }` |
-| `chat.composer` | 输入区 | `{ draft, busy, canSend, onDraftChange, onSend, onStop }` |
-| `chat.empty` | 空状态 | `{ mode, onPick }` |
-| `sidebar.item` | 会话条目 | `{ conversation, active, onSelect, onRemove }` |
-| `settings.section` | 设置分区 | `{ section, onChange }` |
-
-**props 即契约。** 一旦某个键被公开，改它的 props 就是破坏性变更：
-
-- 新增字段只能**可选**；
-- 删除/改名必须升 `apiVersion`，且至少保留一个版本周期的兼容层；
-- 每次改契约，同步更新本表并记入 `docs/01` 的变更说明。
-
----
-
-## 6. 版本与兼容
-
-- `pointstudio.apiVersion` 是整数，宿主启动时校验；不匹配 → 插件置为 `incompatible`，不加载、不报错崩溃。
-- 宿主 API 升级时：`apiVersion` 递增，并保留上一版的适配层一个发布周期。
-- 插件自己也要有 `version`（语义化），用于回滚到 `lastGoodVersion`。
-
----
-
-## 7. 三条硬边界（不是权限，是保命）
-
-1. **不许替换根节点。** 页面必须渲染在壳分配的内容区里。插件把整个 app 换掉后，用户连"禁用插件"的入口都点不到。
-2. **不许自带第二份 React。** 宿主提供 React 实例；插件产物里 `react`/`react-dom` 必须外部化。自带会直接崩（hooks 抛错）。
-3. **不许读写别的插件的 DOM / 样式 / 内部状态。** 需要协作就走宿主事件或共享 API。
-
-违反 1、2 的插件在加载阶段就会被拒绝，并在插件列表里给出具体原因。
-
----
-
-## 8. 崩溃与回滚（兜底，不是权限模型）
-
-宿主保证「插件坏掉不影响主界面」：
-
-| 触发 | 动作 |
-| --- | --- |
-| 页面渲染抛异常 | 该页降级为错误卡片，壳不受影响 |
-| 连续 3 次异常 / 5 分钟 | 自动 `quarantined`，通知用户 |
-| 启动超时 > 5s | 跳过该插件本轮加载 |
-| 主进程侧未捕获异常 | 记录到崩溃日志，插件标记 degraded |
-| 上次非正常退出 | 下次以「插件全禁」启动，顶栏提示并允许一键重试 |
-
-插件状态：`enabled` / `disabled` / `quarantined` / `incompatible` / `degraded`。
-设置里每个插件一行：版本、health、按钮「重置 / 回滚上一版 / 卸载」。
-
----
-
-## 9. 完整示例：会话-拓扑图
-
-**package.json**（见 §2），**renderer.js**：
-
-```js
-export default function apply(ctx) {
-  ctx.pages.register({
-    id: 'graph',
-    title: '会话拓扑',
-    icon: 'share-2',
-    render(mount) {
-      const canvas = document.createElement('canvas')
-      mount.appendChild(canvas)
-      const dispose = drawGraph(canvas)          // 插件自己的绘制逻辑
-
-      // 实时更新：订阅而不是轮询
-      const off = ctx.events.on(['run.started', 'run.finished'], () => dispose.redraw())
-
-      return () => { off(); dispose() }           // 卸载必须清理
+  /** 2. 响应式 Store：批量只读快照 + 细粒度订阅 + 业务动作 */
+  store: {
+    getSnapshot(): StudioSnapshot
+    subscribe(listener: (snapshot: StudioSnapshot) => void): Disposer
+    actions: {
+      selectSession(sessionId: string): void
+      createSession(input?: { title?: string; assistantId?: string | null; workspaceId?: string | null }): Promise<void>
+      setSessionModel(sessionId: string, patch: { model?: string | null; maxTokens?: number }): Promise<void>
+      sendMessage(text: string): Promise<void>
+      runPlan(goal: string): Promise<void>
+      navigatePage(pageId: 'chat' | 'settings' | string): void
     }
+  }
+
+  /** 3. 协同模型路由扩展槽（专为 PandaOrchestrator 等路由器设计） */
+  routing: {
+    /** 注册虚拟模型档位（如 "auto:panda"）及发送前的路由决策钩子 */
+    registerRouter(def: {
+      id: string
+      label: string                  // 显示在输入栏模型下拉中，如 "🐼 Auto · 协同路由"
+      decide(input: {
+        prompt: string
+        sessionId: string
+        assistantId: string | null
+        workspaceId: string | null
+        stepIndex?: number
+        previousFailedModels?: string[]
+      }): Promise<RouteDecisionDto>
+      onOutcome?(traceId: string, outcome: {
+        ok: boolean
+        model: string
+        durationMs: number
+        retried: boolean
+        aborted: boolean
+      }): void | Promise<void>
+    }): Disposer
+  }
+
+  /** 4. 插件私有 KV 存储（由宿主隔离落盘，不污染主库） */
+  storage: {
+    get<T = unknown>(key: string): Promise<T | null>
+    set(key: string, value: unknown): Promise<void>
+    remove(key: string): Promise<void>
+  }
+
+  /** 5. 直通底层 IPC 桥 */
+  bridge: PointStudioApi
+}
+```
+
+---
+
+## 5. 插槽清单（10 个 `SlotName`）与覆盖键（5 个 `OverrideKey`）
+
+### 5.1 预留插槽（追加型 `<Slot>`）
+
+| 插槽名 (`SlotName`) | 界面位置 | 传入的 Props (`SlotPropsMap[S]`) | 典型用途 |
+| --- | --- | --- | --- |
+| `sidebar.features` | 侧栏第二段「关键功能」区 | `{ activePage: string; navigate: (id: string) => void }` | `registerPage` 会自动挂入此处；也可手动加快捷动作项 |
+| `sidebar.agents.header` | 侧栏第三段「Agent」标题右侧 | `{ count: number }` | 导入 Agent、批量装备按钮 |
+| `sidebar.projects.header` | 侧栏第四段「Project」标题右侧 | `{ count: number }` | 切换分组视图（按项目 / 按人）、批量清理 |
+| `sidebar.bottom` | 侧栏最底部 | `{}` | 插件快捷开关或驻场状态摘要 |
+| `topbar.right` | 主区顶栏右侧图标区（检查器键左侧） | `{ sessionId: string | null }` | 顶栏全局小工具开关 |
+| `appbar.left` | 底部全宽状态栏左端 | `{ mode: 'live' | 'local' | null; busy: boolean }` | 引擎连接状态灯、Panda 路由器在线状态 |
+| `appbar.right` | 底部全宽状态栏右端 | `{}` | Token 累计花费、本地模型负载、版本号 |
+| `chat.banner` | 消息流上方通知区 | `{ sessionId: string | null }` | 会话级状态横幅、唤醒的私域记忆提示条 |
+| `chat.composer.toolbar` | 输入栏左下角（模型与思考等级右侧） | `{ draft: string; busy: boolean; sessionId: string | null }` | **Panda 路由实时难度/胜率徽章**、快捷指令选择 |
+| `chat.message.actions` | 每条消息气泡的悬停操作栏 | `{ message: UiMessage; sessionId: string }` | 「✦ 提炼为私域记忆」、按升档阶梯换强模型重试 |
+| `shell.overlay` | 全局顶层浮层（与抽屉同级） | `{}` | `⌘K` 命令面板、全局快捷键浮窗 |
+
+### 5.2 可替换内置组件（覆盖型 `<Overridable>`）
+
+**契约铁律**：以下 5 个键的 Props 一旦公开即为跨版本契约，宿主只能新增可选字段，禁止删改既有字段。
+
+| 覆盖键 (`OverrideKey`) | 默认内置组件 | 传入的 Props (`OverridePropsMap[K]`) |
+| --- | --- | --- |
+| `chat.bubble` | `MessageBubble.tsx` | `{ role, content, streaming, failed, references, route, at, index, onCopy, onDelete, onResend, onReference }` |
+| `chat.composer` | `Composer.tsx` | `{ draft, busy, canSend, model, models, effort, routePreview, onDraftChange, onSend, onStop, onPlan, onModelChange, onEffortChange }` |
+| `chat.empty` | `EmptyState.tsx` | `{ mode, onPick }` |
+| `chat.inspector` | `Inspector.tsx` | `{ tab, onTab, collapsed, conversationTitle, assistantName, mode, messageCount, referenceCount, provider, effectiveModel, effectiveMaxTokens, modelFromSession, lastRunMs, planRun, mcpConnections, onOpenPlan, onConfirmPlan }` |
+| `sidebar.sessionItem` | `Sidebar.tsx` 单行 | `{ conversation, active, onSelect, onRemove }` |
+
+---
+
+## 6. 两个标杆插件示例
+
+### 示例 A：「会话 - Agent - 项目」网络调度拓扑图
+
+```tsx
+// pointstudio-plugin-topology/renderer.js
+export default function apply(ctx) {
+  const { React } = window.__POINTSTUDIO_RUNTIME__
+
+  function TopologyPage() {
+    const [snap, setSnap] = React.useState(() => ctx.store.getSnapshot())
+    React.useEffect(() => ctx.store.subscribe(setSnap), [])
+
+    // 直接用 snap.conversations, snap.assistants, snap.planRun 画出节点与派遣连线
+    return React.createElement('div', { className: 'topology-stage' },
+      `当前驻场 Agent: ${snap.assistants.length} · 活跃会话: ${snap.conversations.length}`
+    )
+  }
+
+  ctx.ui.registerPage({
+    id: 'topology',
+    title: '调度拓扑',
+    icon: 'compass',
+    order: 10,
+    defaultPinned: true,
+    component: TopologyPage
   })
 }
+```
 
-async function drawGraph(canvas) {
-  const { sessions, agents } = await ctx.data.snapshot({ include: ['sessions', 'agents'] })
-  // ……布局与绘制，全部由插件自行决定
+### 示例 B：接入 PandaOrchestrator（31MB 本地协同路由 + 失败升档阶梯）
+
+```tsx
+// pointstudio-plugin-panda-router/renderer.js
+export default function apply(ctx) {
+  const { React } = window.__POINTSTUDIO_RUNTIME__
+
+  // 1. 注册协同路由器：输入栏模型下拉自动多出「🐼 Auto · 协同路由」
+  ctx.routing.registerRouter({
+    id: 'auto:panda',
+    label: '🐼 Auto · 协同路由',
+    async decide({ prompt, previousFailedModels = [] }) {
+      // 调用本地 PandaOrchestrator HTTP 服务 (127.0.0.1:8787/route) 或 MCP
+      const res = await fetch('http://127.0.0.1:8787/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, exclude_models: previousFailedModels })
+      }).then(r => r.json())
+
+      return {
+        traceId: res.trace_id,
+        chosenModel: res.choice.model_id,
+        decidedBy: res.choice.decided_by,
+        confidence: res.choice.confidence,
+        difficulty: { level: res.difficulty.level, category: res.category.label },
+        estCostUsd: res.ranking?.[0]?.est_cost_usd,
+        escalationLadder: res.escalation_ladder?.map(step => ({
+          model: step.model_id,
+          pSuccess: step.p_success,
+          estCostUsd: step.est_cost_usd
+        }))
+      }
+    },
+    async onOutcome(traceId, outcome) {
+      // 把 L1 真实成败、重发、耗时回喂给 Panda Router 拟合本地能力卡
+      await fetch('http://127.0.0.1:8787/outcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trace_id: traceId, ...outcome })
+      }).catch(() => {})
+    }
+  })
+
+  // 2. 在输入栏工具条挂一枚实时难度/升档梯队徽章
+  ctx.ui.registerSlot('chat.composer.toolbar', ({ sessionId }) => {
+    const snap = ctx.store.getSnapshot()
+    if (!snap.lastRouteDecision) return null
+    const d = snap.lastRouteDecision
+    return React.createElement('span', { className: 'chip' },
+      `🐼 Lv.${d.difficulty.level} ${d.difficulty.category} ➔ ${d.chosenModel} (${Math.round(d.confidence * 100)}%)`
+    )
+  })
 }
 ```
 
-这个例子说明：**一个"看起来很深"的功能页，只需要「批量只读 + 事件订阅 + 自己渲染」**，不需要写权限。
-
 ---
 
-## 10. 反模式
+## 7. 三条硬底线（违反即被加载器拒绝或隔离）
 
-- ❌ 在渲染进程里 `eval` / `new Function` 执行远程代码
-- ❌ 插件直接读写 `userData` 下的集合文件
-- ❌ 插件在 `apply` 里做阻塞初始化（超过 5s 会被跳过）
-- ❌ 用全局变量存状态（卸载后残留，且与宿主生命周期不同步）
-- ❌ 页面组件里直接 `fetch` 我们的 IPC 通道；一律走 `ctx.host.invoke`
-
----
-
-## 11. 实现状态（重要）
-
-| 能力 | 状态 |
-| --- | --- |
-| 工具注册表（副作用等级 / 参数校验 / 超时 / 审计） | ✅ 已实现（`src/main/ai/tools`） |
-| MCP 客户端与注册（工具类插件的一种特例） | ✅ 已实现 |
-| preload 白名单桥（`window.pointstudio`） | ✅ 已实现 |
-| 应用壳（导航 + 内容区 + 路由） | ❌ 未实现 |
-| 渲染层状态外置（store） | ❌ 未实现 |
-| 组件注册表（内置组件走注册表） | ❌ 未实现 |
-| 页面 / 插槽注册 | ❌ 未实现 |
-| 插件加载器与 manifest 校验 | ❌ 未实现 |
-| 崩溃隔离与插件状态机 | ❌ 未实现 |
-
-施工顺序见 [ui-remediation.md](./ui-remediation.md)。
+1. **禁止篡改 `#root` 容器本身**：所有页面必须经 `registerPage` 在主舞台内渲染，保留顶栏与设置页入口，确保用户永远有路可退、有处可关。
+2. **禁止打包第二份 React**：必须复用 `window.__POINTSTUDIO_RUNTIME__.React`。
+3. **禁止绕过 `src/shared/types/ipc.ts` 传递非 JSON 对象**：为保证将来客户端无缝切换到 Rust 底座，一切跨进程载荷必须是纯 JSON。

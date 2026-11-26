@@ -23,7 +23,7 @@
 | [ADR 0004 · M0 工程骨架与首批依赖](./adr/0004-M0工程骨架与首批依赖.md) | M0 的目标是打通"窗口能开、文字能动"的最短链路，用来前置 Electron 工具链风险，同时让仓库从"只有文档"变成"能跑的东西"。在此之前仓库没有根 `package.json`，`apps/desktop` 只有一份 README。 |
 | [ADR 0005 · 模型接入改为自研实现口，DeepSeek 首发](./adr/0005-模型接入改为自研实现口.md) | `ADR 0002` 第 8 条当时的判断是「自写多 provider 适配是纯负债，AI SDK 已覆盖」。Alpha 现在改为反方向：**我们自己提供实现口（port），先实现 DeepSeek，后续再补其他平台**。 |
 | [ADR 0006：以 Agent 为中心的装配模型（身份 / 项目 / 派遣）](./adr/0006-Agent为中心的装配模型.md) | 现在的模型是「会话绑一个助手」：`conversations.assistantId`。它把三件事糊在了一起——谁在做、在哪个项目做、这次执行了什么。助手改了提示词或换了工具之后，历史会话就对不上「当时到底是谁、带着什么能力在干」。 |
-| [ADR 0007：壳、注册表与插件整合框架](./adr/0007-壳-路由与插件框架.md) | 要让第三方能"按需给客户端加功能页、改界面"，现在的渲染层撑不住： |
+| [ADR 0007：壳、统一注册表、故障自愈插件宿主与四大独家交互底座](./adr/0007-壳-路由与插件框架.md) | PointStudio 需要同时满足四件事： |
 
 ## 设计笔记
 
@@ -35,8 +35,8 @@
 
 | 文档 | 说明 |
 | --- | --- |
-| [插件开发指南（设计规格）](./references/plugin-development.md) | 参照 DSH 的 bundle 模型，但**只保留我们需要的部分**： |
-| [渲染层整改施工单（为插件化铺路）](./references/ui-remediation.md) | 已经**具备**的好底子（不要推翻）： |
+| [PointStudio 插件开发指南（架构规格）](./references/plugin-development.md) | PointStudio 的插件体系参考 DSH 的双端整合思路，遵循两条基本原则： |
+| [渲染层重构、60fps 性能优化与插件底座施工单](./references/ui-remediation.md) | **目标**：为「Orca 式双轴会话（Agent ⇄ Project）」与「PandaOrchestrator 协同路由 + 升档梯队」留好纯 JSON 契约槽，遵守“只加可选字段、缺省分支有测试”的演进规则。 |
 | [主进程目录结构与依赖规则（`src/main`）](./references/architecture/main-architecture.md) | 本文是 `src/main/` 目录分类与依赖方向的权威参考：每个目录是什么、靠什么规则阻止它蔓延、新能力往哪放。 |
 | [渲染进程结构（`src/renderer`）](./references/architecture/renderer.md) | 渲染层的目录约定、组件组织方式，以及「界面不碰数据」这条硬规则。 |
 | [共享层（`src/shared`）](./references/architecture/shared-layer.md) | 跨进程共享代码放在哪、什么时候才值得建，以及「只放类型和纯函数」的约束。 |
