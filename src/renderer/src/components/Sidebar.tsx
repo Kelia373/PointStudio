@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import type { ConversationDto } from '../../../shared/types/ipc.ts'
 import { filterConversations } from '../lib/filterConversations'
+import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
 import Icon from './Icon'
 
@@ -113,6 +114,7 @@ export default function Sidebar({
               </button>
             </li>
           ))}
+          <Slot name="sidebar.features" props={{ activePage: 'chat', navigate: () => undefined }} />
           <li>
             <button
               className="side__more"
@@ -131,6 +133,7 @@ export default function Sidebar({
         <div className="side__head">
           Agent Beach
           <span className="side__head-note">{assistants.length}</span>
+          <Slot name="sidebar.agents.header" props={{ count: assistants.length }} />
         </div>
         <ul className="side__plain">
           {assistants.length === 0 ? (
@@ -158,6 +161,7 @@ export default function Sidebar({
         <div className="side__head">
           Project
           <span className="side__head-note">未归类</span>
+          <Slot name="sidebar.projects.header" props={{ count: conversations.length }} />
         </div>
         <ul className="side__list">
           {visible.map((conversation) => (
@@ -191,6 +195,8 @@ export default function Sidebar({
           {conversations.length === 0 ? <li className="side__empty">还没有会话</li> : null}
         </ul>
       </section>
+
+      <Slot name="sidebar.bottom" props={{}} />
 
       <div className="side__foot">
         <button className="side__act" type="button" onClick={onOpenSettings} title="设置">

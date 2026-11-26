@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 
 import { EFFORT_LABEL, type Effort } from '../lib/modelOptions'
+import { Slot } from '../runtime/SlotRenderer'
 import Icon from './Icon'
 
 export default function Composer({
@@ -108,6 +109,8 @@ export default function Composer({
               ))}
             </select>
           </label>
+
+          <Slot name="chat.composer.toolbar" props={{ draft, busy }} />
 
           <span className="composer__spacer" />
           <button

@@ -18,6 +18,7 @@ import {
 } from '../lib/modelOptions'
 import { pendingHighRiskStepIds } from '../lib/planConfirm'
 import { reduceAgentEvent, type PlanRunState } from '../lib/planRunState'
+import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import AssistantPanel from './AssistantPanel'
 import Composer from './Composer'
@@ -520,6 +521,8 @@ export default function ChatPanel() {
             <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
           </button>
 
+          <Slot name="topbar.right" props={{ sessionId: activeId }} />
+
           <button
             className={`icon-btn${inspCollapsed ? '' : ' icon-btn--on'}`}
             type="button"
@@ -573,6 +576,8 @@ export default function ChatPanel() {
           </div>
         ) : null}
 
+        <Slot name="chat.banner" props={{ sessionId: activeId }} />
+
         {info ? (
           <div className="banner banner--info">
             <span className="banner__text">{info}</span>
@@ -625,7 +630,11 @@ export default function ChatPanel() {
                 }}
                 onDoubleClick={() => setContentWidth(720)}
               />
-              <EmptyState mode={mode} onPick={(text) => setDraft(text)} />
+              <Overridable
+                name="chat.empty"
+                fallback={EmptyState}
+                props={{ mode, onPick: (text: string) => setDraft(text) }}
+              />
             </div>
           </div>
         ) : (
@@ -665,20 +674,24 @@ export default function ChatPanel() {
                 onDoubleClick={() => setContentWidth(720)}
               />
               {messages.map((message, index) => (
-                <MessageBubble
+                <Overridable
                   key={message.id}
-                  index={index}
-                  role={message.role}
-                  content={message.content}
-                  streaming={message.status === 'streaming'}
-                  failed={message.status === 'error'}
-                  references={message.references}
-                  onReference={(chunkId) => void openReference(chunkId)}
-                  onCopy={() => void copyText(message.content)}
-                  onDelete={() => void removeTurn(message.id)}
-                  {...(message.role === 'user'
-                    ? { onResend: () => void submit(message.content) }
-                    : {})}
+                  name="chat.bubble"
+                  fallback={MessageBubble}
+                  props={{
+                    index,
+                    role: message.role,
+                    content: message.content,
+                    streaming: message.status === 'streaming',
+                    failed: message.status === 'error',
+                    references: message.references,
+                    onReference: (chunkId: string) => void openReference(chunkId),
+                    onCopy: () => void copyText(message.content),
+                    onDelete: () => void removeTurn(message.id),
+                    ...(message.role === 'user'
+                      ? { onResend: () => void submit(message.content) }
+                      : {})
+                  }}
                 />
               ))}
             </div>
@@ -701,61 +714,68 @@ export default function ChatPanel() {
           </div>
         )}
 
-        <Composer
-          draft={draft}
-          busy={busy}
-          canSend={!busy && draft.trim() !== '' && activeId !== null}
-          model={
-            activeConversation?.model ?? provider?.model ?? ''
-          }
-          models={modelChoices(
+        <Overridable
+          name="chat.composer"
+          fallback={Composer}
+          props={{
+          draft,
+          busy,
+          canSend: !busy && draft.trim() !== '' && activeId !== null,
+          model:
+            activeConversation?.model ?? provider?.model ?? '',
+          models: modelChoices(
             provider?.providerId ?? null,
             activeConversation?.model ?? provider?.model ?? null
-          )}
-          effort={effortFromMaxTokens(
+          ),
+          effort: effortFromMaxTokens(
             activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens
-          )}
-          onDraftChange={setDraft}
-          onModelChange={(next) => void applyModel({ model: next === '' ? null : next })}
-          onEffortChange={(level: Effort) =>
-            void applyModel({ params: { maxTokens: EFFORT_MAX_TOKENS[level] } })
-          }
-          onSend={() => void submit()}
-          onStop={() => {
+          ),
+          onDraftChange: setDraft,
+          onModelChange: (next: string) => void applyModel({ model: next === '' ? null : next }),
+          onEffortChange: (level: Effort) =>
+            void applyModel({ params: { maxTokens: EFFORT_MAX_TOKENS[level] } }),
+          onSend: () => void submit(),
+          onStop: () => {
             if (inflightId) {
               void window.pointstudio.chat.cancel(inflightId)
             }
+          },
+          onPlan: () => void runPlan()
           }}
-          onPlan={() => void runPlan()}
         />
       </main>
         </div>
       </div>
 
-      <Inspector
-        tab={inspTab}
-        onTab={setInspTab}
-        collapsed={inspCollapsed}
-        conversationTitle={activeConversation?.title ?? null}
-        assistantName={boundAssistant?.name ?? null}
-        mode={mode}
-        messageCount={messages.length}
-        referenceCount={referenceCount}
-        provider={provider}
-        effectiveModel={activeConversation?.model ?? provider?.model ?? ''}
-        effectiveMaxTokens={activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens}
-        modelFromSession={(activeConversation?.model ?? '') !== ''}
-        lastRunMs={lastRunMs}
-        onOpenPlan={() => setDrawer('plan')}
-        onConfirmPlan={() => void confirmAndResume()}
-        planRun={planRun}
-        mcpConnections={mcpConnections}
+      <Overridable
+        name="chat.inspector"
+        fallback={Inspector}
+        props={{
+        tab: inspTab,
+        onTab: setInspTab,
+        collapsed: inspCollapsed,
+        conversationTitle: activeConversation?.title ?? null,
+        assistantName: boundAssistant?.name ?? null,
+        mode,
+        messageCount: messages.length,
+        referenceCount,
+        provider,
+        effectiveModel: activeConversation?.model ?? provider?.model ?? '',
+        effectiveMaxTokens: activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens,
+        modelFromSession: (activeConversation?.model ?? '') !== '',
+        lastRunMs,
+        onOpenPlan: () => setDrawer('plan'),
+        onConfirmPlan: () => void confirmAndResume(),
+        planRun,
+        mcpConnections
+        }}
       />
+      <Slot name="shell.overlay" props={{}} />
 
       <footer className="appbar">
-        <span>引擎状态 · 待接</span>
+        <Slot name="appbar.left" props={{ mode, busy }} />
         <span className="appbar__spacer" />
-        <span>v0.0.0 · 占位</span>
+        <Slot name="appbar.right" props={{}} />
       </footer>
 
       {settingsOpen ? <SettingsPage onClose={() => setSettingsOpen(false)} /> : null}

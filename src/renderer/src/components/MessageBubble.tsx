@@ -1,5 +1,6 @@
 // 单条消息。纯展示组件：只有 props，没有状态、没有副作用。
 // 渲染层的硬规则——组件不碰存储、网络、模型。
+import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
 
 export type BubbleRole = 'user' | 'assistant'
@@ -86,6 +87,7 @@ export default function MessageBubble({
             onConfirm={onDelete}
           />
         ) : null}
+        <Slot name="chat.message.actions" props={{ role, content, at: at ?? null }} />
       </div>
     </article>
   )
