@@ -29,6 +29,7 @@ export interface ConversationServiceDeps {
 export interface CreateConversationInput {
   title?: string
   assistantId?: string | null
+  workspaceId?: string | null
 }
 
 export interface AppendMessageInput {
@@ -80,6 +81,7 @@ export class ConversationService {
       id: this.deps.newId(),
       title,
       assistantId: input.assistantId ?? null,
+      workspaceId: input.workspaceId ?? null,
       createdAt: now,
       updatedAt: now
     }

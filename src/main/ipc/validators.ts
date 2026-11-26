@@ -45,7 +45,13 @@ export function isCreateConversationRequest(
   if (!isObject(value)) {
     return false
   }
-  return value.title === undefined || typeof value.title === 'string'
+  const optionalId = (field: unknown): boolean =>
+    field === undefined || field === null || typeof field === 'string'
+  return (
+    (value.title === undefined || typeof value.title === 'string') &&
+    optionalId(value.assistantId) &&
+    optionalId(value.workspaceId)
+  )
 }
 
 export function isAssistantDraft(value: unknown): value is AssistantDraft {

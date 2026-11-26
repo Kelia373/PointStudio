@@ -100,10 +100,44 @@ export interface ConversationParamsDto {
   topP?: number
 }
 
+/** 升档梯队中的一棒：候选模型与其预估成功率 / 成本。 */
+export interface EscalationStepDto {
+  model: string
+  providerId?: ProviderIdDto
+  pSuccess: number
+  estCostUsd?: number
+}
+
+/** PandaOrchestrator 协同路由的决策结果：纯 JSON，跨进程与跨语言均可直传。 */
+export interface RouteDecisionDto {
+  traceId: string
+  chosenModel: string
+  providerId?: ProviderIdDto
+  /** 如 "policy:cheapest_above_threshold" / "static:session"。 */
+  decidedBy: string
+  /** 预估成功率 0~1。 */
+  confidence: number
+  difficulty: {
+    /** 1~10。 */
+    level: number
+    /** implementation / debugging / architecture / explanation … */
+    category: string
+  }
+  estCostUsd?: number
+  estLatencyMs?: number
+  /** 当前处于升档阶梯第几棒，缺省 1。 */
+  attempt?: number
+  /** 发生失败自动升档时，上一棒失败的模型名。 */
+  escalatedFrom?: string
+  escalationLadder?: EscalationStepDto[]
+}
+
 export interface ConversationDto {
   id: string
   title: string
   assistantId: string | null
+  /** 挂载的项目（工作区）；缺省或 null 表示「主聊天（未挂载项目）」。 */
+  workspaceId?: string | null
   /** 会话级模型覆盖；缺省表示跟随助手 / 全局默认。 */
   model?: string | null
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
@@ -123,6 +157,8 @@ export interface MessageDto {
   role: 'user' | 'assistant'
   content: string
   status: 'complete' | 'error'
+  /** 该轮由协同路由产生的决策；旧消息与直连模型没有这个字段。 */
+  route?: RouteDecisionDto
   /** 回答引用的检索片段；旧消息没有这个字段。 */
   references?: MessageReferenceDto[]
   createdAt: string
@@ -136,6 +172,10 @@ export type IpcResult<T> = { ok: true; value: T } | { ok: false; code: string }
 
 export interface CreateConversationRequest {
   title?: string
+  /** 创建时就绑定助手；缺省为裸聊。 */
+  assistantId?: string | null
+  /** 创建时就挂到某个项目；缺省为未挂载。 */
+  workspaceId?: string | null
 }
 
 export interface ConversationBridge {
@@ -274,6 +314,8 @@ export interface AgentStepDetailDto {
   tool?: string
   durationMs?: number
   code?: string
+  /** 该步骤的路由决策；直连模型时缺省。 */
+  route?: RouteDecisionDto
 }
 
 export type AgentEventDto =

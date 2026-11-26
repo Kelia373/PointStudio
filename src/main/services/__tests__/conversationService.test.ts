@@ -258,3 +258,25 @@ test('没有引用来源的消息保持 undefined，旧数据依然可读', asyn
     assert.equal(messages[0].references, undefined)
   })
 })
+
+test('创建时带 workspaceId 能原样读回，且经磁盘重开仍在', async () => {
+  await withService(async ({ service, reopen }) => {
+    const created = await service.create({ workspaceId: 'ws-alpha' })
+    assert.equal(created.ok, true)
+    if (!created.ok) return
+
+    assert.equal(created.value.workspaceId, 'ws-alpha')
+
+    const reloaded = await reopen().get(created.value.id)
+    assert.equal(reloaded?.workspaceId, 'ws-alpha')
+  })
+})
+
+test('不带 workspaceId 时保持缺省，旧数据依然可读', async () => {
+  await withService(async ({ service }) => {
+    const created = await service.create({})
+    if (!created.ok) return
+
+    assert.equal(created.value.workspaceId ?? null, null)
+  })
+})

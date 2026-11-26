@@ -19,6 +19,8 @@ export interface Conversation {
   title: string
   /** 绑定的助手；null 表示不用助手（裸聊天）。 */
   assistantId: string | null
+  /** 挂载的项目；缺省或 null 表示未挂载（主聊天 / 临时会话）。 */
+  workspaceId?: string | null
   /**
    * 会话级模型覆盖。空表示跟随助手 / 全局默认。
    * 模型是「这次执行用什么」，所以跟着会话走，而不是全局一刀切。
