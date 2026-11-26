@@ -133,7 +133,7 @@ src/
 
 ### Step 5：内置组件入表、插槽落位与 `ChatPanel` 瘦身
 
-**目标**：把 `ChatPanel.tsx` 接入 `studioStore` 与 `SlotRenderer`，行数压到 ≤450 行，10 个插槽与 5 个 `<Overridable>` 全部就位。
+**目标**：把 `ChatPanel.tsx` 接入 `studioStore` 与 `SlotRenderer`，实现**细粒度订阅与渲染隔离**（流式吐字时历史消息与侧栏 0 重绘，不以文件行数作为考核指标），10 个插槽与 5 个 `<Overridable>` 全部就位。
 
 1. 在 `ChatPanel.tsx` / `Sidebar.tsx` / `Composer.tsx` / `MessageBubble.tsx` 中埋入 `<Slot>` 与 `<Overridable>`：
    - 消息气泡用 `<Overridable name="chat.bubble" fallback={MessageBubble} props={...} />` 渲染，内部操作栏末尾挂 `<Slot name="chat.message.actions" ... />`；
