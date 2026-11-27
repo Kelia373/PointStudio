@@ -10,3 +10,14 @@ declare module '*.svg?raw' {
   const content: string
   export default content
 }
+
+// 打包后的资源地址：WebP 头像按 URL 交给 <img>，字体交给 CSS 的 url()。
+declare module '*.webp' {
+  const src: string
+  export default src
+}
+
+declare module '*.woff2' {
+  const src: string
+  export default src
+}

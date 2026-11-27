@@ -16,6 +16,11 @@ export default defineConfig({
       alias: { '@renderer': resolve('src/renderer/src') }
     },
     plugins: [react()],
+    build: {
+      // 头像 / 字体这类素材要产出独立文件：默认 4KB 以下会内联成 base64，
+      // 26 张头像直接把 renderer 包撑大 100KB+，也没法单独缓存。
+      assetsInlineLimit: 0
+    },
     server: {
       // 本仓库所在的目录收不到 Windows 原生文件通知，热更新因此不触发。
       // 改用轮询：代价是轻微 CPU，换来「保存即生效」。
