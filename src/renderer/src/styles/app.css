@@ -3815,3 +3815,10 @@ select:focus {
   color: var(--fg-3);
   font-size: var(--fs-xs);
 }
+
+.plan-lens__hint {
+  margin: 0;
+  padding: 0 var(--sp-3) var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+}

@@ -12,7 +12,8 @@ export default function PlanLens({
   run,
   elapsedMs,
   onConfirm,
-  canConfirm = true
+  canConfirm = true,
+  modeHint = null
 }: {
   run: PlanRunState | null
   /** 这一轮的耗时（毫秒）；未知就不显示。 */
@@ -21,6 +22,8 @@ export default function PlanLens({
   onConfirm: () => void
   /** plan-only 模式不给执行入口。 */
   canConfirm?: boolean
+  /** 为什么没有执行入口，例如「仅规划模式」。 */
+  modeHint?: string | null
 }) {
   const [open, setOpen] = useState(false)
   const view = planLensView(run, { elapsedMs })
@@ -50,6 +53,10 @@ export default function PlanLens({
           </button>
         ) : null}
       </div>
+
+      {view.needsConfirm && modeHint ? (
+        <p className="plan-lens__hint">{modeHint}</p>
+      ) : null}
 
       {open ? (
         <ol className="plan-lens__steps">

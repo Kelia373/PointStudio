@@ -545,10 +545,14 @@ export default function ChatPanel() {
     if (mode === 'plan-only') {
       return
     }
+    const required = stepsRequiringApproval(plan, mode)
     const ids =
       mode === 'full-access'
         ? autoConfirmedStepIdsForMode(plan, mode)
-        : stepsRequiringApproval(plan, mode)
+        : mode === 'ask'
+          ? // 逐次确认：一次只放行当前第一个受阻步骤，点一下前进一格
+            required.slice(0, 1)
+          : required
     await runPlan(plan.goal, ids)
   }
 
@@ -755,7 +759,7 @@ export default function ChatPanel() {
   const permissionMode = boundAssistant?.permissionMode ?? 'smart'
   const canConfirmPlan = permissionMode !== 'plan-only'
 
-  // full-access：计划因待确认停住时自动放行；同一 goal 最多两次，避免无限空转
+  // full-access：主进程已对它全部放行，正常不会停；这段仅防御旧版主进程或未来门控变化
   const autoResume = useRef<{ goal: string; count: number }>({ goal: '', count: 0 })
   useEffect(() => {
     if (permissionMode !== 'full-access' || planRun?.status !== 'stopped' || !planRun.plan) {
@@ -1327,6 +1331,11 @@ export default function ChatPanel() {
           run={planRun}
           elapsedMs={lastRunMs}
           canConfirm={canConfirmPlan}
+          modeHint={
+            permissionMode === 'plan-only'
+              ? '仅规划模式不会执行工具步骤；切换到其它权限模式后可继续。'
+              : null
+          }
           onConfirm={() => void confirmAndResume()}
         />
 

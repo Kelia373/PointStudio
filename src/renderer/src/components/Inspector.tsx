@@ -271,12 +271,16 @@ export default function Inspector({
                       </span>
                     </div>
                   ))}
+                  {planRun.status === 'stopped' && !canConfirmPlan ? (
+                    <p className="insp__empty">
+                      仅规划模式不会执行工具步骤；切换到其它权限模式后可继续。
+                    </p>
+                  ) : null}
                   <div className="insp__actions">
                     <button className="insp__action" type="button" onClick={onOpenPlan}>
                       打开计划面板
                     </button>
-                    {planRun.status === 'stopped' && canConfirmPlan ? (
-                      <button
+                    {planRun.status === 'stopped' && canConfirmPlan ? (                      <button
                         className="insp__action insp__action--main"
                         type="button"
                         onClick={onConfirmPlan}

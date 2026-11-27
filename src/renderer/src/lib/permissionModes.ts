@@ -29,7 +29,7 @@ export const PERMISSION_MODE_META: Record<AgentPermissionMode, PermissionModeMet
   },
   'auto-edit': {
     label: '自动接受编辑',
-    description: '可自由编辑文件，执行命令前询问。',
+    description: '当前内置工具尚无可编辑能力，暂与「智能批准」相同。',
     tone: 'neutral'
   },
   smart: {
