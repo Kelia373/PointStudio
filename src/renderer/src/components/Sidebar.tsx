@@ -72,7 +72,8 @@ export default function Sidebar({
   planSessionId,
   workerRuns,
   onInspectWorkerRun,
-  onCreateAgent
+  onCreateAgent,
+  assistantsLoaded
 }: {
   conversations: ConversationDto[]
   assistants: AssistantDto[]
@@ -108,6 +109,8 @@ export default function Sidebar({
   onInspectWorkerRun?: (run: AgentWorkerRunDto) => void
   /** 新建 Agent：展开对话区的内联创建表单。 */
   onCreateAgent: () => void
+  /** 助手列表是否已从主进程加载完；未加载时不能修剪小组。 */
+  assistantsLoaded: boolean
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
@@ -309,14 +312,21 @@ export default function Sidebar({
   }
   const [projectAxis, setProjectAxis] = useState<string | null | 'unmounted'>(null)
 
-  // 小组只存本机；成员列表跟随助手删除自动修剪
+  // 小组只存本机；成员列表跟随助手删除自动修剪。
+  // 关键：助手列表没加载完时 assistants=[]，此时修剪会把整组人当幽灵清空并写盘。
   useEffect(() => {
-    window.localStorage.setItem(AGENT_GROUPS_KEY, JSON.stringify(groups))
-  }, [groups])
+    if (!assistantsLoaded) {
+      return
+    }
+    setGroups((current) => normalizeGroups(current, assistants))
+  }, [assistants, assistantsLoaded])
 
   useEffect(() => {
-    setGroups((current) => normalizeGroups(current, assistants))
-  }, [assistants])
+    if (!assistantsLoaded) {
+      return
+    }
+    window.localStorage.setItem(AGENT_GROUPS_KEY, JSON.stringify(groups))
+  }, [groups, assistantsLoaded])
 
   const filteredAgents = useMemo(
     () => sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode),
@@ -819,7 +829,11 @@ export default function Sidebar({
                         <ul className="side__plain side__group-members">
                           {members.map((agent) => renderAgentRow(agent, group.id))}
                           {members.length === 0 ? (
-                            <li className="side__empty">把 Agent 头像拖到这里</li>
+                            <li className="side__empty">
+                              {group.memberIds.length === 0
+                                ? '把 Agent 头像拖到这里'
+                                : '组内没有匹配的 Agent'}
+                            </li>
                           ) : null}
                         </ul>
                       )}

@@ -3447,3 +3447,14 @@ select:focus {
   color: var(--fg-3);
   font-size: var(--fs-xs);
 }
+
+.side__group-new {
+  padding: 1px var(--sp-2) 2px var(--sp-5);
+}
+
+.side__group-new input {
+  width: 100%;
+  height: 22px;
+  padding: 0 var(--sp-1);
+  font-size: var(--fs-sm);
+}

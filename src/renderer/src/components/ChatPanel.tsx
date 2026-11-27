@@ -142,6 +142,8 @@ export default function ChatPanel() {
   // 用户往上滚时暂停自动滚底，否则生成过程中根本读不了前文
   const [pinnedToBottom, setPinnedToBottom] = useState(true)
   const [assistants, setAssistants] = useField('assistants')
+  // 助手列表是异步拉的：没加载完之前不能拿空数组去修剪小组归属
+  const [assistantsLoaded, setAssistantsLoaded] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
   const [chunkPreview, setChunkPreview] = useState<{
@@ -294,7 +296,9 @@ export default function ChatPanel() {
   }, [])
 
   const refreshAssistants = useCallback(async (): Promise<void> => {
-    setAssistants(await window.pointstudio.assistants.list())
+    const list = await window.pointstudio.assistants.list()
+    setAssistants(list)
+    setAssistantsLoaded(true)
   }, [])
 
   const refreshProvider = useCallback(async (): Promise<void> => {
@@ -1085,6 +1089,7 @@ export default function ChatPanel() {
               )
             }}
             onCreateAgent={() => setDrafting(true)}
+            assistantsLoaded={assistantsLoaded}
           />
 
           <main
