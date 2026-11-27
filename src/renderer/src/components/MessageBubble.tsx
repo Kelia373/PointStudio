@@ -1,9 +1,10 @@
 // 单条消息。纯展示组件：只有 props，没有状态、没有副作用。
 // 渲染层的硬规则——组件不碰存储、网络、模型。
-import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
+import type { HandoffEnvelopeDto, RouteDecisionDto } from '../../../shared/types/ipc.ts'
 import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
 import DualTrack from './DualTrack'
+import HandoffPill from './HandoffPill'
 import MemorySpark from './MemorySpark'
 import RouteBadge from './RouteBadge'
 
@@ -23,7 +24,11 @@ export default function MessageBubble({
   onReference,
   onEscalate,
   route,
-  memory
+  memory,
+  handoff = null,
+  handoffFrom = '主人',
+  handoffTo = '',
+  onOpenInSplit
 }: {
   role: BubbleRole
   content: string
@@ -51,7 +56,23 @@ export default function MessageBubble({
     agentName: string
     onChanged: () => void
   }
+  /** 有交接信封时整条消息渲染成一行瘦胶囊，不显示普通聊天气泡。 */
+  handoff?: HandoffEnvelopeDto | null
+  handoffFrom?: string
+  handoffTo?: string
+  onOpenInSplit?: () => void
 }) {
+  if (handoff) {
+    return (
+      <HandoffPill
+        handoff={handoff}
+        fromName={handoffFrom}
+        toName={handoffTo}
+        onOpenInSplit={onOpenInSplit}
+      />
+    )
+  }
+
   return (
     <article
       className={`msg msg--${role}${failed ? ' msg--failed' : ''}`}

@@ -32,12 +32,27 @@ import { appbarLeft, appbarRight } from '../lib/appbarStatus'
 import { copyAgentName, uniqueAgentName, type AgentClipPayload } from '../lib/agentClipboard'
 import { downloadText, exportFileName } from '../lib/exportFile'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
-import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
-import AssistantPanel from './AssistantPanel'
+import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
+import { deriveActiveWorkerRuns } from '../lib/workerRuns'
+import { buildMissionChains, filterMessagesByMission } from '../lib/missionTrace'
+import { buildHandoffEnvelope } from '../lib/handoff'
+import {
+  SPLIT_DEFAULT_RATIO,
+  SPLIT_MARKDOWN_KEY,
+  SPLIT_STORAGE_KEY,
+  parseSplitState,
+  reconcileSplitSession,
+  setSecondaryTarget,
+  setSplitRatio,
+  toggleSplitPane,
+  type SplitPaneState
+} from '../lib/splitView'
+import type { RouteDecisionDto, HandoffEnvelopeDto } from '../../../shared/types/ipc.ts'
 import Composer from './Composer'
 import EmptyState from './EmptyState'
 import Icon from './Icon'
 import Inspector, { type InspectorTab } from './Inspector'
+import SecondaryPane from './SecondaryPane'
 import SettingsPage from './SettingsPage'
 import MessageBubble from './MessageBubble'
 import PlanPanel from './PlanPanel'
@@ -45,8 +60,56 @@ import SettingsPanel from './SettingsPanel'
 import Sidebar from './Sidebar'
 import WorkspacePanel from './WorkspacePanel'
 
-type Drawer = 'settings' | 'assistants' | 'workspace' | 'plan' | null
+type Drawer = 'settings' | 'workspace' | 'plan' | null
 type Theme = 'dark' | 'light'
+
+const HANDOFF_STORAGE_KEY = 'pointstudio.handoffs'
+
+interface StoredHandoff {
+  sessionId: string
+  /** 交接发生在哪条消息之后：刷新/落库后插回原位，而不是永远漂在末尾。 */
+  afterMessageId?: string | null
+  message: UiMessage
+}
+
+/** 交接记录只存在本机：主进程还没有任务链表，界面不能假装它落库了。 */
+function readHandoffs(): StoredHandoff[] {
+  try {
+    const raw = window.localStorage.getItem(HANDOFF_STORAGE_KEY)
+    const parsed: unknown = raw ? JSON.parse(raw) : []
+    if (!Array.isArray(parsed)) {
+      return []
+    }
+    return capHandoffs(
+      parsed.filter(
+        (item): item is StoredHandoff =>
+          typeof item === 'object' &&
+          item !== null &&
+          typeof (item as StoredHandoff).sessionId === 'string' &&
+          typeof (item as StoredHandoff).message?.handoff === 'object' &&
+          (item as StoredHandoff).message.handoff !== null
+      )
+    )
+  } catch {
+    return []
+  }
+}
+
+/** 每个会话各留最近 50 条；按整份数组切会把别的会话一起挤掉。 */
+function capHandoffs(items: StoredHandoff[]): StoredHandoff[] {
+  const kept = new Map<string, number>()
+  const out: StoredHandoff[] = []
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    const count = kept.get(item.sessionId) ?? 0
+    if (count >= 50) {
+      continue
+    }
+    kept.set(item.sessionId, count + 1)
+    out.unshift(item)
+  }
+  return out
+}
 
 function readTheme(): Theme {
   const stored = window.localStorage.getItem('pointstudio.theme')
@@ -69,6 +132,8 @@ export default function ChatPanel() {
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useField('busy')
   const [inflightId, setInflightId] = useField('inflightId')
+  // 流式时正在输出的是哪条会话（inflightId 是 requestId，不能拿来比会话）
+  const [inflightConversationId, setInflightConversationId] = useState<string | null>(null)
   const [mode, setMode] = useField('mode')
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
@@ -101,6 +166,17 @@ export default function ChatPanel() {
   const [autoRoute, setAutoRoute] = useState(false)
   // 从右键菜单点「智能体设置」时要定位到的 Agent
   const [agentFocus, setAgentFocus] = useState<string | null>(null)
+  // 主群按任务链过滤：null = 全部
+  const [missionFilter, setMissionFilter] = useState<string | null>(null)
+  // 本机交接记录：主进程还没有任务链表，先按会话存 localStorage
+  const [handoffs, setHandoffs] = useState<StoredHandoff[]>(readHandoffs)
+  // 左右分屏：状态留在渲染层，只持久化形态与比例；Markdown 草稿单独存一份
+  const [split, setSplit] = useState<SplitPaneState>(() => {
+    const stored = parseSplitState(window.localStorage.getItem(SPLIT_STORAGE_KEY))
+    return { ...stored, markdownText: window.localStorage.getItem(SPLIT_MARKDOWN_KEY) ?? '' }
+  })
+  const [splitDragging, setSplitDragging] = useState(false)
+  const splitRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     registerBuiltinPages()
@@ -139,6 +215,24 @@ export default function ChatPanel() {
   const runStartedAt = useRef<number | null>(null)
   const resizeStart = useRef<{ x: number; width: number } | null>(null)
 
+  /** 副画布的所有变更都从这里过：保持纯函数语义，内容没变就不造新对象。 */
+  const updateSplit = useCallback(
+    (
+      patch: Partial<
+        Pick<SplitPaneState, 'kind' | 'sessionId' | 'pageId' | 'markdownText' | 'traceMissionId'>
+      >
+    ): void => {
+      setSplit((current) => {
+        const withText =
+          patch.markdownText !== undefined && patch.markdownText !== current.markdownText
+            ? { ...current, markdownText: patch.markdownText }
+            : current
+        return setSecondaryTarget(withText, patch)
+      })
+    },
+    []
+  )
+
   const listRef = useRef<HTMLDivElement>(null)
   const activeIdRef = useRef<string | null>(null)
   activeIdRef.current = activeId
@@ -151,6 +245,44 @@ export default function ChatPanel() {
     document.documentElement.dataset['theme'] = theme
     window.localStorage.setItem('pointstudio.theme', theme)
   }, [theme])
+
+  // 分屏形态与比例落盘；Markdown 草稿单独一个键，拖分隔条时不必反复写大段文本
+  useEffect(() => {
+    window.localStorage.setItem(SPLIT_MARKDOWN_KEY, split.markdownText)
+  }, [split.markdownText])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      SPLIT_STORAGE_KEY,
+      JSON.stringify({
+        enabled: split.enabled,
+        kind: split.kind,
+        sessionId: split.sessionId,
+        pageId: split.pageId,
+        traceMissionId: split.traceMissionId,
+        ratio: split.ratio
+      })
+    )
+  }, [
+    split.enabled,
+    split.kind,
+    split.sessionId,
+    split.pageId,
+    split.traceMissionId,
+    split.ratio
+  ])
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      HANDOFF_STORAGE_KEY,
+      JSON.stringify(handoffs.slice(-50))
+    )
+  }, [handoffs])
+
+  // 会话被删或切换后，副画布不能停在一条不存在的会话上
+  useEffect(() => {
+    setSplit((current) => reconcileSplitSession(current, conversations, activeId))
+  }, [conversations, activeId])
 
   const reloadConversations = useCallback(async (): Promise<ConversationDto[]> => {
     const items = await window.pointstudio.conversations.list()
@@ -194,6 +326,7 @@ export default function ChatPanel() {
       setMessages((prev) => markStatus(prev, id, 'complete'))
       setBusy(false)
       setInflightId(null)
+      setInflightConversationId(null)
       if (runStartedAt.current !== null) {
         setLastRunMs(Date.now() - runStartedAt.current)
         runStartedAt.current = null
@@ -218,6 +351,7 @@ export default function ChatPanel() {
       setMessages((prev) => markStatus(prev, id, 'error', `（${describeError(code)}）`))
       setBusy(false)
       setInflightId(null)
+      setInflightConversationId(null)
       runStartedAt.current = null
     })
 
@@ -335,6 +469,9 @@ export default function ChatPanel() {
     }
     setBusy(true)
     setInflightId(requestId)
+    setInflightConversationId(conversationId)
+    // 发新消息时退出任务链过滤，否则刚发的这句会被过滤掉
+    setMissionFilter(null)
     runStartedAt.current = Date.now()
     setError(null)
 
@@ -346,6 +483,7 @@ export default function ChatPanel() {
     setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
     setBusy(false)
     setInflightId(null)
+    setInflightConversationId(null)
     runStartedAt.current = null
   }
 
@@ -371,14 +509,14 @@ export default function ChatPanel() {
       return
     }
     const id = crypto.randomUUID()
-    setPlanRun({ id, plan: null, status: 'running' })
+    setPlanRun({ id, plan: null, status: 'running', sessionId: activeId })
     setDraft('')
     setInspTab('run')
     setInspCollapsed(false)
     // 不再弹遮罩抽屉：计划在消息流里原地展开，检查器要一直看得见
     const result = await window.pointstudio.agent.run({ id, goal, confirmedStepIds })
     if (!result.ok) {
-      setPlanRun({ id, plan: null, status: 'failed' })
+      setPlanRun({ id, plan: null, status: 'failed', sessionId: activeId })
     }
   }
 
@@ -603,9 +741,85 @@ export default function ChatPanel() {
     setDrawer(null)
   }
 
+  /** 点交接胶囊的「右屏盯盘」：直接开分屏并切到这条任务链。 */
+  function openHandoff(handoff: HandoffEnvelopeDto): void {
+    setSplit((current) =>
+      setSecondaryTarget(toggleSplitPane(current, true), {
+        kind: 'trace',
+        traceMissionId: handoff.missionId
+      })
+    )
+  }
+
   const activeConversation = conversations.find((item) => item.id === activeId) ?? null
   const boundAssistant =
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
+
+  // 顶栏派遣胶囊与侧栏共用同一套判定：状态灯不能两处各算一遍
+  const agentLights = useMemo(() => {
+    const lights = new Map<string, AgentLightState>()
+    for (const assistant of assistants) {
+      lights.set(
+        assistant.id,
+        computeAgentBenchStatus(assistant.id, conversations, inflightConversationId, {
+          enabled: assistant.enabled !== false,
+          planStatus: planRun?.status ?? null,
+          // 计划灯认发起会话，不认当前选中会话
+          activeSessionId: planRun?.sessionId ?? null
+        }).state
+      )
+    }
+    return lights
+  }, [assistants, conversations, inflightConversationId, planRun?.status, planRun?.sessionId])
+
+  // 真实并发泳道：只从「正在流式」与「计划在跑/停/失败」派生，没有活跃就是空
+  const workerRuns = useMemo(
+    () => deriveActiveWorkerRuns({ conversations, inflightConversationId, planRun }),
+    [conversations, inflightConversationId, planRun]
+  )
+  // 任务链只由真实消息里的 handoff / missionId 聚合；普通单聊这里是空的
+  const mergedMessages = useMemo(() => {
+    const extras = handoffs.filter((item) => item.sessionId === activeId)
+    if (extras.length === 0) {
+      return messages
+    }
+    // 主进程将来也写 handoff 时，按 handoffId 去重，避免同一条渲染两次
+    const onDisk = new Set(
+      messages
+        .map((message) => message.handoff?.handoffId)
+        .filter((id): id is string => typeof id === 'string')
+    )
+    const merged = [...messages]
+    for (const extra of extras) {
+      const handoff = extra.message.handoff
+      if (handoff && onDisk.has(handoff.handoffId)) {
+        continue
+      }
+      const anchor = extra.afterMessageId ?? null
+      const index = anchor === null ? -1 : merged.findIndex((item) => item.id === anchor)
+      if (index >= 0) {
+        merged.splice(index + 1, 0, extra.message)
+      } else {
+        merged.push(extra.message)
+      }
+    }
+    return merged
+  }, [messages, handoffs, activeId])
+  const missionChains = useMemo(
+    () => buildMissionChains(mergedMessages, workerRuns).filter((chain) => chain.messageCount > 0),
+    [mergedMessages, workerRuns]
+  )
+  const visibleMessages = useMemo(
+    () => filterMessagesByMission(mergedMessages, missionFilter),
+    [mergedMessages, missionFilter]
+  )
+  const agentNameOf = useCallback(
+    (agentId: string): string =>
+      agentId === 'owner'
+        ? '主人'
+        : assistants.find((item) => item.id === agentId)?.name ?? agentId,
+    [assistants]
+  )
 
   // 私域记忆：钉入后 memoryTick 变化，唤醒条立刻刷新。
   const lastRouteDecision = useStudioSlice((state) => state.lastRouteDecision)
@@ -613,6 +827,11 @@ export default function ChatPanel() {
   const [wakeDismissed, setWakeDismissed] = useState(false)
   useEffect(() => {
     setWakeDismissed(false)
+  }, [activeId])
+
+  // 切会话就退出任务链过滤：否则新会话里一条消息都不显示
+  useEffect(() => {
+    setMissionFilter(null)
   }, [activeId])
   // 最近一次路由决策：优先取消息上记录的，其次取 store 里的。
   const lastRoute = useMemo(() => {
@@ -673,20 +892,58 @@ export default function ChatPanel() {
 
           <DispatchPill
             agentName={boundAssistant?.name ?? null}
+            agentState={
+              boundAssistant ? (agentLights.get(boundAssistant.id) ?? 'idle') : null
+            }
             projectName={null}
             // 停用的 Agent 不再进派发候选，但仍在侧栏里看得到、可重新启用
             agents={assistants
               .filter((assistant) => assistant.enabled !== false)
-              .map((assistant) => ({ id: assistant.id, name: assistant.name }))}
+              .map((assistant) => ({
+                id: assistant.id,
+                name: assistant.name,
+                state: agentLights.get(assistant.id) ?? 'idle'
+              }))}
             activeAgentId={activeConversation?.assistantId ?? null}
             onPickAgent={(agentId) => {
               if (!activeId) {
                 return
               }
               void (async () => {
+                const previous = boundAssistant
+                const missionId = activeId
                 await bindAssistant(agentId ?? '')
-                const picked = assistants.find((assistant) => assistant.id === agentId)
+                const picked = assistants.find((assistant) => assistant.id === agentId) ?? null
                 setInfo(picked ? `已交接给 ${picked.name} 继续处理` : '已退回默认对话')
+                if (!picked || picked.id === previous?.id) {
+                  return
+                }
+                // 真的换人接手才写交接记录：会话里留一条可追的 Handoff，而不是 3 秒后消失的横幅
+                const handoff = buildHandoffEnvelope({
+                  handoffId: crypto.randomUUID(),
+                  missionId,
+                  previous: previous ? { id: previous.id, name: previous.name } : null,
+                  next: { id: picked.id, name: picked.name },
+                  messages
+                })
+                setHandoffs((prev) =>
+                  capHandoffs([
+                    ...prev,
+                    {
+                      sessionId: missionId,
+                      afterMessageId: messages.length > 0 ? messages[messages.length - 1].id : null,
+                      message: {
+                        id: `local-handoff-${handoff.handoffId}`,
+                        role: 'assistant',
+                        content: '',
+                        status: 'complete',
+                        missionId,
+                        handoff
+                      }
+                    }
+                  ])
+                )
+                setMissionFilter(null)
               })()
             }}
             onOpenProject={() => setDrawer('workspace')}
@@ -756,6 +1013,29 @@ export default function ChatPanel() {
           <Slot name="topbar.right" props={{ sessionId: activeId }} />
 
           <button
+            className={`icon-btn${split.enabled ? ' icon-btn--on' : ''}`}
+            type="button"
+            aria-pressed={split.enabled}
+            onClick={() =>
+              setSplit((current) => {
+                const next = toggleSplitPane(current)
+                // 首次打开时给一个有意义的默认会话；空选择由用户显式挑，不自动回填
+                if (next.enabled && next.sessionId === null && conversations.length > 0) {
+                  const pick =
+                    conversations.find((conversation) => conversation.id !== activeId) ??
+                    conversations[0]
+                  return setSecondaryTarget(next, { sessionId: pick.id })
+                }
+                return next
+              })
+            }
+            title={split.enabled ? '关闭左右分屏' : '左右分屏：并排看会话 / 功能页 / 草稿'}
+            aria-label="切换左右分屏"
+          >
+            <Icon name="panel-right" />
+          </button>
+
+          <button
             className={`icon-btn${inspCollapsed ? '' : ' icon-btn--on'}`}
             type="button"
             onClick={() => setInspCollapsed((value) => !value)}
@@ -782,8 +1062,10 @@ export default function ChatPanel() {
             onRemove={(id) => void removeConversation(id)}
             assistants={assistants}
             onAgentSettings={(id) => {
+              // 不再弹遮罩抽屉：把右侧检查器切到「智能体」视图，原地编辑
               setAgentFocus(id)
-              setDrawer('assistants')
+              setInspCollapsed(false)
+              setInspTab('agent')
             }}
             onRenameAgent={(id, name) => updateAgent(id, { name })}
             onSetAgentEnabled={async (id, enabled) => {
@@ -795,10 +1077,30 @@ export default function ChatPanel() {
             onOpenWorkspace={() => setDrawer('workspace')}
             activePage={activePage}
             onNavigate={setActivePage}
-            inflightId={inflightId}
+            inflightId={inflightConversationId}
+            planStatus={planRun?.status ?? null}
+            planSessionId={planRun?.sessionId ?? null}
+            workerRuns={workerRuns}
+            onInspectWorkerRun={(run) => {
+              // 子泳道 → 右屏定位到对应会话，左屏主群不跳
+              setSplit((current) =>
+                setSecondaryTarget(toggleSplitPane(current, true), {
+                  kind: 'session',
+                  sessionId: run.sessionId
+                })
+              )
+            }}
           />
 
-          <main className="main" style={{ ['--content-w' as string]: `${contentWidth}px` }}>
+          <main
+            ref={splitRef}
+            className={`main${split.enabled ? ' main--split' : ''}`}
+            style={{
+              ['--content-w' as string]: `${contentWidth}px`,
+              ['--split-ratio' as string]: String(split.ratio)
+            }}
+          >
+            <div className="pane pane--main">
         {ActivePageComponent && activePageEntry ? (
           <PluginErrorBoundary pluginId={activePageEntry.pluginId}>
             <ActivePageComponent navigate={setActivePage} />
@@ -833,6 +1135,43 @@ export default function ChatPanel() {
 
         <Slot name="chat.banner" props={{ sessionId: activeId }} />
 
+        {missionChains.length > 0 ? (
+          <div className="mission-bar" role="group" aria-label="任务链过滤">
+            <button
+              className={`mission-chip${missionFilter === null ? ' is-on' : ''}`}
+              type="button"
+              onClick={() => setMissionFilter(null)}
+            >
+              全部
+            </button>
+            {missionChains.map((chain) => (
+              <button
+                key={chain.missionId}
+                className={`mission-chip${missionFilter === chain.missionId ? ' is-on' : ''}`}
+                type="button"
+                title={chain.title}
+                aria-pressed={missionFilter === chain.missionId}
+                onClick={() =>
+                  setMissionFilter(missionFilter === chain.missionId ? null : chain.missionId)
+                }
+              >
+                <span className="mission-chip__title">{chain.title}</span>
+                <span className="mission-chip__meta">
+                  {chain.status === 'working'
+                    ? `${chain.activeRunCount} 个在跑`
+                    : chain.status === 'waiting'
+                      ? '等待确认'
+                      : chain.status === 'error'
+                        ? '异常'
+                        : chain.status === 'queued'
+                          ? '排队中'
+                          : '已完成'}
+                </span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
         {info ? (
           <div className="banner banner--info">
             <span className="banner__text">{info}</span>
@@ -858,7 +1197,7 @@ export default function ChatPanel() {
           </div>
         ) : null}
 
-        {messages.length === 0 ? (
+        {mergedMessages.length === 0 ? (
           <div className="stream stream--empty">
             <div className="stream__inner stream__inner--empty">
               <div
@@ -929,7 +1268,15 @@ export default function ChatPanel() {
                 }}
                 onDoubleClick={() => setContentWidth(720)}
               />
-              {messages.map((message, index) => (
+              {visibleMessages.length === 0 ? (
+                <div className="mission-empty">
+                  <span>这条任务链在当前会话里没有消息。</span>
+                  <button className="mission-chip" type="button" onClick={() => setMissionFilter(null)}>
+                    看全部
+                  </button>
+                </div>
+              ) : null}
+              {visibleMessages.map((message, index) => (
                 <Overridable
                   key={message.id}
                   name="chat.bubble"
@@ -950,6 +1297,14 @@ export default function ChatPanel() {
                     route: message.route ?? null,
                     ...(nextEscalation(message.route ?? null)
                       ? { onEscalate: () => void escalateFrom(index) }
+                      : {}),
+                    handoff: message.handoff ?? null,
+                    ...(message.handoff
+                      ? {
+                          handoffFrom: agentNameOf(message.handoff.fromAgentId),
+                          handoffTo: agentNameOf(message.handoff.toAgentId),
+                          onOpenInSplit: () => openHandoff(message.handoff!)
+                        }
                       : {}),
                     memory: {
                       agentId: boundAssistant?.id ?? null,
@@ -988,7 +1343,11 @@ export default function ChatPanel() {
           <MemoryWakeBar
             agentName={boundAssistant?.name ?? null}
             memories={wakeMemories}
-            onManage={() => setDrawer('assistants')}
+            onManage={() => {
+              setAgentFocus(boundAssistant?.id ?? null)
+              setInspCollapsed(false)
+              setInspTab('agent')
+            }}
             onDismiss={() => setWakeDismissed(true)}
           />
         )}
@@ -1034,6 +1393,72 @@ export default function ChatPanel() {
         />
           </>
         )}
+            </div>
+
+            {split.enabled ? (
+              <>
+                <div
+                  className="split-divider"
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="拖动调整分屏比例"
+                  aria-valuemin={25}
+                  aria-valuemax={75}
+                  aria-valuenow={Math.round(split.ratio * 100)}
+                  tabIndex={0}
+                  title="拖动调整比例（双击复位到一半，方向键微调）"
+                  onPointerDown={(event) => {
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    setSplitDragging(true)
+                  }}
+                  onPointerMove={(event) => {
+                    if (!splitDragging) {
+                      return
+                    }
+                    const rect = splitRef.current?.getBoundingClientRect()
+                    if (!rect || rect.width === 0) {
+                      return
+                    }
+                    setSplit((current) =>
+                      setSplitRatio(current, (event.clientX - rect.left) / rect.width)
+                    )
+                  }}
+                  onPointerUp={(event) => {
+                    setSplitDragging(false)
+                    event.currentTarget.releasePointerCapture(event.pointerId)
+                  }}
+                  onPointerCancel={() => setSplitDragging(false)}
+                  onLostPointerCapture={() => setSplitDragging(false)}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+                      return
+                    }
+                    event.preventDefault()
+                    const step = event.key === 'ArrowLeft' ? -0.02 : 0.02
+                    setSplit((current) => setSplitRatio(current, current.ratio + step))
+                  }}
+                  onDoubleClick={() =>
+                    setSplit((current) => setSplitRatio(current, SPLIT_DEFAULT_RATIO))
+                  }
+                />
+                <SecondaryPane
+                  state={split}
+                  conversations={conversations}
+                  messages={mergedMessages}
+                  workerRuns={workerRuns}
+                  agentNameOf={agentNameOf}
+                  primarySessionId={activeId}
+                  onChange={updateSplit}
+                  onClose={() => setSplit((current) => toggleSplitPane(current, false))}
+                  onInsertToComposer={(text) =>
+                    setDraft((current) =>
+                      current.trim() === '' ? text : `${current}\n\n${text}`
+                    )
+                  }
+                  onNavigate={setActivePage}
+                />
+              </>
+            ) : null}
       </main>
         </div>
       </div>
@@ -1043,12 +1468,18 @@ export default function ChatPanel() {
         fallback={Inspector}
         props={{
         tab: inspTab,
-        onTab: setInspTab,
+        onTab: (next: InspectorTab) => {
+          setInspTab(next)
+          // 离开智能体页就丢掉定位，避免下次点 tab 又自动展开上次那个 Agent
+          if (next !== 'agent') {
+            setAgentFocus(null)
+          }
+        },
         collapsed: inspCollapsed,
         conversationTitle: activeConversation?.title ?? null,
         assistantName: boundAssistant?.name ?? null,
         mode,
-        messageCount: messages.length,
+        messageCount: mergedMessages.length,
         referenceCount,
         provider,
         effectiveModel: activeConversation?.model ?? provider?.model ?? '',
@@ -1058,7 +1489,9 @@ export default function ChatPanel() {
         onOpenPlan: () => setDrawer('plan'),
         onConfirmPlan: () => void confirmAndResume(),
         planRun,
-        mcpConnections
+        mcpConnections,
+        focusAgentId: agentFocus,
+        onAssistantsChanged: () => void refreshAssistants()
         }}
       />
       <Slot name="shell.overlay" props={{}} />
@@ -1107,13 +1540,6 @@ export default function ChatPanel() {
           <div className="drawer-mask" onClick={closeDrawer} />
           <div className="drawer" role="dialog" aria-modal="true">
             {drawer === 'settings' ? <SettingsPanel onClose={closeDrawer} /> : null}
-            {drawer === 'assistants' ? (
-              <AssistantPanel
-                focusAgentId={agentFocus}
-                onClose={closeDrawer}
-                onChanged={() => void refreshAssistants()}
-              />
-            ) : null}
             {drawer === 'workspace' ? <WorkspacePanel onClose={closeDrawer} /> : null}
             {drawer === 'plan' ? (
               planRun?.plan ? (

@@ -5,12 +5,23 @@
 // 才是唯一出处，两处都显示就是冗余。
 import { useState } from 'react'
 
+import { LIGHT_LABEL, type AgentLightState } from '../lib/dispatchFilter'
+import AgentAvatar from './AgentAvatar'
 import Icon from './Icon'
+
+export interface DispatchAgent {
+  id: string
+  name: string
+  /** 驻场指示灯：与侧栏 Agent Bench 同一套判定。 */
+  state: AgentLightState
+}
 
 export interface DispatchPillProps {
   agentName: string | null
+  /** 当前绑定 Agent 的状态；未绑定时为 null，不画灯。 */
+  agentState: AgentLightState | null
   projectName: string | null
-  agents: { id: string; name: string }[]
+  agents: DispatchAgent[]
   activeAgentId: string | null
   onPickAgent: (agentId: string | null) => void
   onOpenProject: () => void
@@ -18,6 +29,7 @@ export interface DispatchPillProps {
 
 export default function DispatchPill({
   agentName,
+  agentState,
   projectName,
   agents,
   activeAgentId,
@@ -36,7 +48,17 @@ export default function DispatchPill({
         title="换一位 Agent 接手这个会话"
         onClick={() => setOpen((value) => !value)}
       >
-        <Icon name="user" size={13} />
+        {agentName ? (
+          <AgentAvatar agentId={activeAgentId ?? ''} name={agentName} size={14} />
+        ) : (
+          <Icon name="user" size={13} />
+        )}
+        {agentState ? (          <span
+            className={`dispatch-pill__status dispatch-pill__status--${agentState}`}
+            aria-label={LIGHT_LABEL[agentState]}
+            title={LIGHT_LABEL[agentState]}
+          />
+        ) : null}
         <span className="dispatch-pill__text">{agentName ?? '未派 Agent'}</span>
       </button>
 
@@ -75,6 +97,11 @@ export default function DispatchPill({
                   setOpen(false)
                 }}
               >
+                <span
+                  className={`dispatch-pill__status dispatch-pill__status--${agent.state}`}
+                  aria-label={LIGHT_LABEL[agent.state]}
+                  title={LIGHT_LABEL[agent.state]}
+                />
                 {agent.name}
               </button>
             ))}

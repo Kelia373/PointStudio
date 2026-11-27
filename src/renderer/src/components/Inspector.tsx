@@ -1,17 +1,19 @@
-// 右检查器：上下文 / 工具调用 / 运行 三个视图。
+// 右检查器：上下文 / 工具调用 / 运行 / 智能体 四个视图。
 // 原则：只显示真实有的数据；拿不到的一律显示「未接入 / 未统计」，不编数字。
 import type {
   McpConnectionDto,
   ProviderSettingsViewDto
 } from '../../../shared/types/ipc.ts'
 import type { PlanRunState } from '../lib/planRunState'
+import AssistantPanel from './AssistantPanel'
 
-export type InspectorTab = 'context' | 'tools' | 'run'
+export type InspectorTab = 'context' | 'tools' | 'run' | 'agent'
 
 const TAB_LABEL: Record<InspectorTab, string> = {
   context: '上下文',
   tools: '工具调用',
-  run: '运行'
+  run: '运行',
+  agent: '智能体'
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -46,7 +48,9 @@ export default function Inspector({
   planRun,
   mcpConnections,
   onOpenPlan,
-  onConfirmPlan
+  onConfirmPlan,
+  focusAgentId = null,
+  onAssistantsChanged
 }: {
   tab: InspectorTab
   onTab: (tab: InspectorTab) => void
@@ -68,6 +72,10 @@ export default function Inspector({
   mcpConnections: McpConnectionDto[]
   onOpenPlan: () => void
   onConfirmPlan: () => void
+  /** 从侧栏右键「智能体设置」进来时要直接展开的 Agent。 */
+  focusAgentId?: string | null
+  /** Agent 被改 / 删后通知外壳刷新侧栏与派遣胶囊。 */
+  onAssistantsChanged?: () => void
 }) {
   const params = provider?.params ?? {}
   const details = planRun?.details ?? []
@@ -277,6 +285,14 @@ export default function Inspector({
               )}
             </div>
           </>
+        ) : null}
+
+        {tab === 'agent' ? (
+          <AssistantPanel
+            embedded
+            focusAgentId={focusAgentId}
+            onChanged={onAssistantsChanged ?? (() => undefined)}
+          />
         ) : null}
       </div>
     </aside>

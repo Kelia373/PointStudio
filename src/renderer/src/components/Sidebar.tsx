@@ -2,7 +2,7 @@
 // 收起态不再做图标轨，整列由 .shell--collapsed 收掉。
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import type { AssistantDto, ConversationDto } from '../../../shared/types/ipc.ts'
+import type { AssistantDto, ConversationDto, AgentWorkerRunDto } from '../../../shared/types/ipc.ts'
 import {
   AGENT_CLIPBOARD_KEY,
   isAgentNameTaken,
@@ -11,12 +11,22 @@ import {
   type AgentClipPayload
 } from '../lib/agentClipboard'
 import { buildAgentMenuItems, type AgentMenuAction } from '../lib/agentMenu'
-import { computeAgentBenchStatus, filterSessionsByAxis } from '../lib/dispatchFilter'
+import { computeAgentBenchStatus, computeAgentWorkerLanes, filterSessionsByAxis, LIGHT_LABEL } from '../lib/dispatchFilter'
+import type { PlanRunStatus } from '../lib/planRunState'
 import { CHAT_PAGE, nextActivePage } from '../lib/pageNav'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
 import SessionItem from './SessionItem'
+import AgentAvatar from './AgentAvatar'
+
+const RUN_STATUS_LABEL: Record<AgentWorkerRunDto['status'], string> = {
+  working: '执行中',
+  waiting: '待确认',
+  error: '异常',
+  completed: '完成',
+  queued: '排队'
+}
 
 export default function Sidebar({
   conversations,
@@ -36,7 +46,11 @@ export default function Sidebar({
   onOpenWorkspace,
   activePage,
   onNavigate,
-  inflightId
+  inflightId,
+  planStatus,
+  planSessionId,
+  workerRuns,
+  onInspectWorkerRun
 }: {
   conversations: ConversationDto[]
   assistants: AssistantDto[]
@@ -60,8 +74,16 @@ export default function Sidebar({
   /** 当前主舞台页面，用于高亮功能项。 */
   activePage: string
   onNavigate: (pageId: string) => void
-  /** 正在流式输出的会话 id，用于驻场状态。 */
+  /** 正在流式输出的会话 id（不是 requestId），用于驻场状态。 */
   inflightId: string | null
+  /** 当前会话的 Agent 计划状态；只对绑定在该 Agent 上的会话亮灯。 */
+  planStatus?: PlanRunStatus | null
+  /** 发起这条计划的会话 id；计划灯只亮在它身上。 */
+  planSessionId?: string | null
+  /** 真实派生出来的并发 Run（流式 / 计划）。 */
+  workerRuns?: AgentWorkerRunDto[]
+  /** 点子泳道：打开右侧副画布定位到该 Run 的会话。 */
+  onInspectWorkerRun?: (run: AgentWorkerRunDto) => void
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
@@ -72,6 +94,8 @@ export default function Sidebar({
   const [agentAxis, setAgentAxis] = useState<string | null>(null)
   // 工位区：整段可折叠、行上右键出菜单、改名在行内完成
   const [agentsOpen, setAgentsOpen] = useState(true)
+  // 项目区：与 Agent Bench 同样是可折叠的分区头
+  const [projectsOpen, setProjectsOpen] = useState(true)
   const [menu, setMenu] = useState<{ agentId: string; x: number; y: number } | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -306,7 +330,14 @@ export default function Sidebar({
               <li className="side__empty">还没有 Agent</li>
             ) : (
               assistants.map((assistant) => {
-                const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId)
+                const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId, {
+                  enabled: assistant.enabled !== false,
+                  planStatus: planStatus ?? null,
+                  // 计划灯只认发起它的会话；切走会话不会把别的 Agent 点亮
+                  activeSessionId: planSessionId ?? null,
+                  ...(workerRuns ? { workerRuns } : {})
+                })
+                const lanes = computeAgentWorkerLanes(assistant.id, workerRuns ?? [])
                 const active = agentAxis === assistant.id
                 const disabled = assistant.enabled === false
 
@@ -361,22 +392,42 @@ export default function Sidebar({
                         })
                       }}
                     >
-                      <Icon name="user" className="side__row-icon" />
+                      <AgentAvatar agentId={assistant.id} name={assistant.name} size={16} />
                       <span>{assistant.name}</span>
                       <span
-                        className={`side__status${
-                          bench.state === 'working' && !disabled ? ' side__status--working' : ''
-                        }`}
+                        className={`side__status side__status--${bench.state}`}
                         title={
-                          disabled
-                            ? '已停用'
-                            : bench.state === 'working'
-                              ? bench.lastTitle ?? '执行中'
-                              : '空闲待命'
+                          bench.state === 'working'
+                            ? bench.lastTitle ?? '执行中'
+                            : LIGHT_LABEL[bench.state]
                         }
                       />
-                      <span className="side__status-count">{bench.activeCount}</span>
+                      <span className="side__status-count">{bench.sessionCount}</span>
                     </button>
+                    {lanes.activeRuns.length > 0 ? (
+                      <ul className={`side__lanes${disabled ? ' side__lanes--disabled' : ''}`}>
+                        {lanes.activeRuns.map((run) => (
+                          <li key={run.runId}>
+                            <button
+                              className="side__lane"
+                              type="button"
+                              title={`${run.taskTitle} · 点击在右侧副画布查看`}
+                              onClick={() => onInspectWorkerRun?.(run)}
+                            >
+                              <span className="side__lane-tag">
+                                {run.subagentRole === null ? '主身' : 'Sub'}
+                              </span>
+                              <span className="side__lane-title">{run.taskTitle}</span>
+                              <span className="side__lane-meta">
+                                {run.status === 'working' && run.progress
+                                  ? `${run.progress.current}/${run.progress.total}`
+                                  : RUN_STATUS_LABEL[run.status]}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </li>
                 )
               })
@@ -422,11 +473,25 @@ export default function Sidebar({
       ) : null}
 
       <section className="side__section side__section--grow">
-        <div className="side__head">
-          Project
-          <span className="side__head-note">
-            {projectAxis === 'unmounted' ? '主聊天' : '未归类'}
-          </span>
+        <div className="side__head side__head--lg">
+          <button
+            className="side__head-btn"
+            type="button"
+            aria-expanded={projectsOpen}
+            title={projectsOpen ? '收起 Project 列表' : '展开 Project 列表'}
+            onClick={() => setProjectsOpen((value) => !value)}
+          >
+            <Icon name="folder" className="side__head-icon" size={13} />
+            <span className="side__head-title">Project</span>
+            <span className="side__head-note">
+              {projectAxis === 'unmounted' ? '主聊天' : '未归类'}
+            </span>
+            <Icon
+              name="arrow-down"
+              className={`side__head-caret${projectsOpen ? ' is-open' : ''}`}
+              size={13}
+            />
+          </button>
           <Slot name="sidebar.projects.header" props={{ count: conversations.length }} />
           <button
             className="side__head-act"
@@ -438,38 +503,44 @@ export default function Sidebar({
             <Icon name="folder" size={13} />
           </button>
         </div>
-        <button
-          className={`side__row side__row--axis${projectAxis === 'unmounted' ? ' side__row--active' : ''}`}
-          type="button"
-          onClick={() => {
-            setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')
-            // 回到对话：主舞台停在功能页时，这一行也会被点到
-            onNavigate(CHAT_PAGE)
-          }}
-        >
-          <Icon name="folder" className="side__row-icon" />
-          <span>主聊天（未挂载项目）</span>
-        </button>
-        <ul className="side__list">
-          {visible.map((conversation) => (
-            <li key={conversation.id}>
-              <Overridable
-                name="sidebar.sessionItem"
-                fallback={SessionItem}
-                props={{
-                  conversation,
-                  active: conversation.id === activeId,
-                  onSelect: () => onSelect(conversation.id),
-                  onRemove: () => onRemove(conversation.id)
-                }}
-              />
-            </li>
-          ))}
-          {visible.length === 0 && conversations.length > 0 ? (
-            <li className="side__empty">没有匹配的会话</li>
-          ) : null}
-          {conversations.length === 0 ? <li className="side__empty">还没有会话</li> : null}
-        </ul>
+        {projectsOpen ? (
+          <>
+            <button
+              className={`side__row side__row--axis${
+                projectAxis === 'unmounted' ? ' side__row--active' : ''
+              }`}
+              type="button"
+              onClick={() => {
+                setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')
+                // 回到对话：主舞台停在功能页时，这一行也会被点到
+                onNavigate(CHAT_PAGE)
+              }}
+            >
+              <Icon name="folder" className="side__row-icon" />
+              <span>主聊天（未挂载项目）</span>
+            </button>
+            <ul className="side__list">
+              {visible.map((conversation) => (
+                <li key={conversation.id}>
+                  <Overridable
+                    name="sidebar.sessionItem"
+                    fallback={SessionItem}
+                    props={{
+                      conversation,
+                      active: conversation.id === activeId,
+                      onSelect: () => onSelect(conversation.id),
+                      onRemove: () => onRemove(conversation.id)
+                    }}
+                  />
+                </li>
+              ))}
+              {visible.length === 0 && conversations.length > 0 ? (
+                <li className="side__empty">没有匹配的会话</li>
+              ) : null}
+              {conversations.length === 0 ? <li className="side__empty">还没有会话</li> : null}
+            </ul>
+          </>
+        ) : null}
       </section>
 
       <Slot name="sidebar.bottom" props={{}} />
