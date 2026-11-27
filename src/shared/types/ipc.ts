@@ -162,6 +162,50 @@ export interface MessageDto {
   /** 回答引用的检索片段；旧消息没有这个字段。 */
   references?: MessageReferenceDto[]
   createdAt: string
+  /** 归属的任务链；没有就是普通对话。 */
+  missionId?: string | null
+  /** 交接 / 派单 / 收据卡；有值时主群只渲染一行瘦胶囊。 */
+  handoff?: HandoffEnvelopeDto | null
+}
+
+/**
+ * 任务链上的一个交接信封（纯 JSON，跨 IPC 只传这些字段）。
+ * 主群只显示 summary；payloadMarkdown 默认折叠，点「右屏盯盘」再展开。
+ */
+export interface HandoffEnvelopeDto {
+  handoffId: string
+  missionId: string
+  fromAgentId: string | 'owner'
+  toAgentId: string
+  kind: 'handoff' | 'question' | 'subagent_spawn' | 'receipt'
+  /** 一句话摘要（≤60 字），主群胶囊只显示它。 */
+  summary: string
+  /** 完整施工单 / 对账正文；不在主群展开。 */
+  payloadMarkdown: string
+  status: 'pending' | 'accepted' | 'running' | 'done' | 'failed'
+  targetRunId?: string
+}
+
+/**
+ * 一个 Agent 分身（主身或 Subagent）手上的一个 Run。
+ * 同一 Agent 可以有多条并行，侧栏据此显示并发徽章与子泳道。
+ */
+export interface AgentWorkerRunDto {
+  runId: string
+  /** 归属的主智能体 ID。 */
+  agentId: string
+  /** 子智能体角色名；主身填 null。 */
+  subagentRole: string | null
+  /** 串联「派单 → 架构 → 开发 → 测试」的根任务链。 */
+  missionId: string
+  /** 派单方：'owner' 或来源 agentId。 */
+  dispatchedBy: string
+  /** 一句话任务摘要。 */
+  taskTitle: string
+  sessionId: string
+  status: 'working' | 'waiting' | 'error' | 'completed' | 'queued'
+  progress?: { current: number; total: number; stepLabel: string }
+  startedAt: string
 }
 
 /**

@@ -11,6 +11,12 @@ export interface PlanRunState {
   plan: PlanViewDto | null
   status: PlanRunStatus
   details?: AgentStepDetailDto[]
+  /**
+   * 发起这次计划的会话 id。
+   * 计划是全局唯一的一条，但灯必须亮在「真正发起它」的 Agent 上，
+   * 不能因为用户切到别的会话就把别人点亮。
+   */
+  sessionId?: string | null
 }
 
 /**

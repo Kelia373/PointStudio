@@ -69,3 +69,16 @@ test('不修改入参（React 依赖引用变化）', () => {
   assert.equal(original.plan, null)
   assert.notEqual(next, original)
 })
+
+test('sessionId 跟着计划走：归约任何事件都不丢发起会话', () => {
+  const withSession: PlanRunState = { ...idle, sessionId: 'session-a' }
+  const next = reduceAgentEvent(withSession, { type: 'plan', plan: plan('目标') })
+  assert.equal(next?.sessionId, 'session-a')
+  const done = reduceAgentEvent(next, {
+    type: 'done',
+    status: 'completed',
+    plan: plan('目标'),
+    details: []
+  })
+  assert.equal(done?.sessionId, 'session-a')
+})
