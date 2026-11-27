@@ -13,6 +13,12 @@ import type {
 import { AVATAR_KEYS, pickAgentAvatar, type AvatarKey } from '../lib/agentAvatar'
 import { modelChoices } from '../lib/modelOptions'
 import {
+  MODEL_SERVICES_KEY,
+  collectAvailableModelOptions,
+  modelDisplayLabel,
+  parseModelServicesState
+} from '../lib/modelServices'
+import {
   PERMISSION_MODE_META,
   PERMISSION_MODE_ORDER,
   permissionModeMeta
@@ -50,9 +56,18 @@ export default function AgentCreateDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const services = useMemo(
+    () => parseModelServicesState(window.localStorage.getItem(MODEL_SERVICES_KEY)),
+    []
+  )
   const models = useMemo(
-    () => modelChoices(provider?.providerId ?? null, null),
-    [provider?.providerId]
+    () =>
+      modelChoices(
+        provider?.providerId ?? null,
+        null,
+        collectAvailableModelOptions(services).map((option) => option.value)
+      ),
+    [provider?.providerId, services]
   )
   const previewKey = pickAgentAvatar('', name, avatar)
   const modeMeta = permissionModeMeta(permissionMode)
@@ -266,7 +281,7 @@ export default function AgentCreateDialog({
                 aria-label="模型"
                 onClick={(event) => openMenu('model', event)}
               >
-                <span>{modelId === '' ? '跟随全局默认' : modelId}</span>
+                <span>{modelId === '' ? '跟随全局默认' : modelDisplayLabel(modelId, services)}</span>
                 <Icon name="arrow-down" size={12} />
               </button>
             </div>
@@ -335,7 +350,7 @@ export default function AgentCreateDialog({
                       </button>
                     )
                   })
-                : [{ value: '', label: '跟随全局默认' }, ...models.map((model) => ({ value: model, label: model }))].map(
+                : [{ value: '', label: '跟随全局默认' }, ...models.map((model) => ({ value: model, label: modelDisplayLabel(model, services) }))].map(
                     (item) => (
                       <button
                         key={item.value === '' ? '__default__' : item.value}
