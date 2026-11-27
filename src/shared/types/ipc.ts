@@ -187,6 +187,21 @@ export interface HandoffEnvelopeDto {
 }
 
 /**
+ * 一个 Agent 小组（纯 UI 数据，渲染层 localStorage 持久化）。
+ * 不放进 AssistantDto：一个 Agent 将来可以跨组兼职，单值 groupId 会作废。
+ */
+export interface AgentGroupDto {
+  id: string
+  name: string
+  /** 组内成员 agentId，有序、去重。 */
+  memberIds: string[]
+  /** 组长；缺省取 memberIds[0] ?? null。 */
+  leadAgentId: string | null
+  collapsed?: boolean
+  updatedAt: string
+}
+
+/**
  * 一个 Agent 分身（主身或 Subagent）手上的一个 Run。
  * 同一 Agent 可以有多条并行，侧栏据此显示并发徽章与子泳道。
  */
