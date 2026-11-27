@@ -46,6 +46,19 @@ test('双轴叠加时取交集', () => {
   assert.deepEqual(rows.map((r) => r.id), ['s1'])
 })
 
+test('小组视图：agentIds 取并集，未绑 Agent 的会话被排除', () => {
+  assert.deepEqual(
+    filterSessionsByAxis(sessions, { agentIds: ['a1', 'a2'] }).map((r) => r.id),
+    ['s1', 's2', 's3']
+  )
+  assert.deepEqual(
+    filterSessionsByAxis(sessions, { agentIds: ['a2'], workspaceId: 'w1' }).map((r) => r.id),
+    ['s3']
+  )
+  // 空数组视为不限制
+  assert.equal(filterSessionsByAxis(sessions, { agentIds: [] }).length, 4)
+})
+
 test('关键词与轴叠加，且忽略大小写与空白', () => {
   assert.deepEqual(
     filterSessionsByAxis(sessions, { keyword: ' 登录 ' }).map((r) => r.id),

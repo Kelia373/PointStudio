@@ -50,7 +50,8 @@ export default function Inspector({
   onOpenPlan,
   onConfirmPlan,
   focusAgentId = null,
-  onAssistantsChanged
+  onAssistantsChanged,
+  agentTabOpen = false
 }: {
   tab: InspectorTab
   onTab: (tab: InspectorTab) => void
@@ -76,6 +77,8 @@ export default function Inspector({
   focusAgentId?: string | null
   /** Agent 被改 / 删后通知外壳刷新侧栏与派遣胶囊。 */
   onAssistantsChanged?: () => void
+  /** 「智能体」是上下文 tab：只有从 Agent Bench 进来才出现。 */
+  agentTabOpen?: boolean
 }) {
   const params = provider?.params ?? {}
   const details = planRun?.details ?? []
@@ -84,16 +87,18 @@ export default function Inspector({
   return (
     <aside className="insp" hidden={collapsed}>
       <div className="insp__tabs">
-        {(Object.keys(TAB_LABEL) as InspectorTab[]).map((key) => (
-          <button
-            key={key}
-            className={`insp__tab${tab === key ? ' insp__tab--on' : ''}`}
-            type="button"
-            onClick={() => onTab(key)}
-          >
-            {TAB_LABEL[key]}
-          </button>
-        ))}
+        {(Object.keys(TAB_LABEL) as InspectorTab[])
+          .filter((key) => key !== 'agent' || agentTabOpen)
+          .map((key) => (
+            <button
+              key={key}
+              className={`insp__tab${tab === key ? ' insp__tab--on' : ''}`}
+              type="button"
+              onClick={() => onTab(key)}
+            >
+              {TAB_LABEL[key]}
+            </button>
+          ))}
         {/* 收起键只在顶栏保留一处：这里再放一个会出现两个相邻的雪佛龙 */}
         <span style={{ flex: 1 }} />
       </div>
@@ -287,7 +292,7 @@ export default function Inspector({
           </>
         ) : null}
 
-        {tab === 'agent' ? (
+        {tab === 'agent' && agentTabOpen ? (
           <AssistantPanel
             embedded
             focusAgentId={focusAgentId}

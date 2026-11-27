@@ -1,8 +1,29 @@
 // 侧栏四段：搜索 / 关键功能 / Agent Bench（驻场工位）/ Project。
 // 收起态不再做图标轨，整列由 .shell--collapsed 收掉。
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { DragEvent as ReactDragEvent } from 'react'
 
-import type { AssistantDto, ConversationDto, AgentWorkerRunDto } from '../../../shared/types/ipc.ts'
+import type {
+  AssistantDto,
+  ConversationDto,
+  AgentGroupDto,
+  AgentWorkerRunDto
+} from '../../../shared/types/ipc.ts'
+import {
+  AGENT_GROUPS_KEY,
+  addAgentToGroup,
+  computeGroupBenchStatus,
+  createGroup,
+  filterAgents,
+  normalizeGroups,
+  parseAgentGroups,
+  removeAgentFromGroup,
+  removeGroup,
+  renameGroup,
+  sortAgents,
+  toggleGroupCollapsed,
+  type AgentSortMode
+} from '../lib/agentGroups'
 import {
   AGENT_CLIPBOARD_KEY,
   isAgentNameTaken,
@@ -50,7 +71,8 @@ export default function Sidebar({
   planStatus,
   planSessionId,
   workerRuns,
-  onInspectWorkerRun
+  onInspectWorkerRun,
+  onCreateAgent
 }: {
   conversations: ConversationDto[]
   assistants: AssistantDto[]
@@ -84,6 +106,8 @@ export default function Sidebar({
   workerRuns?: AgentWorkerRunDto[]
   /** 点子泳道：打开右侧副画布定位到该 Run 的会话。 */
   onInspectWorkerRun?: (run: AgentWorkerRunDto) => void
+  /** 新建 Agent：展开对话区的内联创建表单。 */
+  onCreateAgent: () => void
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
@@ -101,6 +125,24 @@ export default function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameError, setRenameError] = useState<string | null>(null)
+  // Agent Bench 的搜索 / 筛选 / 小组
+  const [agentKeyword, setAgentKeyword] = useState('')
+  const [agentSearchOpen, setAgentSearchOpen] = useState(false)
+  const [filterMenu, setFilterMenu] = useState<{ x: number; y: number } | null>(null)
+  const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null)
+  const [groupView, setGroupView] = useState<'grouped' | 'flat'>('grouped')
+  const [sortMode, setSortMode] = useState<AgentSortMode>('manual')
+  const [hideDisabled, setHideDisabled] = useState(false)
+  const [groups, setGroups] = useState<AgentGroupDto[]>(() =>
+    parseAgentGroups(window.localStorage.getItem(AGENT_GROUPS_KEY))
+  )
+  const [groupAxis, setGroupAxis] = useState<string | null>(null)
+  const [newGroupOpen, setNewGroupOpen] = useState(false)
+  const [newGroupName, setNewGroupName] = useState('')
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null)
+  const [renameGroupValue, setRenameGroupValue] = useState('')
+  const [draggingAgentId, setDraggingAgentId] = useState<string | null>(null)
+  const [dropGroupId, setDropGroupId] = useState<string | null>(null)
   // 应用内剪贴板：只存配置，不存 id 与时间戳
   const [clipboard, setClipboard] = useState<AgentClipPayload | null>(() =>
     parseAgentClip(window.localStorage.getItem(AGENT_CLIPBOARD_KEY))
@@ -141,6 +183,70 @@ export default function Sidebar({
     }
     setRenamingId(null)
     setRenameError(null)
+  }
+
+  function commitNewGroup(): void {
+    const name = newGroupName.trim()
+    setNewGroupOpen(false)
+    setNewGroupName('')
+    if (name === '') {
+      return
+    }
+    setGroups((current) =>
+      createGroup(current, { id: crypto.randomUUID(), name, now: new Date().toISOString() })
+    )
+    setGroupView('grouped')
+  }
+
+  function commitGroupRename(): void {
+    if (!renamingGroupId) {
+      return
+    }
+    const id = renamingGroupId
+    const name = renameGroupValue.trim()
+    setRenamingGroupId(null)
+    if (name !== '') {
+      setGroups((current) => renameGroup(current, id, name, new Date().toISOString()))
+    }
+  }
+
+  function startAgentDrag(agentId: string, event: ReactDragEvent<HTMLSpanElement>): void {
+    event.dataTransfer.setData('text/x-agent-id', agentId)
+    event.dataTransfer.effectAllowed = 'copy'
+    setDraggingAgentId(agentId)
+  }
+
+  function endAgentDrag(): void {
+    setDraggingAgentId(null)
+    setDropGroupId(null)
+  }
+
+  function dragOverGroup(groupId: string, event: ReactDragEvent<HTMLDivElement>): void {
+    if (!draggingAgentId) {
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setDropGroupId(groupId)
+  }
+
+  function dropOnGroup(groupId: string, event: ReactDragEvent<HTMLDivElement>): void {
+    event.preventDefault()
+    const agentId = event.dataTransfer.getData('text/x-agent-id') || draggingAgentId
+    setDropGroupId(null)
+    setDraggingAgentId(null)
+    if (!agentId) {
+      return
+    }
+    // 多归属：只是「加入」这个组，不把人从别的组或全量池里移走；落组后自动展开
+    setGroups((current) =>
+      toggleGroupCollapsed(
+        addAgentToGroup(current, agentId, groupId, 'multi', new Date().toISOString()),
+        groupId,
+        false
+      )
+    )
+    setGroupAxis(null)
   }
 
   async function runMenuAction(action: AgentMenuAction): Promise<void> {
@@ -202,9 +308,43 @@ export default function Sidebar({
     }
   }
   const [projectAxis, setProjectAxis] = useState<string | null | 'unmounted'>(null)
+
+  // 小组只存本机；成员列表跟随助手删除自动修剪
+  useEffect(() => {
+    window.localStorage.setItem(AGENT_GROUPS_KEY, JSON.stringify(groups))
+  }, [groups])
+
+  useEffect(() => {
+    setGroups((current) => normalizeGroups(current, assistants))
+  }, [assistants])
+
+  const filteredAgents = useMemo(
+    () => sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode),
+    [assistants, agentKeyword, hideDisabled, sortMode]
+  )
+  const filterActive =
+    groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
+  const groupAxisMembers = useMemo(() => {
+    if (!groupAxis) {
+      return null
+    }
+    return groups.find((group) => group.id === groupAxis)?.memberIds ?? []
+  }, [groupAxis, groups])
   const visible = useMemo(
-    () => filterSessionsByAxis(conversations, { agentId: agentAxis, workspaceId: projectAxis, keyword }),
-    [conversations, agentAxis, projectAxis, keyword]
+    () =>
+      filterSessionsByAxis(conversations, {
+        agentId: agentAxis,
+        // 空小组用一个不存在的 id 兜底：否则「空数组」会被当成不限制
+        agentIds:
+          groupAxisMembers === null
+            ? undefined
+            : groupAxisMembers.length > 0
+              ? groupAxisMembers
+              : ['__empty_group__'],
+        workspaceId: projectAxis,
+        keyword
+      }),
+    [conversations, agentAxis, groupAxisMembers, projectAxis, keyword]
   )
 
   // Ctrl/⌘ + F 聚焦搜索：界面上那个 ⌘F 标记得是真的。
@@ -227,6 +367,142 @@ export default function Sidebar({
   const features = pages.filter(
     (entry) => (pinned[entry.def.id] ?? entry.def.defaultPinned ?? false) || moreOpen
   )
+
+  const renderAgentRow = (assistant: AssistantDto, groupId: string | null = null) => {
+    const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId, {
+      enabled: assistant.enabled !== false,
+      planStatus: planStatus ?? null,
+      // 计划灯只认发起它的会话；切走会话不会把别的 Agent 点亮
+      activeSessionId: planSessionId ?? null,
+      ...(workerRuns ? { workerRuns } : {})
+    })
+    const lanes = computeAgentWorkerLanes(assistant.id, workerRuns ?? [])
+    const active = agentAxis === assistant.id
+    const disabled = assistant.enabled === false
+
+    if (renamingId === assistant.id) {
+      return (
+        <li key={`${groupId ?? 'roster'}-${assistant.id}`}>
+          <input
+            className={`side__row-input${renameError ? ' side__row-input--bad' : ''}`}
+            value={renameValue}
+            autoFocus
+            aria-label="重命名智能体"
+            onChange={(event) => {
+              setRenameValue(event.target.value)
+              setRenameError(null)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void commitRename()
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                cancelRename()
+              }
+            }}
+            onBlur={() => void commitRename()}
+          />
+          {renameError ? <span className="side__row-hint">{renameError}</span> : null}
+        </li>
+      )
+    }
+
+    const row = (
+      <button
+        className={`side__row${active ? ' side__row--active' : ''}${
+          disabled ? ' side__row--disabled' : ''
+        }`}
+        type="button"
+        title={`${bench.lastTitle ?? assistant.name}${
+          disabled ? '（已停用）' : ''
+        } · 按住头像可拖进小组 · 右键打开菜单`}
+        onClick={() => {
+          setAgentAxis(active ? null : assistant.id)
+          setGroupAxis(null)
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          setConfirmRemoveId(null)
+          // 贴边右键时把菜单推回视口内，别让它跑到屏幕外
+          setMenu({
+            agentId: assistant.id,
+            x: Math.min(event.clientX, window.innerWidth - 184),
+            y: Math.min(event.clientY, window.innerHeight - 216)
+          })
+        }}
+      >
+        <span
+          className="side__avatar-handle"
+          draggable
+          title="按住拖到上方小组里加入"
+          onDragStart={(event) => startAgentDrag(assistant.id, event)}
+          onDragEnd={endAgentDrag}
+        >
+          <AgentAvatar agentId={assistant.id} name={assistant.name} size={16} />
+        </span>
+        <span>{assistant.name}</span>
+        <span
+          className={`side__status side__status--${bench.state}`}
+          title={
+            bench.state === 'working' ? bench.lastTitle ?? '执行中' : LIGHT_LABEL[bench.state]
+          }
+        />
+        <span className="side__status-count">{bench.sessionCount}</span>
+      </button>
+    )
+
+    return (
+      <li key={`${groupId ?? 'roster'}-${assistant.id}`}>
+        {groupId === null ? (
+          row
+        ) : (
+          <div className="side__agent-row">
+            {row}
+            <button
+              className="side__row-remove"
+              type="button"
+              title="移出本小组（不会删除 Agent）"
+              aria-label="移出本小组"
+              onClick={(event) => {
+                event.stopPropagation()
+                setGroups((current) =>
+                  removeAgentFromGroup(current, assistant.id, groupId, new Date().toISOString())
+                )
+              }}
+            >
+              <Icon name="x" size={11} />
+            </button>
+          </div>
+        )}
+        {lanes.activeRuns.length > 0 ? (
+          <ul className={`side__lanes${disabled ? ' side__lanes--disabled' : ''}`}>
+            {lanes.activeRuns.map((run) => (
+              <li key={run.runId}>
+                <button
+                  className="side__lane"
+                  type="button"
+                  title={`${run.taskTitle} · 点击在右侧副画布查看`}
+                  onClick={() => onInspectWorkerRun?.(run)}
+                >
+                  <span className="side__lane-tag">
+                    {run.subagentRole === null ? '主身' : 'Sub'}
+                  </span>
+                  <span className="side__lane-title">{run.taskTitle}</span>
+                  <span className="side__lane-meta">
+                    {run.status === 'working' && run.progress
+                      ? `${run.progress.current}/${run.progress.total}`
+                      : RUN_STATUS_LABEL[run.status]}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </li>
+    )
+  }
 
   return (
     <aside className="side">
@@ -312,129 +588,376 @@ export default function Sidebar({
             title={agentsOpen ? '收起全部 Agent' : '展开 Agent 列表'}
             onClick={() => setAgentsOpen((value) => !value)}
           >
-            <Icon name="user" className="side__head-icon" size={13} />
-            <span className="side__head-title">Agent Bench</span>
-            <span className="side__head-note">{assistants.length}</span>
             <Icon
               name="arrow-down"
               className={`side__head-caret${agentsOpen ? ' is-open' : ''}`}
               size={13}
             />
+            <span className="side__head-title">Agent Bench</span>
+            <span className="side__head-note">{assistants.length}</span>
           </button>
           <Slot name="sidebar.agents.header" props={{ count: assistants.length }} />
+          <div className="side__head-acts">
+            <button
+              className={`side__head-act${agentSearchOpen ? ' is-on' : ''}`}
+              type="button"
+              title="搜索 Agent"
+              aria-label="搜索 Agent"
+              aria-pressed={agentSearchOpen}
+              onClick={() => {
+                setAgentSearchOpen((value) => !value)
+                if (agentSearchOpen) {
+                  setAgentKeyword('')
+                }
+              }}
+            >
+              <Icon name="search" size={13} />
+            </button>
+            <button
+              className={`side__head-act${filterActive ? ' is-on' : ''}`}
+              type="button"
+              title="分组 / 排序 / 筛选"
+              aria-label="分组排序筛选"
+              onClick={(event) => {
+                setAddMenu(null)
+                setFilterMenu({
+                  x: Math.min(event.clientX, window.innerWidth - 232),
+                  y: Math.min(event.clientY, window.innerHeight - 320)
+                })
+              }}
+            >
+              <Icon name="filter" size={13} />
+            </button>
+            <button
+              className="side__head-act"
+              type="button"
+              title="新增智能体或小组"
+              aria-label="新增"
+              onClick={(event) => {
+                setFilterMenu(null)
+                setAddMenu({
+                  x: Math.min(event.clientX, window.innerWidth - 208),
+                  y: Math.min(event.clientY, window.innerHeight - 160)
+                })
+              }}
+            >
+              <Icon name="plus" size={13} />
+            </button>
+          </div>
         </div>
 
         {agentsOpen ? (
-          <ul className="side__plain">
-            {assistants.length === 0 ? (
-              <li className="side__empty">还没有 Agent</li>
-            ) : (
-              assistants.map((assistant) => {
-                const bench = computeAgentBenchStatus(assistant.id, conversations, inflightId, {
-                  enabled: assistant.enabled !== false,
-                  planStatus: planStatus ?? null,
-                  // 计划灯只认发起它的会话；切走会话不会把别的 Agent 点亮
-                  activeSessionId: planSessionId ?? null,
-                  ...(workerRuns ? { workerRuns } : {})
-                })
-                const lanes = computeAgentWorkerLanes(assistant.id, workerRuns ?? [])
-                const active = agentAxis === assistant.id
-                const disabled = assistant.enabled === false
+          <>
+            {agentSearchOpen ? (
+              <div className="side__agent-search">
+                <Icon name="search" size={12} className="side__agent-search-icon" />
+                <input
+                  autoFocus
+                  value={agentKeyword}
+                  placeholder="搜索 Agent 名称"
+                  aria-label="搜索 Agent 名称"
+                  onChange={(event) => setAgentKeyword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Escape') {
+                      setAgentKeyword('')
+                      setAgentSearchOpen(false)
+                    }
+                  }}
+                />
+                <button
+                  className="side__agent-search-close"
+                  type="button"
+                  aria-label="关闭搜索"
+                  onClick={() => {
+                    setAgentKeyword('')
+                    setAgentSearchOpen(false)
+                  }}
+                >
+                  <Icon name="x" size={11} />
+                </button>
+              </div>
+            ) : null}
 
-                if (renamingId === assistant.id) {
-                  return (
-                    <li key={assistant.id}>
-                      <input
-                        className={`side__row-input${renameError ? ' side__row-input--bad' : ''}`}
-                        value={renameValue}
-                        autoFocus
-                        aria-label="重命名智能体"
-                        onChange={(event) => {
-                          setRenameValue(event.target.value)
-                          setRenameError(null)
-                        }}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter') {
-                            event.preventDefault()
-                            void commitRename()
-                          }
-                          if (event.key === 'Escape') {
-                            event.preventDefault()
-                            cancelRename()
-                          }
-                        }}
-                        onBlur={() => void commitRename()}
-                      />
-                      {renameError ? <span className="side__row-hint">{renameError}</span> : null}
-                    </li>
-                  )
-                }
-
-                return (
-                  <li key={assistant.id}>
-                    <button
-                      className={`side__row${active ? ' side__row--active' : ''}${
-                        disabled ? ' side__row--disabled' : ''
-                      }`}
-                      type="button"
-                      title={`${bench.lastTitle ?? assistant.name}${
-                        disabled ? '（已停用）' : ''
-                      } · 右键打开菜单`}
-                      onClick={() => setAgentAxis(active ? null : assistant.id)}
-                      onContextMenu={(event) => {
-                        event.preventDefault()
-                        setConfirmRemoveId(null)
-                        // 贴边右键时把菜单推回视口内，别让它跑到屏幕外
-                        setMenu({
-                          agentId: assistant.id,
-                          x: Math.min(event.clientX, window.innerWidth - 184),
-                          y: Math.min(event.clientY, window.innerHeight - 216)
-                        })
-                      }}
-                    >
-                      <AgentAvatar agentId={assistant.id} name={assistant.name} size={16} />
-                      <span>{assistant.name}</span>
-                      <span
-                        className={`side__status side__status--${bench.state}`}
-                        title={
-                          bench.state === 'working'
-                            ? bench.lastTitle ?? '执行中'
-                            : LIGHT_LABEL[bench.state]
+            {groupView === 'grouped' ? (
+              <div className="side__groups">
+                {newGroupOpen ? (
+                  <div className="side__group-new">
+                    <input
+                      autoFocus
+                      value={newGroupName}
+                      placeholder="小组名称，回车创建"
+                      aria-label="小组名称"
+                      onChange={(event) => setNewGroupName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault()
+                          commitNewGroup()
                         }
-                      />
-                      <span className="side__status-count">{bench.sessionCount}</span>
-                    </button>
-                    {lanes.activeRuns.length > 0 ? (
-                      <ul className={`side__lanes${disabled ? ' side__lanes--disabled' : ''}`}>
-                        {lanes.activeRuns.map((run) => (
-                          <li key={run.runId}>
-                            <button
-                              className="side__lane"
-                              type="button"
-                              title={`${run.taskTitle} · 点击在右侧副画布查看`}
-                              onClick={() => onInspectWorkerRun?.(run)}
-                            >
-                              <span className="side__lane-tag">
-                                {run.subagentRole === null ? '主身' : 'Sub'}
-                              </span>
-                              <span className="side__lane-title">{run.taskTitle}</span>
-                              <span className="side__lane-meta">
-                                {run.status === 'working' && run.progress
-                                  ? `${run.progress.current}/${run.progress.total}`
-                                  : RUN_STATUS_LABEL[run.status]}
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </li>
-                )
-              })
-            )}
-          </ul>
+                        if (event.key === 'Escape') {
+                          setNewGroupOpen(false)
+                          setNewGroupName('')
+                        }
+                      }}
+                      onBlur={commitNewGroup}
+                    />
+                  </div>
+                ) : null}
+
+                {groups.map((group) => {
+                  const members = sortAgents(
+                    filterAgents(
+                      assistants.filter((agent) => group.memberIds.includes(agent.id)),
+                      { keyword: agentKeyword, hideDisabled }
+                    ),
+                    sortMode
+                  )
+                  const groupBench = computeGroupBenchStatus(
+                    group,
+                    assistants,
+                    conversations,
+                    inflightId,
+                    {
+                      planStatus: planStatus ?? null,
+                      planSessionId: planSessionId ?? null,
+                      ...(workerRuns ? { workerRuns } : {})
+                    }
+                  )
+                  if (
+                    agentKeyword !== '' &&
+                    members.length === 0 &&
+                    !group.name.toLowerCase().includes(agentKeyword.toLowerCase())
+                  ) {
+                    return null
+                  }
+                  return (
+                    <div
+                      key={group.id}
+                      className={`side__group${dropGroupId === group.id ? ' side__group--drop' : ''}${
+                        groupAxis === group.id ? ' side__group--active' : ''
+                      }`}
+                      onDragOver={(event) => dragOverGroup(group.id, event)}
+                      onDragLeave={() =>
+                        setDropGroupId((current) => (current === group.id ? null : current))
+                      }
+                      onDrop={(event) => dropOnGroup(group.id, event)}
+                    >
+                      <div className="side__group-head">
+                        <button
+                          className="side__group-caret"
+                          type="button"
+                          aria-expanded={!group.collapsed}
+                          title={group.collapsed ? '展开小组' : '收起小组'}
+                          onClick={() =>
+                            setGroups((current) => toggleGroupCollapsed(current, group.id))
+                          }
+                        >
+                          <Icon
+                            name="arrow-down"
+                            className={`side__head-caret${group.collapsed ? '' : ' is-open'}`}
+                            size={12}
+                          />
+                        </button>
+                        {renamingGroupId === group.id ? (
+                          <input
+                            className="side__group-input"
+                            autoFocus
+                            value={renameGroupValue}
+                            aria-label="重命名小组"
+                            onChange={(event) => setRenameGroupValue(event.target.value)}
+                            onBlur={commitGroupRename}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                event.preventDefault()
+                                commitGroupRename()
+                              }
+                              if (event.key === 'Escape') {
+                                setRenamingGroupId(null)
+                              }
+                            }}
+                          />
+                        ) : (
+                          <button
+                            className="side__group-name"
+                            type="button"
+                            title="点击只看这组的会话；双击改名"
+                            onClick={() => {
+                              setGroupAxis(groupAxis === group.id ? null : group.id)
+                              setAgentAxis(null)
+                              setProjectAxis(null)
+                            }}
+                            onDoubleClick={() => {
+                              setRenamingGroupId(group.id)
+                              setRenameGroupValue(group.name)
+                            }}
+                          >
+                            <Icon name="users" size={12} />
+                            <span>{group.name}</span>
+                            <span className="side__group-count">{members.length}</span>
+                          </button>
+                        )}
+                        <span
+                          className={`side__status side__status--${groupBench.state}`}
+                          title={LIGHT_LABEL[groupBench.state]}
+                        />
+                        <button
+                          className="side__group-del"
+                          type="button"
+                          title="删除小组（不会删除组里的 Agent）"
+                          aria-label="删除小组"
+                          onClick={() => {
+                            setGroups((current) => removeGroup(current, group.id))
+                            if (groupAxis === group.id) {
+                              setGroupAxis(null)
+                            }
+                          }}
+                        >
+                          <Icon name="x" size={11} />
+                        </button>
+                      </div>
+
+                      {group.collapsed ? null : (
+                        <ul className="side__plain side__group-members">
+                          {members.map((agent) => renderAgentRow(agent, group.id))}
+                          {members.length === 0 ? (
+                            <li className="side__empty">把 Agent 头像拖到这里</li>
+                          ) : null}
+                        </ul>
+                      )}
+                      {dropGroupId === group.id ? (
+                        <div className="side__drop">+ 加入「{group.name}」</div>
+                      ) : null}
+                    </div>
+                  )
+                })}
+
+                {groups.length === 0 && !newGroupOpen ? (
+                  <p className="side__group-hint">点 ＋ 新建小组，或把 Agent 头像拖进来</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="side__roster-head">
+              <span>全部智能体</span>
+              <span className="side__head-note">{filteredAgents.length}</span>
+            </div>
+            <ul className="side__plain">
+              {filteredAgents.map((assistant) => renderAgentRow(assistant))}
+              {filteredAgents.length === 0 ? (
+                <li className="side__empty">
+                  {agentKeyword !== '' ? '没有匹配的 Agent' : '还没有 Agent'}
+                </li>
+              ) : null}
+            </ul>
+          </>
         ) : null}
       </section>
+
+      {filterMenu ? (
+        <>
+          <span
+            className="ctx-mask"
+            role="presentation"
+            onClick={() => setFilterMenu(null)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setFilterMenu(null)
+            }}
+          />
+          <div
+            className="side__filter"
+            style={{ left: filterMenu.x, top: filterMenu.y }}
+            role="menu"
+            aria-label="分组排序筛选"
+          >
+            <span className="side__filter-head">分组</span>
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => setGroupView('grouped')}
+            >
+              <span className="side__check">{groupView === 'grouped' ? '✓' : ''}</span>
+              按小组展示
+            </button>
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => setGroupView('flat')}
+            >
+              <span className="side__check">{groupView === 'flat' ? '✓' : ''}</span>
+              平铺全部智能体
+            </button>
+            <span className="side__filter-head">排序</span>
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => setSortMode('manual')}
+            >
+              <span className="side__check">{sortMode === 'manual' ? '✓' : ''}</span>
+              手动排序
+            </button>
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => setSortMode('recent')}
+            >
+              <span className="side__check">{sortMode === 'recent' ? '✓' : ''}</span>
+              最近更新
+            </button>
+            <span className="side__filter-head">筛选</span>
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => setHideDisabled((value) => !value)}
+            >
+              <span className="side__check">{hideDisabled ? '✓' : ''}</span>
+              隐藏已停用的 Agent
+            </button>
+            <span className="side__filter-note">小组协同 · 路由拆解待接入</span>
+          </div>
+        </>
+      ) : null}
+
+      {addMenu ? (
+        <>
+          <span
+            className="ctx-mask"
+            role="presentation"
+            onClick={() => setAddMenu(null)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setAddMenu(null)
+            }}
+          />
+          <div
+            className="side__filter"
+            style={{ left: addMenu.x, top: addMenu.y }}
+            role="menu"
+            aria-label="新增"
+          >
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => {
+                setAddMenu(null)
+                onCreateAgent()
+              }}
+            >
+              新建智能体
+            </button>
+            <button
+              className="side__filter-item"
+              type="button"
+              onClick={() => {
+                setAddMenu(null)
+                setNewGroupOpen(true)
+                setGroupView('grouped')
+              }}
+            >
+              新建小组
+            </button>
+          </div>
+        </>
+      ) : null}
 
       {menu && menuAgent ? (
         <>
@@ -512,6 +1035,7 @@ export default function Sidebar({
               type="button"
               onClick={() => {
                 setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')
+                setGroupAxis(null)
                 // 回到对话：主舞台停在功能页时，这一行也会被点到
                 onNavigate(CHAT_PAGE)
               }}
@@ -528,7 +1052,10 @@ export default function Sidebar({
                     props={{
                       conversation,
                       active: conversation.id === activeId,
-                      onSelect: () => onSelect(conversation.id),
+                      onSelect: () => {
+                        setGroupAxis(null)
+                        onSelect(conversation.id)
+                      },
                       onRemove: () => onRemove(conversation.id)
                     }}
                   />

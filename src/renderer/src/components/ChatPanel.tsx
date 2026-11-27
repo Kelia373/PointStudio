@@ -159,6 +159,8 @@ export default function ChatPanel() {
   const [sideCollapsed, setSideCollapsed] = useState(false)
   const [inspCollapsed, setInspCollapsed] = useState(false)
   const [inspTab, setInspTab] = useState<InspectorTab>('context')
+  // 右栏「智能体」是上下文 tab：只有从 Agent Bench 进来才出现
+  const [agentTabOpen, setAgentTabOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   // 主舞台页面：'chat' 或注册表里的页面 id（插件页 / 内置功能页）
   const [activePage, setActivePage] = useState(CHAT_PAGE)
@@ -950,16 +952,6 @@ export default function ChatPanel() {
             onOpenProject={() => setDrawer('workspace')}
           />
 
-          <button
-            className="icon-btn"
-            type="button"
-            onClick={() => setDrafting((value) => !value)}
-            title="快速新建助手"
-            aria-label="快速新建助手"
-          >
-            <Icon name="plus" />
-          </button>
-
           <span
             className={`chip${mode === 'live' ? ' chip--live' : ''}${
               busy ? ' chip--busy' : ''
@@ -1065,6 +1057,7 @@ export default function ChatPanel() {
             onAgentSettings={(id) => {
               // 不再弹遮罩抽屉：把右侧检查器切到「智能体」视图，原地编辑
               setAgentFocus(id)
+              setAgentTabOpen(true)
               setInspCollapsed(false)
               setInspTab('agent')
             }}
@@ -1091,6 +1084,7 @@ export default function ChatPanel() {
                 })
               )
             }}
+            onCreateAgent={() => setDrafting(true)}
           />
 
           <main
@@ -1346,6 +1340,7 @@ export default function ChatPanel() {
             memories={wakeMemories}
             onManage={() => {
               setAgentFocus(boundAssistant?.id ?? null)
+              setAgentTabOpen(true)
               setInspCollapsed(false)
               setInspTab('agent')
             }}
@@ -1471,11 +1466,13 @@ export default function ChatPanel() {
         tab: inspTab,
         onTab: (next: InspectorTab) => {
           setInspTab(next)
-          // 离开智能体页就丢掉定位，避免下次点 tab 又自动展开上次那个 Agent
+          // 离开智能体页就丢掉定位，并收起这个上下文 tab
           if (next !== 'agent') {
+            setAgentTabOpen(false)
             setAgentFocus(null)
           }
         },
+        agentTabOpen,
         collapsed: inspCollapsed,
         conversationTitle: activeConversation?.title ?? null,
         assistantName: boundAssistant?.name ?? null,

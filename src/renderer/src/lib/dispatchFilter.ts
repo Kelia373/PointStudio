@@ -6,6 +6,8 @@ import type { AgentWorkerRunDto, ConversationDto } from '../../../shared/types/i
 export interface DispatchFilter {
   /** 选中某个 Agent：拿到它跨项目的执行记录。 */
   agentId?: string | null
+  /** 只保留这些 Agent 名下的会话（小组视图用）；空数组视为不限制。 */
+  agentIds?: string[]
   /** 选中某个项目；'unmounted' 表示「主聊天 / 未挂载项目的随手聊」。 */
   workspaceId?: string | null | 'unmounted'
   /** 标题关键词，忽略大小写与首尾空白。 */
@@ -20,6 +22,14 @@ export function filterSessionsByAxis(
 
   return sessions.filter((session) => {
     if (filter.agentId !== undefined && filter.agentId !== null && session.assistantId !== filter.agentId) {
+      return false
+    }
+
+    if (
+      filter.agentIds !== undefined &&
+      filter.agentIds.length > 0 &&
+      (session.assistantId === null || !filter.agentIds.includes(session.assistantId))
+    ) {
       return false
     }
 

@@ -11,6 +11,7 @@ import penLine from '../assets/icons/pen-line.svg?raw'
 import x from '../assets/icons/x.svg?raw'
 import chevronRight from '../assets/icons/chevron-right.svg?raw'
 import download from '../assets/icons/download.svg?raw'
+import filter from '../assets/icons/filter.svg?raw'
 import folder from '../assets/icons/folder.svg?raw'
 import moon from '../assets/icons/moon.svg?raw'
 import panelRight from '../assets/icons/panel-right.svg?raw'
@@ -22,6 +23,7 @@ import squareArrowLeft from '../assets/icons/square-arrow-left.svg?raw'
 import squareArrowRight from '../assets/icons/square-arrow-right.svg?raw'
 import sun from '../assets/icons/sun.svg?raw'
 import user from '../assets/icons/user.svg?raw'
+import users from '../assets/icons/users.svg?raw'
 
 const PATHS = {
   search,
@@ -34,6 +36,8 @@ const PATHS = {
   user,
   folder,
   download,
+  filter,
+  users,
   settings,
   x,
   compass,
