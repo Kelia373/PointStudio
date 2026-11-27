@@ -18,8 +18,8 @@ import type {
 import { AVATAR_KEYS } from '../lib/agentAvatar'
 import { modelChoices } from '../lib/modelOptions'
 import {
-  PERMISSION_MODE_META,
-  PERMISSION_MODE_ORDER
+  PERMISSION_MODE_ORDER,
+  permissionModeMeta
 } from '../lib/permissionModes'
 
 export default function AssistantPanel({
@@ -171,12 +171,12 @@ export default function AssistantPanel({
                   >
                     {PERMISSION_MODE_ORDER.map((mode) => (
                       <option key={mode} value={mode}>
-                        {PERMISSION_MODE_META[mode].label}
+                        {permissionModeMeta(mode).label}
                       </option>
                     ))}
                     {!PERMISSION_MODE_ORDER.includes(permissionMode) ? (
                       <option value={permissionMode}>
-                        {PERMISSION_MODE_META[permissionMode].label}（历史值）
+                        {permissionModeMeta(permissionMode).label}（历史值）
                       </option>
                     ) : null}
                   </select>

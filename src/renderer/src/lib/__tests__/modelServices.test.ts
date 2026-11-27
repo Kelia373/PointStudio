@@ -4,19 +4,23 @@ import assert from 'node:assert/strict'
 
 import { AUTO_ROUTE_MODEL } from '../modelOptions.ts'
 import {
+  addCustomApiProvider,
   buildCliInvocationPreview,
   collectAvailableModelOptions,
+  collectModelPositionOptions,
+  createCustomApiProvider,
   createDefaultModelServicesState,
   modelDisplayLabel,
   parseModelServicesState,
+  removeCustomApiProvider,
   serializeModelServicesState
 } from '../modelServices.ts'
 
-test('默认状态：4 API / 6 CLI / 2 本地 + 四槽位 + 浏览器配置', () => {
+test('默认状态：14 API / 13 CLI / 3 本地 + 四槽位 + 浏览器配置', () => {
   const state = createDefaultModelServicesState()
-  assert.equal(state.api.length, 4)
-  assert.equal(state.cli.length, 6)
-  assert.equal(state.local.length, 2)
+  assert.equal(state.api.length, 14)
+  assert.equal(state.cli.length, 13)
+  assert.equal(state.local.length, 3)
   assert.equal(state.slots.primaryModel, AUTO_ROUTE_MODEL)
   assert.equal(state.browser.driver, 'agent-browser-sandbox')
   assert.equal(state.browser.smartGateOnSubmit, true)
@@ -33,7 +37,7 @@ test('持久化解析：坏数据回退默认，部分字段合并', () => {
   )
   assert.equal(partial.slots.primaryModel, 'deepseek-chat')
   assert.equal(partial.slots.fastModel, defaults.slots.fastModel)
-  assert.equal(partial.cli.length, 6)
+  assert.equal(partial.cli.length, 13)
 })
 
 test('CLI 预览：替换占位符并按权限模式拼标志，无多余空格', () => {
@@ -97,11 +101,11 @@ test('可用模型汇总：只收已启用项，CLI 用 cli: 前缀和中文标�
 
 test('模型位口径：CLI 不进模型下拉，只保留 API / 本地', () => {
   const state = createDefaultModelServicesState()
-  const positionValues = collectAvailableModelOptions(state)
-    .filter((item) => item.kind !== 'cli')
-    .map((item) => item.value)
+  const positionValues = collectModelPositionOptions(state).map((item) => item.value)
   assert.ok(positionValues.includes('deepseek-chat'))
   assert.equal(positionValues.includes('cli:opencode'), false)
+  // 直接断言被测函数的过滤结果，函数被改成含 CLI 时这条会红
+  assert.equal(collectModelPositionOptions(state).some((item) => item.kind === 'cli'), false)
 })
 
 test('显示名：CLI 用友好标签，未知值原样返回', () => {
@@ -129,13 +133,102 @@ test('坏条目逐条清洗：null / 缺字段不进状态，槽位与浏览器�
       browser: { cdpPort: 'x' }
     })
   )
-  assert.equal(dirty.api.length, 1)
-  assert.deepEqual(dirty.api[0].models, ['m'])
-  assert.equal(dirty.cli.length, 1)
-  assert.equal(dirty.cli[0].cwdPolicy, 'workspace')
-  // 数组被清空时整体回退默认，不让设置页白屏
-  assert.equal(dirty.local.length, 2)
-  assert.equal(parseModelServicesState(JSON.stringify({ local: [{ id: 'bad' }] })).local.length, 2)
+  // 脏条目被过滤，其余按 id 合并进完整目录；不在预置里的自定义项追加到末尾
+  const customApi = dirty.api.find((item) => item.id === 'y')
+  assert.deepEqual(customApi?.models, ['m'])
+  assert.equal(dirty.api.length, defaults.api.length + 1)
+  const customCli = dirty.cli.find((item) => item.id === 'c')
+  assert.equal(customCli?.cwdPolicy, 'workspace')
+  assert.equal(customCli?.preset, 'custom-command')
+  assert.equal(dirty.cli.length, defaults.cli.length + 1)
+  // 本地数组全是脏条目时整体回退默认，不让设置页白屏
+  assert.equal(dirty.local.length, defaults.local.length)
+  assert.equal(
+    parseModelServicesState(JSON.stringify({ local: [{ id: 'bad' }] })).local.length,
+    defaults.local.length
+  )
   assert.equal(dirty.slots.primaryModel, defaults.slots.primaryModel)
   assert.equal(dirty.browser.cdpPort, defaults.browser.cdpPort)
+})
+
+test('完整厂商目录：14 API / 13 CLI / 3 本地，CLI 带 launchMode', () => {
+  const catalog = createDefaultModelServicesState()
+  assert.equal(catalog.api.length, 14)
+  assert.equal(catalog.cli.length, 13)
+  assert.equal(catalog.local.length, 3)
+  assert.ok(catalog.api.some((item) => item.id === 'opencode-go'))
+  assert.ok(catalog.cli.some((item) => item.id === 'cursor'))
+  assert.ok(catalog.local.some((item) => item.id === 'vllm'))
+  assert.equal(catalog.cli.every((item) => item.launchMode === 'cli' || item.launchMode === 'chat'), true)
+})
+
+test('老缓存增量合并：保留用户改动，同时补齐新预置厂商', () => {
+  const legacy = JSON.stringify({
+    api: [
+      {
+        id: 'deepseek',
+        kind: 'api',
+        name: 'DeepSeek',
+        protocol: 'deepseek',
+        enabled: false,
+        baseUrl: 'https://my-proxy.example/v1',
+        models: ['my-model'],
+        defaultModel: 'my-model'
+      }
+    ],
+    cli: [
+      {
+        id: 'opencode',
+        kind: 'cli',
+        preset: 'opencode',
+        name: 'OpenCode',
+        enabled: false,
+        executable: 'opencode',
+        transport: 'stdio-jsonl',
+        argsTemplate: '{{prompt}}',
+        permissionFlags: { 'auto-edit': '', smart: '', 'full-access': '' },
+        cwdPolicy: 'workspace'
+      }
+    ],
+    local: [
+      {
+        id: 'ollama',
+        kind: 'local',
+        name: 'Ollama',
+        enabled: true,
+        baseUrl: 'http://127.0.0.1:11434',
+        models: ['qwen2.5'],
+        numCtx: 4096,
+        keepAliveMinutes: 30
+      }
+    ]
+  })
+  const merged = parseModelServicesState(legacy)
+  assert.equal(merged.api.length, 14)
+  assert.equal(merged.cli.length, 13)
+  assert.equal(merged.local.length, 3)
+  assert.equal(merged.api.find((item) => item.id === 'deepseek')?.baseUrl, 'https://my-proxy.example/v1')
+  assert.equal(merged.api.find((item) => item.id === 'openai')?.name, 'OpenAI')
+  assert.equal(merged.cli.find((item) => item.id === 'opencode')?.enabled, false)
+  assert.equal(merged.local.find((item) => item.id === 'ollama')?.numCtx, 4096)
+  assert.equal(merged.cli.find((item) => item.id === 'opencode')?.launchMode, 'cli')
+})
+
+test('自定义 API 服务商：创建、去重添加、只删自定义', () => {
+  const base = createDefaultModelServicesState()
+  const provider = createCustomApiProvider({ name: 'My Gateway', baseUrl: 'https://gw/v1', model: 'm1' })
+  assert.equal(provider.id, 'custom-my-gateway')
+  assert.equal(provider.protocol, 'openai-compatible')
+  assert.deepEqual(provider.models, ['m1'])
+
+  const added = addCustomApiProvider(base, { name: 'My Gateway', baseUrl: 'https://gw/v1' })
+  assert.equal(added.api.length, 15)
+  const again = addCustomApiProvider(added, { name: 'My Gateway', baseUrl: 'https://gw/v1' })
+  assert.equal(again.api.length, 16)
+  assert.equal(new Set(again.api.map((item) => item.id)).size, 16)
+
+  const removed = removeCustomApiProvider(again, 'custom-my-gateway')
+  assert.equal(removed.api.length, 15)
+  // 内置项不可删
+  assert.equal(removeCustomApiProvider(removed, 'deepseek').api.length, 15)
 })

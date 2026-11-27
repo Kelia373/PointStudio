@@ -5,6 +5,41 @@
 
 ---
 
+## LobeHub Icons（@lobehub/icons-static-svg）
+
+- 用途：`src/renderer/src/assets/providers/*.svg`（24×24 厂商品牌图标，构建期以 `?raw` 内联）
+- 上游：https://github.com/lobehub/lobe-icons
+- 版本：1.106.0（只取静态 SVG，不作为运行时依赖）
+- 许可：MIT
+
+```text
+MIT License
+
+Copyright (c) 2023 LobeHub
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+`paseo.svg`、`continue.svg`、`custom.svg` 为本项目自绘的几何兜底图标，随本仓库许可发布。
+
+---
+
 ## Lucide Icons
 
 - 用途：`src/renderer/src/assets/icons/*.svg`（24×24 线性图标）
