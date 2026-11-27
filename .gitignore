@@ -39,6 +39,9 @@ desktop.ini
 ai-workstation/ref/
 ref/
 
+# 本机临时区（目录说明见 _local/README.md）：素材、中间产物、一次性脚本，一律不入库
+_local/
+
 # 参考资料暂存区（未整理的不入库）
 resources/inbox/
 

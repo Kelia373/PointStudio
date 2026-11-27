@@ -26,3 +26,37 @@ jobs:
       # 测试层：真正的关卡。钩子能用 --no-verify 绕，这里绕不过。
       - name: 运行测试
         run: python scripts/tdd_gate.py --test
+
+  # TS 侧的类型检查与单元测试。
+  #
+  # 为什么单开一个 job：上面那个 job 只跑 Python 门禁，仓库里 300+ 条 TS 测试
+  # 在 CI 里从来没被执行过。这个 job 让它们真的跑起来。
+  #
+  # 注意：本地把依赖装在工作区外（见 AGENTS.md），CI 是干净 checkout，
+  # 因此用 --store-dir 覆盖 pnpm-workspace.yaml 里的机器专属路径。
+  js-tests:
+    name: TS 类型检查与单测
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          # 不挂 pnpm 缓存：安装用了自定义 --store-dir .pnpm-store，
+          # setup-node 默认按 `pnpm store path` 缓存，post-step 会因路径不存在而把 job 判失败。
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile --store-dir .pnpm-store
+
+      - name: 类型检查
+        run: node node_modules/typescript/bin/tsc --noEmit -p tsconfig.json
+
+      - name: 单元测试
+        # 不用 node --test（它会 spawn 子进程），直跑总入口。
+        # Node 22 需显式开启类型擦除；Node 23.6+ 默认开启。
+        run: node --experimental-strip-types tests/js/all.test.ts

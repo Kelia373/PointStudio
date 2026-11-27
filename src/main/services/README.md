@@ -1,0 +1,42 @@
+# src/main/services
+
+**职责**：中小型业务服务，一件事一个文件。
+
+## 与 `features/` 的分界
+
+同一个业务，**体量**决定放哪：
+
+| 体量 | 放哪 |
+|---|---|
+| 一个文件装得下 | `services/<name>.ts` |
+| 需要几个私有辅助文件 | `services/<name>/`（原地长子目录，不跳级） |
+| 长成多文件的大领域、有自己的页面 | `features/<name>/` |
+
+## 内容举例（将来可能出现的）
+
+- 文件处理流水线
+- 搜索与索引
+- 知识库检索
+- 导入 / 导出
+- 备份
+
+现在都还没有，此目录保持空。
+
+## 铁律
+
+1. **对外入口唯一**：`services/<name>/` 子目录只暴露一个 `index.ts`，其余文件私有。
+2. **服务之间可以互相调用，但不能成环**。
+3. **不做版本判断**：个人版 / 企业版差异归 `policy`。
+4. **不直接碰 Electron**：需要平台能力时走 `core` 的接口注入。
+
+## 依赖
+
+允许依赖 `core`、`data`、`ai`；被 `src/main` / `ipc` 调用。
+
+## 现状
+
+已有：`chatReply.ts`（假流式回复）、`chatEngine.ts`（有 Key 走真模型、无 Key 降级）、`chatFlow.ts`（一次问答的落库编排：先存用户消息 → 流式产出 → 存助手消息，失败时保留已产出部分并标记 error）、`assistantCleanup.ts`（删除助手并解绑引用它的会话，避免悬空引用）、`assistantService.ts`（助手增删改查）、`conversationService.ts`（会话与消息：建/改名/删（级联删消息）、追加/编辑/删除消息、按最近活动排序）、`providerSettingsService.ts`（模型凭据读写，对外只给脱敏视图）、`chatFlow.ts` 可选接入检索（命中片段拼进用户消息并回调引用，检索失败降级为无资料）；`crashLogService.ts`（崩溃报告落盘 + 轮转，写失败返回错误码而不抛）、`retrievalService.ts`（工作区检索：读文件 → 切块 → 关键词检索 → 格式化片段，读失败的文件跳过）、`chunkLocator.ts`（按 `path#index` 回原文定位片段；对不上返回 null 不猜）、`streamRegistry.ts`（在途流登记：按请求 id 取消/收尾，供「停止生成」使用）、`exportService.ts`（单会话导出 Markdown，保留引用来源与失败标记）、`backupService.ts`（整库导出与恢复：先校验后写入、merge 按 id 去重不覆盖）、`comparisonService.ts`（同一问题并行问多个平台，单点失败隔离）、`agentLoop.ts`（一个目标的完整推进：生成 → 执行 → 失败 → 重规划 → 再执行，依赖以函数注入、可单测）、`workspaceImportService.ts`（从任意路径导入：读源 → 领域校验 → 查重 → 落盘 → 登记，落盘失败不留登记）、`workspaceService.ts`（工作区文件登记：路径安全校验、同路径去重、持久化；不含文件落盘）、`planService.ts`（调模型生成计划：拼提示词 → 解析 → 协议校验 → 带错误码重试，默认最多 2 次；`replanAfterFailure` 把失败现场交给模型产出修订版，旧计划保持不可变）。
+
+上下文：`chatFlow` 在落库前先读历史，用 `ai/domain/context.ts` 的 `trimHistory` 按条数 + 估算 token 裁剪，被丢掉的条数通过 `onContextTrimmed` 回调上报（界面显示提示），不静默丢弃。
+
+约定：服务层只依赖注入进来的存储对象与时钟，不 import electron，因此可脱离运行环境单测。

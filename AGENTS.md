@@ -41,7 +41,7 @@ python scripts/tdd_gate.py --all       # 内容检查 + 全部测试（CI 跑这
 
 ```powershell
 powershell -File scripts\dev.ps1       # 开发模式（或双击 dev.cmd）
-powershell -File scripts\build.ps1     # 构建，产物在 apps\desktop\out
+powershell -File scripts\build.ps1     # 构建，产物在 out/
 powershell -File scripts\check.ps1     # tsc + 门禁
 ```
 
@@ -53,12 +53,14 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 
 ## 本机环境事实
 
+- **临时产物一律进 `_local/`**（已在 `.gitignore`）：判断标准是「会不会提交」。素材、日志、一次性脚本、mock 都放这里按子目录分类；应用真正要用的资源必须挪进 `src/renderer/src/assets/`，打包不会带 `_local/`。
 - **依赖在工作区外**：实体在 `D:\deveTools\ps-node`，工作区里的 `node_modules` 是指向它的 junction。**改完 `package.json` 的依赖要同步过去再 install。**
 - **工作区目录会让其中的 exe 静默失败**（无输出、退出码 0、不执行）。判断：`icacls <目录>` 有没有 `S-1-4-`。别再用"文件损坏/签名/环境变量"解释它。
 - 跑 electron 前清 `ELECTRON_RUN_AS_NODE`（DSH 会注入），否则报 `whenReady` undefined。
 - electron 二进制可能缺失，需在包目录 `node install.js`，带 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
 - **AI 无法启动 Electron 窗口**，只能验证构建产物与 `tsc --noEmit`；窗口必须人开终端确认。
 - PowerShell 拦 `.ps1`：用 `.CMD` 后缀或 `bash`；改执行策略由人做。
+- **含中文的 `.ps1` 必须存成 UTF-8 BOM**：PowerShell 5.1 在无 BOM 时按系统 ANSI(GBK) 解码 UTF-8 字节，中文注释会把**下一行代码吃掉**，报错却指向再下一行（表现为莫名其妙的 null 参数）。已踩：`scripts/dev.ps1`。
 - TS 7 移除了 `baseUrl`，`paths` 写相对路径。
 - 改主进程要手动重启 dev；改界面热更新可用。这些细节见 `docs/03` §6。
 
@@ -66,8 +68,8 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 
 | 路径 | 作用 |
 | --- | --- |
-| `apps/` | 可运行产物：`desktop`（个人版） |
-| `packages/` | 内核，禁依赖 UI：`core` `agent` `providers` `tools` `policy` `storage` `remote` `ui` |
+| `_local/` | **本机临时区，不入库**：图标素材、agent 中间产物、一次性脚本、截图。分类见 `_local/README.md` |
+| `src/main/` | 主进程与内核目录：`core` `ipc` `data` `ai` `features` `services` `utils` `i18n` `policy` `remote` `ui`（内核禁依赖 UI） |
 | `docs/` | 规则、ADR、盘点（编号上限 5 个） |
 | `scripts/` | 构建与检查脚本；根目录 `dev.cmd` 是双击启动入口 |
 | `D:\Project\NewGame\ai-workstation\ref\` | 外部参考源码，**只读** |
@@ -82,8 +84,10 @@ powershell -File scripts\check.ps1     # tsc + 门禁
 | --- | --- |
 | 分支合并、提交流程、测试契约、自检、停止条件 | `docs/01` |
 | 任务分级、计划六问、澄清预算、阶段出口 | `docs/02` |
+| 产品能力清单、模块归属、里程碑与验收判据 | `docs/04` |
 | 个人版 / 企业版边界与不做清单 | `docs/00` |
 | 环境坑、能力盘点、能力缺口 | `docs/03` |
+| 包分层、依赖方向、新能力归位 | `docs/references/architecture/main-architecture.md` |
 | 技术栈与双版本架构 | `docs/adr/0002` |
 
 优先级：本文件 > `docs/` > 现存同类代码 > 问人。
