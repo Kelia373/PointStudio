@@ -38,6 +38,7 @@ import { CHAT_PAGE, nextActivePage } from '../lib/pageNav'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
+import ConfirmButton from './ConfirmButton'
 import SessionItem from './SessionItem'
 import AgentAvatar from './AgentAvatar'
 
@@ -144,7 +145,6 @@ export default function Sidebar({
   const [newGroupName, setNewGroupName] = useState('')
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null)
   const [renameGroupValue, setRenameGroupValue] = useState('')
-  const [confirmGroupId, setConfirmGroupId] = useState<string | null>(null)
   const [draggingAgentId, setDraggingAgentId] = useState<string | null>(null)
   const [dropGroupId, setDropGroupId] = useState<string | null>(null)
   // 应用内剪贴板：只存配置，不存 id 与时间戳
@@ -810,25 +810,12 @@ export default function Sidebar({
                           className={`side__status side__status--${groupBench.state}`}
                           title={LIGHT_LABEL[groupBench.state]}
                         />
-                        <button
-                          className={`side__group-del${
-                            confirmGroupId === group.id ? ' side__group-del--armed' : ''
-                          }`}
-                          type="button"
-                          title={
-                            confirmGroupId === group.id
-                              ? '再点一次确认删除（不会删除组里的 Agent）'
-                              : '删除小组（不会删除组里的 Agent）'
-                          }
-                          aria-label={
-                            confirmGroupId === group.id ? '再点一次确认删除小组' : '删除小组'
-                          }
-                          onClick={() => {
-                            if (confirmGroupId !== group.id) {
-                              setConfirmGroupId(group.id)
-                              return
-                            }
-                            setConfirmGroupId(null)
+                        <ConfirmButton
+                          className="side__group-del"
+                          confirmLabel="删?"
+                          title="删除小组（不会删除组里的 Agent）"
+                          ariaLabel="删除小组"
+                          onConfirm={() => {
                             setGroups((current) => removeGroup(current, group.id))
                             if (groupAxis === group.id) {
                               setGroupAxis(null)
@@ -836,7 +823,7 @@ export default function Sidebar({
                           }}
                         >
                           <Icon name="x" size={11} />
-                        </button>
+                        </ConfirmButton>
                       </div>
 
                       {group.collapsed ? null : (

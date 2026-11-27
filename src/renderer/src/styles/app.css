@@ -3459,7 +3459,10 @@ select:focus {
   font-size: var(--fs-sm);
 }
 
-.side__group-del--armed {
+.side__group-del.is-confirm {
+  width: auto;
+  padding: 0 var(--sp-1);
   opacity: 1;
   color: var(--danger);
+  font-size: var(--fs-xs);
 }
