@@ -65,7 +65,9 @@ export default function AgentCreateDialog({
       modelChoices(
         provider?.providerId ?? null,
         null,
-        collectModelPositionOptions(services).map((option) => option.value)
+        collectModelPositionOptions(services, provider?.providerId ?? null).map(
+          (option) => option.value
+        )
       ),
     [provider?.providerId, services]
   )

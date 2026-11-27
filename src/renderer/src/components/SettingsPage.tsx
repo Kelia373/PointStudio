@@ -97,7 +97,10 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
   const section = findSettingsSection(sectionId)
   const groups = useMemo(() => filterSettingsGroups(query), [query])
-  const modelOptions = useMemo(() => collectModelPositionOptions(services), [services])
+  const modelOptions = useMemo(
+    () => collectModelPositionOptions(services, provider?.providerId ?? null),
+    [services, provider?.providerId]
+  )
   const slotValues = useMemo(
     () => [AUTO_ROUTE_MODEL, ...modelOptions.map((option) => option.value)],
     [modelOptions]
@@ -309,13 +312,22 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                         {MODEL_LABEL[value] ?? modelDisplayLabel(value, services)}
                       </option>
                     ))}
+                    {services.slots[card.key] !== '' &&
+                    !slotValues.includes(services.slots[card.key]) ? (
+                      <option value={services.slots[card.key]}>
+                        {modelDisplayLabel(services.slots[card.key], services)}
+                        （当前服务商未提供）
+                      </option>
+                    ) : null}
                   </select>
                 </label>
               ))}
             </div>
             <p className="settings-note">
-              主对话模型用于新建会话；已有会话保留各自的模型覆盖。其余三个槽位目前只保存配置，
-              等对应调用方（标题/规划/向量）接入后生效。
+              只列主进程当前服务商（DeepSeek 或 Ollama）的模型：请求只能覆盖 model，
+              地址与凭据仍走主进程那一家。其它服务商先保存配置，等第 2 笔多服务商
+              凭据库接入后才会出现在这里。主对话模型用于新建会话，已有会话保留各自的
+              模型覆盖；其余三个槽位目前只保存配置。
             </p>
           </>
         )
@@ -719,72 +731,79 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
       case 'local-models':
         return (
-          <div className="settings-card-grid">
-            {services.local.map((runtime) => (
-              <div key={runtime.id} className="settings-card">
-                <span className="settings-card__title">{runtime.name}</span>
-                <label className="settings__row">
-                  <span className="settings__label">启用</span>
-                  <input
-                    type="checkbox"
-                    checked={runtime.enabled}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { enabled: event.target.checked })
-                    }
-                  />
-                </label>
-                <label className="settings__row">
-                  <span className="settings__label">Base URL</span>
-                  <input
-                    className="settings__input"
-                    value={runtime.baseUrl}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { baseUrl: event.target.value })
-                    }
-                  />
-                </label>
-                <label className="settings__row">
-                  <span className="settings__label">模型（逗号分隔）</span>
-                  <input
-                    className="settings__input"
-                    value={runtime.models.join(', ')}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { models: splitModels(event.target.value) })
-                    }
-                  />
-                </label>
-                <label className="settings__row">
-                  <span className="settings__label">numCtx</span>
-                  <input
-                    className="settings__input"
-                    type="number"
-                    value={runtime.numCtx}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { numCtx: Number(event.target.value) || 0 })
-                    }
-                  />
-                </label>
-                {runtime.id === 'ollama' ? (
-                  <>
-                    <button
-                      className="settings__save"
-                      type="button"
-                      onClick={() => void saveOllama(runtime)}
-                    >
-                      写入主进程
-                    </button>
+          <>
+            <div className="settings-card-grid">
+              {services.local.map((runtime) => (
+                <div key={runtime.id} className="settings-card">
+                  <span className="settings-card__title">{runtime.name}</span>
+                  <label className="settings__row">
+                    <span className="settings__label">启用</span>
+                    <input
+                      type="checkbox"
+                      checked={runtime.enabled}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { enabled: event.target.checked })
+                      }
+                    />
+                  </label>
+                  <label className="settings__row">
+                    <span className="settings__label">Base URL</span>
+                    <input
+                      className="settings__input"
+                      value={runtime.baseUrl}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { baseUrl: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings__row">
+                    <span className="settings__label">模型（逗号分隔）</span>
+                    <input
+                      className="settings__input"
+                      value={runtime.models.join(', ')}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { models: splitModels(event.target.value) })
+                      }
+                    />
+                  </label>
+                  <label className="settings__row">
+                    <span className="settings__label">numCtx</span>
+                    <input
+                      className="settings__input"
+                      type="number"
+                      value={runtime.numCtx}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { numCtx: Number(event.target.value) || 0 })
+                      }
+                    />
+                  </label>
+                  {runtime.id === 'ollama' ? (
+                    <>
+                      <button
+                        className="settings__save"
+                        type="button"
+                        onClick={() => void saveOllama(runtime)}
+                      >
+                        写入主进程
+                      </button>
+                      <p className="settings-note">
+                        写入主进程只送 Base URL 与首个模型；numCtx / keepAlive 仅本地保存。
+                      </p>
+                    </>
+                  ) : (
                     <p className="settings-note">
-                      写入主进程只送 Base URL 与首个模型；numCtx / keepAlive 仅本地保存。
+                      {runtime.name} 只保存在渲染层配置，主进程真链路留后续专题。
                     </p>
-                  </>
-                ) : (
-                  <p className="settings-note">
-                    {runtime.name} 只保存在渲染层配置，主进程真链路留后续专题。
-                  </p>
-                )}
-              </div>
+                  )}
+                </div>
             ))}
-          </div>
+            </div>
+            <p className="settings-note">
+              已知边界：主进程当前只保存一行 provider 配置，写 Ollama 会覆盖 DeepSeek
+              那一行（反之亦然），切回来需要重新填 Key。多服务商凭据库排在下一单，
+              这里先按「同一时间只用一家」使用。
+            </p>
+          </>
         )
 
       case 'browser':

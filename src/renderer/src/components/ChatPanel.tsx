@@ -903,9 +903,10 @@ export default function ChatPanel() {
   const primarySlot = modelServicesView.slots.primaryModel
   const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
   const defaultModelValue = activeConversation?.model ?? (provider?.model || slotFallback)
-  const externalModelValues = collectModelPositionOptions(modelServicesView).map(
-    (option) => option.value
-  )
+  const externalModelValues = collectModelPositionOptions(
+    modelServicesView,
+    provider?.providerId ?? null
+  ).map((option) => option.value)
   const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
   return (

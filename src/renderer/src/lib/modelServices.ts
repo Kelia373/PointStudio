@@ -499,13 +499,17 @@ export function serializeModelServicesState(state: ModelServicesState): string {
  *
  * 结果按原始字符串缓存：ChatPanel 每帧都会读一次状态，同一份 localStorage
  * 只解析一遍，输入与流式输出不再重复 JSON.parse 全量 sanitize。
- * 返回的对象视为只读快照，不要原地修改。
+ *
+ * 缓存值是**共享**的，所以返回前整体冻结（对象、数组与每个条目）：
+ * 任何原地 `push` / `sort` / `state.api[0].enabled = ...` 都会直接抛错，
+ * 而不是静默污染同一份 localStorage 的所有读者。需要改状态请照
+ * SettingsPage 的写法复制出新对象。不可变契约只靠注释挡不住，交给运行时。
  */
 export function parseModelServicesState(raw: string | null): ModelServicesState {
   if (cachedRaw === raw && cachedState !== null) {
     return cachedState
   }
-  const parsed = parseModelServicesUncached(raw)
+  const parsed = freezeDeep(parseModelServicesUncached(raw))
   cachedRaw = raw
   cachedState = parsed
   return parsed
@@ -513,6 +517,27 @@ export function parseModelServicesState(raw: string | null): ModelServicesState 
 
 let cachedRaw: string | null | undefined
 let cachedState: ModelServicesState | null = null
+
+function freezeDeep(state: ModelServicesState): ModelServicesState {
+  for (const item of state.api) {
+    Object.freeze(item)
+    Object.freeze(item.models)
+  }
+  for (const item of state.cli) {
+    Object.freeze(item)
+    Object.freeze(item.permissionFlags)
+  }
+  for (const item of state.local) {
+    Object.freeze(item)
+    Object.freeze(item.models)
+  }
+  Object.freeze(state.api)
+  Object.freeze(state.cli)
+  Object.freeze(state.local)
+  Object.freeze(state.slots)
+  Object.freeze(state.browser)
+  return Object.freeze(state)
+}
 
 function parseModelServicesUncached(raw: string | null): ModelServicesState {
   const base = createDefaultModelServicesState()
@@ -561,6 +586,10 @@ function stringOf(value: unknown, fallback: string): string {
 /**
  * 老缓存增量合并：已有 id 保留用户改过的配置，新增预置按默认顺序补进来，
  * 自定义服务商（不在预置里）追加在末尾。
+ *
+ * 注意是**整条替换**（`byId.get(id) ?? item`），不是字段级合并：
+ * 老条目缺的新字段只能靠 sanitize 的默认值兜，以后给预置加字段时记得
+ * 在 sanitize 里给一个合理默认，否则老用户永远拿不到。
  */
 function mergePresets<T extends { id: string }>(saved: T[], defaults: T[]): T[] {
   if (saved.length === 0) {
@@ -868,11 +897,35 @@ export function collectAvailableModelOptions(state: ModelServicesState): ModelOp
 }
 
 /**
- * 模型位（新建智能体 / 四槽位 / 输入栏）可选的口径：
- * CLI 引擎还没有执行路径，选成模型只会把 `cli:xxx` 发给 API，所以这里排除。
+ * 模型位（新建智能体 / 四槽位 / 输入栏）可选的口径。
+ *
+ * 只列「主进程当前 provider」的模型：请求只能带 model 覆盖，baseUrl / key 仍走
+ * 唯一那行 provider 设置，所以把别家的模型选进来必然把模型名发错地址。
+ * CLI 引擎同样没有执行路径，`cli:xxx` 只会被当成模型名发出去，也排除。
+ *
+ * activeProviderId 来自 settings.readProvider()：null（还没读到）时返回空，
+ * 由调用方只显示会话当前值，不猜。
  */
-export function collectModelPositionOptions(state: ModelServicesState): ModelOption[] {
-  return collectAvailableModelOptions(state).filter((option) => option.kind !== 'cli')
+export function collectModelPositionOptions(
+  state: ModelServicesState,
+  activeProviderId: string | null
+): ModelOption[] {
+  if (!activeProviderId) {
+    return []
+  }
+  const api = state.api.find((item) => item.id === activeProviderId)
+  if (api) {
+    return api.models.map((model) => ({ value: model, label: model, kind: 'api' }))
+  }
+  const runtime = state.local.find((item) => item.id === activeProviderId)
+  if (runtime) {
+    return runtime.models.map((model) => ({
+      value: model,
+      label: `${runtime.name} · ${model}`,
+      kind: 'local'
+    }))
+  }
+  return []
 }
 
 /** 某个模型标识在下拉里显示什么。 */

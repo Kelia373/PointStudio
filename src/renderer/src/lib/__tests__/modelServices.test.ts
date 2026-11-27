@@ -99,13 +99,26 @@ test('可用模型汇总：只收已启用项，CLI 用 cli: 前缀和中文标�
   )
 })
 
-test('模型位口径：CLI 不进模型下拉，只保留 API / 本地', () => {
+test('模型位口径：只列主进程当前 provider，CLI 与其他家一律不进下拉', () => {
   const state = createDefaultModelServicesState()
-  const positionValues = collectModelPositionOptions(state).map((item) => item.value)
-  assert.ok(positionValues.includes('deepseek-chat'))
-  assert.equal(positionValues.includes('cli:opencode'), false)
-  // 直接断言被测函数的过滤结果，函数被改成含 CLI 时这条会红
-  assert.equal(collectModelPositionOptions(state).some((item) => item.kind === 'cli'), false)
+  const deepseek = collectModelPositionOptions(state, 'deepseek')
+  const values = deepseek.map((item) => item.value)
+  assert.ok(values.includes('deepseek-chat'))
+  assert.equal(values.includes('cli:opencode'), false)
+  assert.equal(deepseek.some((item) => item.kind === 'cli'), false)
+  // 目录里其他家的模型不能出现，否则会把别家模型名发到 DeepSeek 的地址上
+  assert.equal(values.includes('llama3.1'), false)
+  assert.equal(values.includes('gpt-5.1'), false)
+  assert.equal(values.includes('kimi-k2.5'), false)
+})
+
+test('模型位口径：切到本地运行时只列该运行时的模型；未读到 provider 时为空', () => {
+  const state = createDefaultModelServicesState()
+  const ollama = collectModelPositionOptions(state, 'ollama').map((item) => item.value)
+  assert.deepEqual(ollama, ['llama3.1', 'qwen2.5'])
+  assert.equal(collectModelPositionOptions(state, 'lm-studio').length, 1)
+  assert.equal(collectModelPositionOptions(state, null).length, 0)
+  assert.equal(collectModelPositionOptions(state, 'not-configured').length, 0)
 })
 
 test('显示名：CLI 用友好标签，未知值原样返回', () => {
@@ -231,4 +244,19 @@ test('自定义 API 服务商：创建、去重添加、只删自定义', () => 
   assert.equal(removed.api.length, 15)
   // 内置项不可删
   assert.equal(removeCustomApiProvider(removed, 'deepseek').api.length, 15)
+})
+
+test('缓存结果被冻结：原地修改直接抛错，不会污染同一份 raw 的其他读者', () => {
+  const raw = JSON.stringify({ slots: { primaryModel: 'deepseek-chat' } })
+  const first = parseModelServicesState(raw)
+  assert.equal(first.api[0].enabled, true)
+  assert.throws(() => {
+    first.api[0].enabled = false
+  })
+  assert.throws(() => {
+    first.api.push(first.api[0])
+  })
+  const second = parseModelServicesState(raw)
+  assert.equal(second, first, '同一份 raw 应命中缓存')
+  assert.equal(second.api[0].enabled, true)
 })
