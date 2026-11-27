@@ -2,6 +2,7 @@
 //
 // 只负责收集输入与一次 IPC 调用；创建成功后把 AssistantDto 交给外壳去刷新与绑定。
 import { useEffect, useMemo, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 
 import { describeError } from '../../../shared/i18n/errors.ts'
 import type {
@@ -39,7 +40,13 @@ export default function AgentCreateDialog({
   const [avatar, setAvatar] = useState<string | null>(null)
   const [modelId, setModelId] = useState('')
   const [avatarOpen, setAvatarOpen] = useState(false)
-  const [modeOpen, setModeOpen] = useState(false)
+  const [menu, setMenu] = useState<{
+    kind: 'mode' | 'model'
+    left: number
+    width: number
+    top?: number
+    bottom?: number
+  } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -55,6 +62,10 @@ export default function AgentCreateDialog({
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
+        if (menu) {
+          setMenu(null)
+          return
+        }
         onClose()
         return
       }
@@ -66,7 +77,27 @@ export default function AgentCreateDialog({
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, soul, permissionMode, avatar, modelId, busy])
+  }, [name, soul, permissionMode, avatar, modelId, busy, menu])
+
+  function openMenu(
+    kind: 'mode' | 'model',
+    event: ReactMouseEvent<HTMLButtonElement>
+  ): void {
+    if (menu?.kind === kind) {
+      setMenu(null)
+      return
+    }
+    const rect = event.currentTarget.getBoundingClientRect()
+    const openUp = window.innerHeight - rect.bottom < 300
+    setMenu({
+      kind,
+      left: rect.left,
+      width: rect.width,
+      ...(openUp
+        ? { bottom: window.innerHeight - rect.top + 4 }
+        : { top: rect.bottom + 4 })
+    })
+  }
 
   async function submit(): Promise<void> {
     if (busy) {
@@ -207,16 +238,15 @@ export default function AgentCreateDialog({
               <span className="agent-dialog__label">权限模式</span>
               <button
                 className={`mode-picker mode-picker--${modeMeta.tone}${
-                  modeOpen ? ' is-open' : ''
+                  menu?.kind === 'mode' ? ' is-open' : ''
                 }`}
                 type="button"
-                aria-expanded={modeOpen}
+                aria-expanded={menu?.kind === 'mode'}
                 aria-haspopup="listbox"
-                onClick={() => setModeOpen((value) => !value)}
+                onClick={(event) => openMenu('mode', event)}
               >
                 <span className="mode-picker__text">
                   <b>{modeMeta.label}</b>
-                  <small>{modeMeta.description}</small>
                 </span>
                 {modeMeta.tone === 'warn' ? <span className="mode-badge">!</span> : null}
                 {modeMeta.tone === 'danger' ? (
@@ -224,56 +254,22 @@ export default function AgentCreateDialog({
                 ) : null}
                 <Icon name="arrow-down" size={12} />
               </button>
-              {modeOpen ? (
-                <ul className="mode-list" role="listbox" aria-label="权限模式">
-                  {PERMISSION_MODE_ORDER.map((mode) => {
-                    const meta = PERMISSION_MODE_META[mode]
-                    return (
-                      <li key={mode}>
-                        <button
-                          className={`mode-list__item mode-list__item--${meta.tone}${
-                            permissionMode === mode ? ' is-on' : ''
-                          }`}
-                          type="button"
-                          role="option"
-                          aria-selected={permissionMode === mode}
-                          onClick={() => {
-                            setPermissionMode(mode)
-                            setModeOpen(false)
-                          }}
-                        >
-                          <span className="mode-list__text">
-                            <b>{meta.label}</b>
-                            <small>{meta.description}</small>
-                          </span>
-                          {meta.tone === 'warn' ? <span className="mode-badge">!</span> : null}
-                          {meta.tone === 'danger' ? (
-                            <span className="mode-badge mode-badge--danger">!</span>
-                          ) : null}
-                        </button>
-                      </li>
-                    )
-                  })}
-                </ul>
-              ) : null}
             </div>
 
-            <label className="agent-dialog__field">
+            <div className="agent-dialog__field">
               <span className="agent-dialog__label">模型</span>
-              <select
-                className="agent-dialog__select"
-                value={modelId}
+              <button
+                className={`agent-dialog__select-btn${menu?.kind === 'model' ? ' is-open' : ''}`}
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={menu?.kind === 'model'}
                 aria-label="模型"
-                onChange={(event) => setModelId(event.target.value)}
+                onClick={(event) => openMenu('model', event)}
               >
-                <option value="">跟随全局默认</option>
-                {models.map((model) => (
-                  <option key={model} value={model}>
-                    {model}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <span>{modelId === '' ? '跟随全局默认' : modelId}</span>
+                <Icon name="arrow-down" size={12} />
+              </button>
+            </div>
           </div>
 
           {error ? <div className="agent-dialog__error">{error}</div> : null}
@@ -293,6 +289,74 @@ export default function AgentCreateDialog({
             <span className="agent-dialog__hint">Ctrl+↵</span>
           </button>
         </footer>
+
+        {menu ? (
+          <>
+            <div
+              className="agent-dialog__menu-mask"
+              role="presentation"
+              onMouseDown={() => setMenu(null)}
+            />
+            <div
+              className="agent-dialog__menu"
+              role="listbox"
+              aria-label={menu.kind === 'mode' ? '权限模式' : '模型'}
+              style={{
+                left: menu.left,
+                width: menu.width,
+                ...(menu.top !== undefined ? { top: menu.top } : { bottom: menu.bottom })
+              }}
+            >
+              {menu.kind === 'mode'
+                ? PERMISSION_MODE_ORDER.map((mode) => {
+                    const meta = PERMISSION_MODE_META[mode]
+                    return (
+                      <button
+                        key={mode}
+                        className={`mode-list__item mode-list__item--${meta.tone}${
+                          permissionMode === mode ? ' is-on' : ''
+                        }`}
+                        type="button"
+                        role="option"
+                        aria-selected={permissionMode === mode}
+                        onClick={() => {
+                          setPermissionMode(mode)
+                          setMenu(null)
+                        }}
+                      >
+                        <span className="mode-list__text">
+                          <b>{meta.label}</b>
+                          <small>{meta.description}</small>
+                        </span>
+                        {meta.tone === 'warn' ? <span className="mode-badge">!</span> : null}
+                        {meta.tone === 'danger' ? (
+                          <span className="mode-badge mode-badge--danger">!</span>
+                        ) : null}
+                      </button>
+                    )
+                  })
+                : [{ value: '', label: '跟随全局默认' }, ...models.map((model) => ({ value: model, label: model }))].map(
+                    (item) => (
+                      <button
+                        key={item.value === '' ? '__default__' : item.value}
+                        className={`agent-dialog__menu-item${
+                          modelId === item.value ? ' is-on' : ''
+                        }`}
+                        type="button"
+                        role="option"
+                        aria-selected={modelId === item.value}
+                        onClick={() => {
+                          setModelId(item.value)
+                          setMenu(null)
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    )
+                  )}
+            </div>
+          </>
+        ) : null}
       </section>
     </div>
   )

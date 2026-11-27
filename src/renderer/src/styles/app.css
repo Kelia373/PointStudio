@@ -3597,10 +3597,6 @@ select:focus {
   gap: var(--sp-3);
 }
 
-.agent-dialog__select {
-  height: 32px;
-}
-
 .agent-dialog__error {
   color: var(--danger);
   font-size: var(--fs-sm);
@@ -3695,8 +3691,8 @@ select:focus {
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
-  min-height: 46px;
-  padding: var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--rad-ctl);
   background: var(--panel-2);
@@ -3711,7 +3707,7 @@ select:focus {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  align-items: center;
 }
 
 .mode-picker__text b {
@@ -3719,49 +3715,28 @@ select:focus {
   font-weight: 500;
 }
 
-.mode-picker__text small {
-  color: var(--fg-3);
-  font-size: var(--fs-xs);
-  line-height: 1.5;
-}
-
-.mode-picker--danger .mode-picker__text b,
-.mode-picker--danger .mode-picker__text small {
+.mode-picker--danger .mode-picker__text b {
   color: var(--danger);
 }
 
 .mode-badge {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   display: grid;
   place-items: center;
+  border: 1px solid var(--warn);
   border-radius: var(--rad-pill);
-  background: var(--warn);
-  color: var(--on-accent);
+  background: transparent;
+  color: var(--warn);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .mode-badge--danger {
-  background: var(--danger);
-}
-
-.mode-list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 2;
-  max-height: 280px;
-  overflow-y: auto;
-  margin: 0;
-  padding: var(--sp-1);
-  list-style: none;
-  background: var(--panel);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--rad-card);
-  box-shadow: var(--shadow-pop);
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
 }
 
 .mode-list__item {
@@ -3769,7 +3744,7 @@ select:focus {
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
-  padding: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--rad-ctl);
   text-align: left;
 }
@@ -3787,21 +3762,23 @@ select:focus {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .mode-list__text b {
-  font-size: var(--fs-sm);
-  font-weight: 500;
+  color: var(--fg);
+  font-size: var(--fs-md);
+  font-weight: 600;
 }
 
 .mode-list__text small {
   color: var(--fg-3);
   font-size: var(--fs-xs);
+  font-weight: 400;
   line-height: 1.5;
 }
 
-.mode-list__item--danger .mode-list__text b,
-.mode-list__item--danger .mode-list__text small {
+.mode-list__item--danger .mode-list__text b {
   color: var(--danger);
 }
 
@@ -3821,4 +3798,75 @@ select:focus {
   padding: 0 var(--sp-3) var(--sp-2);
   color: var(--fg-3);
   font-size: var(--fs-xs);
+}
+
+/* 弹层菜单：脱离弹窗滚动区，按按钮位置浮层显示 */
+.agent-dialog__menu-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+
+.agent-dialog__menu {
+  position: fixed;
+  z-index: 6;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: var(--sp-1);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.agent-dialog__menu-item {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-ctl);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.agent-dialog__menu-item:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.agent-dialog__menu-item.is-on {
+  background: var(--raise);
+  color: var(--fg);
+}
+
+.agent-dialog__select-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  width: 100%;
+  height: 36px;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-ctl);
+  background: var(--panel-2);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.agent-dialog__select-btn:hover,
+.agent-dialog__select-btn.is-open {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+
+.agent-dialog__select-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
