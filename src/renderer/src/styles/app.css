@@ -3691,8 +3691,8 @@ select:focus {
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
-  min-height: 46px;
-  padding: var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--rad-ctl);
   background: var(--panel-2);
@@ -3707,7 +3707,7 @@ select:focus {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  align-items: center;
 }
 
 .mode-picker__text b {
@@ -3715,32 +3715,28 @@ select:focus {
   font-weight: 500;
 }
 
-.mode-picker__text small {
-  color: var(--fg-3);
-  font-size: var(--fs-xs);
-  line-height: 1.5;
-}
-
-.mode-picker--danger .mode-picker__text b,
-.mode-picker--danger .mode-picker__text small {
+.mode-picker--danger .mode-picker__text b {
   color: var(--danger);
 }
 
 .mode-badge {
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   display: grid;
   place-items: center;
+  border: 1px solid var(--warn);
   border-radius: var(--rad-pill);
-  background: var(--warn);
-  color: var(--on-accent);
+  background: transparent;
+  color: var(--warn);
   font-size: var(--fs-xs);
-  font-weight: 700;
+  font-weight: 500;
 }
 
 .mode-badge--danger {
-  background: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
 }
 
 .mode-list__item {
@@ -3748,7 +3744,7 @@ select:focus {
   align-items: center;
   gap: var(--sp-2);
   width: 100%;
-  padding: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
   border-radius: var(--rad-ctl);
   text-align: left;
 }
@@ -3766,21 +3762,23 @@ select:focus {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 
 .mode-list__text b {
-  font-size: var(--fs-sm);
-  font-weight: 500;
+  color: var(--fg);
+  font-size: var(--fs-md);
+  font-weight: 600;
 }
 
 .mode-list__text small {
   color: var(--fg-3);
   font-size: var(--fs-xs);
+  font-weight: 400;
   line-height: 1.5;
 }
 
-.mode-list__item--danger .mode-list__text b,
-.mode-list__item--danger .mode-list__text small {
+.mode-list__item--danger .mode-list__text b {
   color: var(--danger);
 }
 
@@ -3851,8 +3849,8 @@ select:focus {
   justify-content: space-between;
   gap: var(--sp-2);
   width: 100%;
-  height: 46px;
-  padding: 0 var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-3);
   border: 1px solid var(--line);
   border-radius: var(--rad-ctl);
   background: var(--panel-2);

@@ -247,7 +247,6 @@ export default function AgentCreateDialog({
               >
                 <span className="mode-picker__text">
                   <b>{modeMeta.label}</b>
-                  <small>{modeMeta.description}</small>
                 </span>
                 {modeMeta.tone === 'warn' ? <span className="mode-badge">!</span> : null}
                 {modeMeta.tone === 'danger' ? (

@@ -17,7 +17,11 @@ import type {
 } from '../../../shared/types/ipc.ts'
 import { AVATAR_KEYS } from '../lib/agentAvatar'
 import { modelChoices } from '../lib/modelOptions'
-import { PERMISSION_MODE_META, PERMISSION_MODE_ORDER } from '../lib/permissionModes'
+import {
+  PERMISSION_MODE_META,
+  PERMISSION_MODE_ORDER,
+  uiPermissionMode
+} from '../lib/permissionModes'
 
 export default function AssistantPanel({
   onClose,
@@ -62,7 +66,7 @@ export default function AssistantPanel({
     setEditingId(assistant.id)
     setName(assistant.name)
     setSystemPrompt(assistant.systemPrompt)
-    setPermissionMode(assistant.permissionMode ?? 'smart')
+    setPermissionMode(uiPermissionMode(assistant.permissionMode))
     setAvatar(assistant.avatar ?? '')
     setModelId(assistant.modelId ?? '')
     setMessage(null)
