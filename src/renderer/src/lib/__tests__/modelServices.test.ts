@@ -65,6 +65,9 @@ test('CLI 预览：替换占位符并按权限模式拼标志，无多余空格'
     prompt: 'p'
   })
   assert.match(legacy, /--smart-approve$/)
+  // model 为空时 --model 应整段剔除，prompt 不能顶到模型位
+  assert.doesNotMatch(legacy, /--model/)
+  assert.match(legacy, /"p"/)
 })
 
 test('可用模型汇总：只收已启用项，CLI 用 cli: 前缀和中文标签', () => {
@@ -92,6 +95,15 @@ test('可用模型汇总：只收已启用项，CLI 用 cli: 前缀和中文标�
   )
 })
 
+test('模型位口径：CLI 不进模型下拉，只保留 API / 本地', () => {
+  const state = createDefaultModelServicesState()
+  const positionValues = collectAvailableModelOptions(state)
+    .filter((item) => item.kind !== 'cli')
+    .map((item) => item.value)
+  assert.ok(positionValues.includes('deepseek-chat'))
+  assert.equal(positionValues.includes('cli:opencode'), false)
+})
+
 test('显示名：CLI 用友好标签，未知值原样返回', () => {
   const state = createDefaultModelServicesState()
   assert.equal(modelDisplayLabel('cli:opencode', state), '⚡ OpenCode · CLI 引擎')
@@ -104,4 +116,26 @@ test('序列化再解析保持状态', () => {
   state.slots.embeddingModel = 'text-embedding-3-small'
   const restored = parseModelServicesState(serializeModelServicesState(state))
   assert.equal(restored.slots.embeddingModel, 'text-embedding-3-small')
+})
+
+test('坏条目逐条清洗：null / 缺字段不进状态，槽位与浏览器字段类型错误回退', () => {
+  const defaults = createDefaultModelServicesState()
+  const dirty = parseModelServicesState(
+    JSON.stringify({
+      api: [null, { id: 'x' }, { id: 'y', name: 'Y', models: [1, 'm'] }],
+      cli: [{ id: 'c', name: 'C', permissionFlags: null }],
+      local: [{ id: 'bad' }],
+      slots: { primaryModel: 123 },
+      browser: { cdpPort: 'x' }
+    })
+  )
+  assert.equal(dirty.api.length, 1)
+  assert.deepEqual(dirty.api[0].models, ['m'])
+  assert.equal(dirty.cli.length, 1)
+  assert.equal(dirty.cli[0].cwdPolicy, 'workspace')
+  // 数组被清空时整体回退默认，不让设置页白屏
+  assert.equal(dirty.local.length, 2)
+  assert.equal(parseModelServicesState(JSON.stringify({ local: [{ id: 'bad' }] })).local.length, 2)
+  assert.equal(dirty.slots.primaryModel, defaults.slots.primaryModel)
+  assert.equal(dirty.browser.cdpPort, defaults.browser.cdpPort)
 })

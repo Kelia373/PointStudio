@@ -19,8 +19,7 @@ import { AVATAR_KEYS } from '../lib/agentAvatar'
 import { modelChoices } from '../lib/modelOptions'
 import {
   PERMISSION_MODE_META,
-  PERMISSION_MODE_ORDER,
-  uiPermissionMode
+  PERMISSION_MODE_ORDER
 } from '../lib/permissionModes'
 
 export default function AssistantPanel({
@@ -66,7 +65,7 @@ export default function AssistantPanel({
     setEditingId(assistant.id)
     setName(assistant.name)
     setSystemPrompt(assistant.systemPrompt)
-    setPermissionMode(uiPermissionMode(assistant.permissionMode))
+    setPermissionMode((assistant.permissionMode ?? 'smart') as AgentPermissionMode)
     setAvatar(assistant.avatar ?? '')
     setModelId(assistant.modelId ?? '')
     setMessage(null)
@@ -175,6 +174,11 @@ export default function AssistantPanel({
                         {PERMISSION_MODE_META[mode].label}
                       </option>
                     ))}
+                    {!PERMISSION_MODE_ORDER.includes(permissionMode) ? (
+                      <option value={permissionMode}>
+                        {PERMISSION_MODE_META[permissionMode].label}（历史值）
+                      </option>
+                    ) : null}
                   </select>
                 </label>
                 <label className="assistants__field">

@@ -11,7 +11,7 @@ import { AUTO_ROUTE_MODEL, MODEL_LABEL } from '../lib/modelOptions'
 import {
   MODEL_SERVICES_KEY,
   buildCliInvocationPreview,
-  collectAvailableModelOptions,
+  collectModelPositionOptions,
   modelDisplayLabel,
   parseModelServicesState,
   serializeModelServicesState,
@@ -27,11 +27,16 @@ import {
   type SettingsSectionId
 } from '../lib/settingsNav'
 
-const SLOT_CARDS: { key: keyof ModelServicesState['slots']; label: string; hint: string }[] = [
+const SLOT_CARDS: {
+  key: keyof ModelServicesState['slots']
+  label: string
+  hint: string
+  pending?: boolean
+}[] = [
   { key: 'primaryModel', label: '主对话模型', hint: '默认 Agent 与新会话' },
-  { key: 'fastModel', label: '轻量快反模型', hint: '标题、/side、记忆提炼' },
-  { key: 'plannerModel', label: '规划与拆单模型', hint: '计划、Agent 小组拆单' },
-  { key: 'embeddingModel', label: '知识库向量模型', hint: '检索增强的 embedding' }
+  { key: 'fastModel', label: '轻量快反模型', hint: '标题、/side、记忆提炼', pending: true },
+  { key: 'plannerModel', label: '规划与拆单模型', hint: '计划、Agent 小组拆单', pending: true },
+  { key: 'embeddingModel', label: '知识库向量模型', hint: '检索增强的 embedding', pending: true }
 ]
 
 const TRANSPORTS: { value: CliEngineProfile['transport']; label: string }[] = [
@@ -67,7 +72,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
   const section = findSettingsSection(sectionId)
   const groups = useMemo(() => filterSettingsGroups(query), [query])
-  const modelOptions = useMemo(() => collectAvailableModelOptions(services), [services])
+  const modelOptions = useMemo(() => collectModelPositionOptions(services), [services])
   const slotValues = useMemo(
     () => [AUTO_ROUTE_MODEL, ...modelOptions.map((option) => option.value)],
     [modelOptions]
@@ -219,26 +224,35 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
     switch (sectionId) {
       case 'default-models':
         return (
-          <div className="settings-card-grid">
-            {SLOT_CARDS.map((card) => (
-              <label key={card.key} className="settings-card">
-                <span className="settings-card__title">{card.label}</span>
-                <span className="settings-card__hint">{card.hint}</span>
-                <select
-                  className="settings__input"
-                  value={services.slots[card.key]}
-                  onChange={(event) => setSlot(card.key, event.target.value)}
-                >
-                  {card.key !== 'primaryModel' ? <option value="">未指定</option> : null}
-                  {slotValues.map((value) => (
-                    <option key={value} value={value}>
-                      {MODEL_LABEL[value] ?? modelDisplayLabel(value, services)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
-          </div>
+          <>
+            <div className="settings-card-grid">
+              {SLOT_CARDS.map((card) => (
+                <label key={card.key} className="settings-card">
+                  <span className="settings-card__title">{card.label}</span>
+                  <span className="settings-card__hint">
+                    {card.hint}
+                    {card.pending ? ' · 暂为占位' : ''}
+                  </span>
+                  <select
+                    className="settings__input"
+                    value={services.slots[card.key]}
+                    onChange={(event) => setSlot(card.key, event.target.value)}
+                  >
+                    {card.key !== 'primaryModel' ? <option value="">未指定</option> : null}
+                    {slotValues.map((value) => (
+                      <option key={value} value={value}>
+                        {MODEL_LABEL[value] ?? modelDisplayLabel(value, services)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <p className="settings-note">
+              主对话模型用于新建会话；已有会话保留各自的模型覆盖。其余三个槽位目前只保存配置，
+              等对应调用方（标题/规划/向量）接入后生效。
+            </p>
+          </>
         )
 
       case 'model-services':
@@ -477,7 +491,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                       {buildCliInvocationPreview(cli, {
                         permissionMode: previewMode,
                         workspace: 'D:/Project/PointStudio',
-                        model: cli.name,
+                        model: 'deepseek-chat',
                         prompt: '修复登录'
                       })}
                     </pre>
@@ -536,13 +550,18 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                   />
                 </label>
                 {runtime.id === 'ollama' ? (
-                  <button
-                    className="settings__save"
-                    type="button"
-                    onClick={() => void saveOllama(runtime)}
-                  >
-                    写入主进程
-                  </button>
+                  <>
+                    <button
+                      className="settings__save"
+                      type="button"
+                      onClick={() => void saveOllama(runtime)}
+                    >
+                      写入主进程
+                    </button>
+                    <p className="settings-note">
+                      写入主进程只送 Base URL 与首个模型；numCtx / keepAlive 仅本地保存。
+                    </p>
+                  </>
                 ) : (
                   <p className="settings-note">LM Studio 仅渲染层配置，主进程接入留后续。</p>
                 )}

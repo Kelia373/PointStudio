@@ -14,7 +14,7 @@ import { AVATAR_KEYS, pickAgentAvatar, type AvatarKey } from '../lib/agentAvatar
 import { modelChoices } from '../lib/modelOptions'
 import {
   MODEL_SERVICES_KEY,
-  collectAvailableModelOptions,
+  collectModelPositionOptions,
   modelDisplayLabel,
   parseModelServicesState
 } from '../lib/modelServices'
@@ -65,7 +65,7 @@ export default function AgentCreateDialog({
       modelChoices(
         provider?.providerId ?? null,
         null,
-        collectAvailableModelOptions(services).map((option) => option.value)
+        collectModelPositionOptions(services).map((option) => option.value)
       ),
     [provider?.providerId, services]
   )

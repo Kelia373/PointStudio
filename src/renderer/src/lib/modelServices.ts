@@ -275,13 +275,190 @@ export function parseModelServicesState(raw: string | null): ModelServicesState 
   if (typeof parsed !== 'object' || parsed === null) {
     return base
   }
-  const record = parsed as Partial<ModelServicesState>
+  const record = parsed as Record<string, unknown>
+  const api = sanitizeApiList(record['api'])
+  const cli = sanitizeCliList(record['cli'])
+  const local = sanitizeLocalList(record['local'])
+  const slots = record['slots']
+  const browser = record['browser']
   return {
-    api: Array.isArray(record.api) && record.api.length > 0 ? record.api : base.api,
-    cli: Array.isArray(record.cli) && record.cli.length > 0 ? record.cli : base.cli,
-    local: Array.isArray(record.local) && record.local.length > 0 ? record.local : base.local,
-    slots: { ...base.slots, ...(record.slots ?? {}) },
-    browser: { ...base.browser, ...(record.browser ?? {}) }
+    api: api.length > 0 ? api : base.api,
+    cli: cli.length > 0 ? cli : base.cli,
+    local: local.length > 0 ? local : base.local,
+    slots: {
+      primaryModel: stringOf((slots as Record<string, unknown>)?.['primaryModel'], base.slots.primaryModel),
+      fastModel: stringOf((slots as Record<string, unknown>)?.['fastModel'], base.slots.fastModel),
+      plannerModel: stringOf(
+        (slots as Record<string, unknown>)?.['plannerModel'],
+        base.slots.plannerModel
+      ),
+      embeddingModel: stringOf(
+        (slots as Record<string, unknown>)?.['embeddingModel'],
+        base.slots.embeddingModel
+      )
+    },
+    browser: sanitizeBrowser(browser, base.browser)
+  }
+}
+
+function stringOf(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.filter((item): item is string => typeof item === 'string' && item !== '')
+}
+
+const API_PROTOCOLS: ApiProtocolKind[] = ['openai-compatible', 'deepseek', 'anthropic', 'gemini']
+const CLI_PRESETS: CliEnginePresetId[] = [
+  'opencode',
+  'paseo',
+  'devin',
+  'claude-code',
+  'codex',
+  'custom-command'
+]
+const CLI_TRANSPORTS: CliTransportMode[] = ['stdio-jsonl', 'acp', 'oneshot-text']
+
+function sanitizeApiList(value: unknown): ApiProviderProfile[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const out: ApiProviderProfile[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+    const record = item as Record<string, unknown>
+    if (typeof record['id'] !== 'string' || typeof record['name'] !== 'string') {
+      continue
+    }
+    const protocol = API_PROTOCOLS.includes(record['protocol'] as ApiProtocolKind)
+      ? (record['protocol'] as ApiProtocolKind)
+      : 'openai-compatible'
+    const models = stringList(record['models'])
+    out.push({
+      id: record['id'],
+      kind: 'api',
+      name: record['name'],
+      protocol,
+      enabled: record['enabled'] === true,
+      baseUrl: stringOf(record['baseUrl'], ''),
+      models,
+      defaultModel: stringOf(record['defaultModel'], models[0] ?? ''),
+      ...(typeof record['hasKey'] === 'boolean' ? { hasKey: record['hasKey'] } : {}),
+      ...(typeof record['maskedKey'] === 'string' ? { maskedKey: record['maskedKey'] } : {})
+    })
+  }
+  return out
+}
+
+function sanitizeCliList(value: unknown): CliEngineProfile[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const out: CliEngineProfile[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+    const record = item as Record<string, unknown>
+    if (typeof record['id'] !== 'string' || typeof record['name'] !== 'string') {
+      continue
+    }
+    const preset = CLI_PRESETS.includes(record['preset'] as CliEnginePresetId)
+      ? (record['preset'] as CliEnginePresetId)
+      : 'custom-command'
+    const transport = CLI_TRANSPORTS.includes(record['transport'] as CliTransportMode)
+      ? (record['transport'] as CliTransportMode)
+      : 'oneshot-text'
+    const rawFlags =
+      typeof record['permissionFlags'] === 'object' && record['permissionFlags'] !== null
+        ? (record['permissionFlags'] as Record<string, unknown>)
+        : {}
+    out.push({
+      id: record['id'],
+      kind: 'cli',
+      preset,
+      name: record['name'],
+      enabled: record['enabled'] === true,
+      executable: stringOf(record['executable'], ''),
+      transport,
+      argsTemplate: stringOf(record['argsTemplate'], '{{prompt}}'),
+      permissionFlags: {
+        'auto-edit': stringOf(rawFlags['auto-edit'], ''),
+        smart: stringOf(rawFlags['smart'], ''),
+        'full-access': stringOf(rawFlags['full-access'], '')
+      },
+      cwdPolicy: record['cwdPolicy'] === 'custom' ? 'custom' : 'workspace',
+      ...(typeof record['customCwd'] === 'string' ? { customCwd: record['customCwd'] } : {})
+    })
+  }
+  return out
+}
+
+function sanitizeLocalList(value: unknown): LocalRuntimeProfile[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const out: LocalRuntimeProfile[] = []
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+    const record = item as Record<string, unknown>
+    if (record['id'] !== 'ollama' && record['id'] !== 'lm-studio') {
+      continue
+    }
+    out.push({
+      id: record['id'],
+      kind: 'local',
+      name: stringOf(record['name'], record['id']),
+      enabled: record['enabled'] === true,
+      baseUrl: stringOf(record['baseUrl'], ''),
+      models: stringList(record['models']),
+      numCtx: typeof record['numCtx'] === 'number' && record['numCtx'] > 0 ? record['numCtx'] : 8192,
+      keepAliveMinutes:
+        typeof record['keepAliveMinutes'] === 'number' && record['keepAliveMinutes'] >= 0
+          ? record['keepAliveMinutes']
+          : 30
+    })
+  }
+  return out
+}
+
+function sanitizeBrowser(
+  value: unknown,
+  fallback: AgentBrowserWorkflowConfig
+): AgentBrowserWorkflowConfig {
+  if (typeof value !== 'object' || value === null) {
+    return fallback
+  }
+  const record = value as Record<string, unknown>
+  return {
+    driver:
+      record['driver'] === 'local-cdp-attach' ? 'local-cdp-attach' : 'agent-browser-sandbox',
+    cdpPort:
+      typeof record['cdpPort'] === 'number' && record['cdpPort'] > 0
+        ? record['cdpPort']
+        : fallback.cdpPort,
+    perceptionMode:
+      record['perceptionMode'] === 'axtree-first' ? 'axtree-first' : 'som-visual-hybrid',
+    smartGateOnSubmit:
+      typeof record['smartGateOnSubmit'] === 'boolean'
+        ? record['smartGateOnSubmit']
+        : fallback.smartGateOnSubmit,
+    rightPaneLivePreview:
+      typeof record['rightPaneLivePreview'] === 'boolean'
+        ? record['rightPaneLivePreview']
+        : fallback.rightPaneLivePreview,
+    autoSolidifySkill:
+      typeof record['autoSolidifySkill'] === 'boolean'
+        ? record['autoSolidifySkill']
+        : fallback.autoSolidifySkill
   }
 }
 
@@ -298,7 +475,14 @@ export function buildCliInvocationPreview(
   const mode = uiPermissionMode(options.permissionMode)
   const flag =
     profile.permissionFlags[mode as keyof CliEngineProfile['permissionFlags']] ?? ''
-  const command = profile.argsTemplate
+  // 模型为空时连 --model 一起剔除，别让 prompt 顶到模型位上
+  let template = profile.argsTemplate
+  if (!options.model) {
+    template = template
+      .replace(/--model\s+\{\{model\}\}/g, '')
+      .replace(/--model=\{\{model\}\}/g, '')
+  }
+  const command = template
     .replaceAll('{{workspace}}', options.workspace)
     .replaceAll('{{model}}', options.model ?? '')
     .replaceAll('{{prompt}}', options.prompt)
@@ -309,16 +493,16 @@ export function buildCliInvocationPreview(
     .trim()
 }
 
-/** 汇总所有已启用的 API / 本地模型与 CLI 引擎，供各处下拉消费。 */
+/** 汇总所有已启用的 API / 本地模型与 CLI 引擎。 */
 export function collectAvailableModelOptions(state: ModelServicesState): ModelOption[] {
-  const options: ModelOption[] = []
+  const collected: ModelOption[] = []
 
   for (const provider of state.api) {
     if (!provider.enabled) {
       continue
     }
     for (const model of provider.models) {
-      options.push({ value: model, label: model, kind: 'api' })
+      collected.push({ value: model, label: model, kind: 'api' })
     }
   }
 
@@ -327,7 +511,7 @@ export function collectAvailableModelOptions(state: ModelServicesState): ModelOp
       continue
     }
     for (const model of runtime.models) {
-      options.push({ value: model, label: `${runtime.name} · ${model}`, kind: 'local' })
+      collected.push({ value: model, label: `${runtime.name} · ${model}`, kind: 'local' })
     }
   }
 
@@ -335,14 +519,30 @@ export function collectAvailableModelOptions(state: ModelServicesState): ModelOp
     if (!engine.enabled) {
       continue
     }
-    options.push({
+    collected.push({
       value: `cli:${engine.preset}`,
       label: `⚡ ${engine.name} · CLI 引擎`,
       kind: 'cli'
     })
   }
 
-  return options
+  // 跨服务商可能配同一个模型 id：按 value 去重，先出现的赢
+  const seen = new Set<string>()
+  return collected.filter((option) => {
+    if (seen.has(option.value)) {
+      return false
+    }
+    seen.add(option.value)
+    return true
+  })
+}
+
+/**
+ * 模型位（新建智能体 / 四槽位 / 输入栏）可选的口径：
+ * CLI 引擎还没有执行路径，选成模型只会把 `cli:xxx` 发给 API，所以这里排除。
+ */
+export function collectModelPositionOptions(state: ModelServicesState): ModelOption[] {
+  return collectAvailableModelOptions(state).filter((option) => option.kind !== 'cli')
 }
 
 /** 某个模型标识在下拉里显示什么。 */
