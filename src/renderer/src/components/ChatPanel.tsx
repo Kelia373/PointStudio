@@ -35,6 +35,11 @@ import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
 import { appbarLeft, appbarRight } from '../lib/appbarStatus'
 import { copyAgentName, uniqueAgentName, type AgentClipPayload } from '../lib/agentClipboard'
 import { downloadText, exportFileName } from '../lib/exportFile'
+import {
+  MODEL_SERVICES_KEY,
+  collectModelPositionOptions,
+  parseModelServicesState
+} from '../lib/modelServices'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
 import { deriveActiveWorkerRuns } from '../lib/workerRuns'
@@ -118,6 +123,10 @@ function capHandoffs(items: StoredHandoff[]): StoredHandoff[] {
 function readTheme(): Theme {
   const stored = window.localStorage.getItem('pointstudio.theme')
   return stored === 'light' ? 'light' : 'dark'
+}
+
+function readModelServices() {
+  return parseModelServicesState(window.localStorage.getItem(MODEL_SERVICES_KEY))
 }
 
 function formatMs(value: number): string {
@@ -384,6 +393,7 @@ export default function ChatPanel() {
       }
       const created = await window.pointstudio.conversations.create({})
       if (created.ok) {
+        await applyPrimarySlot(created.value.id)
         await reloadConversations()
         setActiveId(created.value.id)
       } else {
@@ -710,12 +720,22 @@ export default function ChatPanel() {
     await submit(prompt, next)
   }
 
+  async function applyPrimarySlot(conversationId: string): Promise<void> {
+    const primary = readModelServices().slots.primaryModel
+    if (primary === '' || primary === AUTO_ROUTE_MODEL) {
+      return
+    }
+    await window.pointstudio.conversations.setModel(conversationId, { model: primary })
+  }
+
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
       setError(describeError(created.code))
       return
     }
+    // 默认模型槽位只影响新建会话：已有会话保留自己的覆盖
+    await applyPrimarySlot(created.value.id)
     await reloadConversations()
     setActiveId(created.value.id)
     // 新建即回聊天：否则新会话建在功能页背后，用户根本看不见
@@ -872,6 +892,13 @@ export default function ChatPanel() {
     [memoryTick, boundAssistant, draft]
   )
   const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
+  const modelServicesView = readModelServices()
+  const primarySlot = modelServicesView.slots.primaryModel
+  const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
+  const defaultModelValue = activeConversation?.model ?? (provider?.model || slotFallback)
+  const externalModelValues = collectModelPositionOptions(modelServicesView).map(
+    (option) => option.value
+  )
   const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
   return (
@@ -1360,12 +1387,11 @@ export default function ChatPanel() {
           draft,
           busy,
           canSend: !busy && draft.trim() !== '' && activeId !== null,
-          model: autoRoute
-            ? AUTO_ROUTE_MODEL
-            : (activeConversation?.model ?? provider?.model ?? ''),
+          model: autoRoute ? AUTO_ROUTE_MODEL : defaultModelValue,
           models: modelSelectOptions(
             provider?.providerId ?? null,
-            activeConversation?.model ?? provider?.model ?? null
+            defaultModelValue,
+            externalModelValues
           ),
           effort: effortFromMaxTokens(
             activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens

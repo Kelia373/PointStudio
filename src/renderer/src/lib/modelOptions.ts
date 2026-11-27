@@ -46,25 +46,29 @@ const MODELS_BY_PROVIDER: Record<string, string[]> = {
 }
 
 /**
- * 输入栏下拉的完整选项：Auto 协同路由固定排在最前，其余是当前值 + 平台预设。
+ * 输入栏下拉的完整选项：Auto 协同路由固定排在最前，其余是当前值 + 平台预设 + 外部汇入。
  */
 export function modelSelectOptions(
   providerId: string | null,
-  current: string | null | undefined
+  current: string | null | undefined,
+  extra: string[] = []
 ): string[] {
-  return [AUTO_ROUTE_MODEL, ...modelChoices(providerId, current)]
+  return [AUTO_ROUTE_MODEL, ...modelChoices(providerId, current, extra)]
 }
 
 /**
- * 下拉里要显示的模型名：平台预设 + 当前值（当前值可能不在预设里，比如手输的）。
+ * 下拉里要显示的模型名：平台预设 + 当前值 + 外部汇入（设置页启用的 API/CLI/本地模型）。
  * 去重并保持顺序，第一项永远是当前值。
  */
 export function modelChoices(
   providerId: string | null,
-  current: string | null | undefined
+  current: string | null | undefined,
+  extra: string[] = []
 ): string[] {
   const presets = providerId ? (MODELS_BY_PROVIDER[providerId] ?? []) : []
   const head = current && current !== '' ? [current] : []
-  const rest = presets.filter((model) => !head.includes(model))
-  return [...head, ...rest]
+  const rest = [...presets, ...extra].filter(
+    (model) => model !== '' && !head.includes(model)
+  )
+  return [...head, ...Array.from(new Set(rest))]
 }
