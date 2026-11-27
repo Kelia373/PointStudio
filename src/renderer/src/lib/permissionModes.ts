@@ -45,7 +45,7 @@ export const PERMISSION_MODE_META: Record<AgentPermissionMode, PermissionModeMet
 }
 
 export function permissionModeMeta(mode?: string | null): PermissionModeMeta {
-  if (mode && mode in PERMISSION_MODE_META) {
+  if (mode && Object.hasOwn(PERMISSION_MODE_META, mode)) {
     return PERMISSION_MODE_META[mode as AgentPermissionMode]
   }
   return PERMISSION_MODE_META.smart

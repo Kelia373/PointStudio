@@ -54,6 +54,7 @@ export default function AgentCreateDialog({
     function onKeyDown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
         event.preventDefault()
+        event.stopPropagation()
         onClose()
         return
       }
@@ -62,8 +63,8 @@ export default function AgentCreateDialog({
         void submit()
       }
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, soul, permissionMode, avatar, modelId, busy])
 
@@ -140,11 +141,10 @@ export default function AgentCreateDialog({
               className="agent-dialog__name"
               value={name}
               autoFocus
-              maxLength={NAME_MAX}
               placeholder="输入名称"
               aria-label="智能体名称"
               onChange={(event) => {
-                setName(event.target.value)
+                setName(Array.from(event.target.value).slice(0, NAME_MAX).join(''))
                 setError(null)
               }}
             />
@@ -190,11 +190,12 @@ export default function AgentCreateDialog({
             <textarea
               className="agent-dialog__soul"
               value={soul}
-              maxLength={SOUL_MAX}
               rows={5}
               placeholder="它是谁，负责做什么"
               aria-label="Soul 系统提示词"
-              onChange={(event) => setSoul(event.target.value)}
+              onChange={(event) =>
+                setSoul(Array.from(event.target.value).slice(0, SOUL_MAX).join(''))
+              }
             />
             <span className="agent-dialog__counter">
               {Array.from(soul).length} / {SOUL_MAX}
@@ -202,7 +203,7 @@ export default function AgentCreateDialog({
           </label>
 
           <div className="agent-dialog__row">
-            <div className="agent-dialog__field agent-dialog__field--mode">
+            <div className="agent-dialog__field">
               <span className="agent-dialog__label">权限模式</span>
               <button
                 className={`mode-picker mode-picker--${modeMeta.tone}${

@@ -8,6 +8,7 @@ import { ipcMain } from 'electron'
 import {
   AGENT_CHANNELS,
   type AgentEventDto,
+  type AgentPermissionMode,
   type IpcResult,
   type PlanViewDto
 } from '../../shared/types/ipc.ts'
@@ -27,8 +28,8 @@ export interface AgentIpcOptions {
   maxReplans?: number
 }
 
-function toDto(plan: Plan): PlanViewDto {
-  return toPlanView(plan)
+function toDto(plan: Plan, mode: AgentPermissionMode): PlanViewDto {
+  return toPlanView(plan, mode)
 }
 
 export function registerAgentIpc(options: AgentIpcOptions): void {
@@ -38,7 +39,8 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
       if (!isAgentRunRequest(request)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      const { goal, confirmedStepIds } = request
+      const { goal, confirmedStepIds, permissionMode } = request
+      const mode: AgentPermissionMode = permissionMode ?? 'smart'
 
       const emit = (payload: AgentEventDto): void => {
         if (!event.sender.isDestroyed()) {
@@ -56,7 +58,8 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
               executePlan(plan, {
                 tools: options.tools,
                 confirmedStepIds: execOptions.confirmedStepIds,
-                onStepChange: (current) => emit({ type: 'step', plan: toDto(current) })
+                permissionMode: mode,
+                onStepChange: (current) => emit({ type: 'step', plan: toDto(current, mode) })
               }),
             replan: (request_) =>
               replanAfterFailure(request_, {
@@ -66,7 +69,7 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
               }),
             maxReplans: options.maxReplans ?? 1,
             confirmedStepIds,
-            onPlan: (plan) => emit({ type: 'plan', plan: toDto(plan) }),
+            onPlan: (plan) => emit({ type: 'plan', plan: toDto(plan, mode) }),
             onReplan: (request_) =>
               emit({ type: 'replan', failedStepId: request_.failedStepId, errorCode: request_.errorCode })
           })
@@ -74,7 +77,7 @@ export function registerAgentIpc(options: AgentIpcOptions): void {
           emit({
             type: 'done',
             status: result.status,
-            plan: toDto(result.plan),
+            plan: toDto(result.plan, mode),
             ...(result.reason ? { reason: result.reason } : {}),
             details: result.history.at(-1)?.result.stepResults ?? []
           })

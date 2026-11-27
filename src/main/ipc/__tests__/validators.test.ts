@@ -95,3 +95,10 @@ test('isAssistantDraft：permissionMode 只认五档，avatar 只认字符串或
   assert.equal(isAssistantDraft({ name: 'x', avatar: null }), true)
   assert.equal(isAssistantDraft({ name: 'x', avatar: 2 }), false)
 })
+
+test('isAgentRunRequest：permissionMode 只认五档，缺省允许', () => {
+  assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 'ask' }), true)
+  assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 'full-access' }), true)
+  assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 'root' }), false)
+  assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 1 }), false)
+})

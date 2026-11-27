@@ -135,10 +135,18 @@ export function isAgentRunRequest(value: unknown): value is AgentRunRequest {
     return false
   }
   const confirmed = value.confirmedStepIds
-  if (confirmed === undefined) {
-    return true
+  if (confirmed !== undefined) {
+    if (!Array.isArray(confirmed) || !confirmed.every((item) => typeof item === 'string')) {
+      return false
+    }
   }
-  return Array.isArray(confirmed) && confirmed.every((item) => typeof item === 'string')
+  if (
+    value.permissionMode !== undefined &&
+    !AGENT_PERMISSION_MODES.includes(value.permissionMode as AgentPermissionMode)
+  ) {
+    return false
+  }
+  return true
 }
 
 export function isWorkspaceImportPath(value: unknown): value is string {

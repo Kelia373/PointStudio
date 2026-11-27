@@ -417,6 +417,8 @@ export interface AgentRunRequest {
   goal: string
   /** 用户已确认的高风险步骤 id；不传则遇到高风险步骤会停下。 */
   confirmedStepIds?: string[]
+  /** 当前 Agent 的权限模式；缺省 smart，主进程据此决定哪些步骤要确认。 */
+  permissionMode?: AgentPermissionMode
 }
 
 export interface AgentBridge {

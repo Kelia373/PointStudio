@@ -3,7 +3,8 @@
 // 真正的编排在 ai/agent/executor 与 services/agentLoop，这里只做两件事：
 // 1. 把 Plan 映射成界面视图（不含 input 等内部数据）；
 // 2. 明确「哪些事件值得推给界面」。界面据此显示过程，而不是猜。
-import { summarizeProgress, type Plan, type PlanStep } from '../ai/agent/plan.ts'
+import { stepNeedsConfirmation, summarizeProgress, type Plan, type PlanStep } from '../ai/agent/plan.ts'
+import type { AgentPermissionMode } from '../../shared/types/ipc.ts'
 
 export type PlanStepStatusView = PlanStep['status']
 
@@ -26,7 +27,7 @@ export interface PlanView {
   progress: ReturnType<typeof summarizeProgress>
 }
 
-export function toPlanView(plan: Plan): PlanView {
+export function toPlanView(plan: Plan, mode: AgentPermissionMode = 'smart'): PlanView {
   return {
     goal: plan.goal,
     assumptions: [...plan.assumptions],
@@ -38,7 +39,7 @@ export function toPlanView(plan: Plan): PlanView {
       expect: step.expect,
       risk: step.risk,
       status: step.status,
-      requiresConfirmation: step.risk === 'high'
+      requiresConfirmation: stepNeedsConfirmation(step, mode)
     })),
     progress: summarizeProgress(plan)
   }

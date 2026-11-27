@@ -519,7 +519,12 @@ export default function ChatPanel() {
     setInspTab('run')
     setInspCollapsed(false)
     // 不再弹遮罩抽屉：计划在消息流里原地展开，检查器要一直看得见
-    const result = await window.pointstudio.agent.run({ id, goal, confirmedStepIds })
+    const result = await window.pointstudio.agent.run({
+      id,
+      goal,
+      confirmedStepIds,
+      permissionMode: boundAssistant?.permissionMode ?? 'smart'
+    })
     if (!result.ok) {
       setPlanRun({ id, plan: null, status: 'failed', sessionId: activeId })
     }
@@ -750,16 +755,20 @@ export default function ChatPanel() {
   const permissionMode = boundAssistant?.permissionMode ?? 'smart'
   const canConfirmPlan = permissionMode !== 'plan-only'
 
-  // full-access：计划因待确认停住时自动放行一次，不用人再点
-  const autoResumedPlanId = useRef<string | null>(null)
+  // full-access：计划因待确认停住时自动放行；同一 goal 最多两次，避免无限空转
+  const autoResume = useRef<{ goal: string; count: number }>({ goal: '', count: 0 })
   useEffect(() => {
     if (permissionMode !== 'full-access' || planRun?.status !== 'stopped' || !planRun.plan) {
       return
     }
-    if (autoResumedPlanId.current === planRun.id) {
+    if (autoResume.current.goal !== planRun.plan.goal) {
+      autoResume.current = { goal: planRun.plan.goal, count: 0 }
+    }
+    if (autoResume.current.count >= 2) {
+      setWarn('完全访问已自动放行两次，计划仍未通过；请检查步骤或降低权限模式。')
       return
     }
-    autoResumedPlanId.current = planRun.id
+    autoResume.current.count += 1
     void confirmAndResume()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permissionMode, planRun?.id, planRun?.status])

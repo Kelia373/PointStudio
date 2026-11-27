@@ -7,6 +7,8 @@
 //
 // 本文件不调模型、不落库、不做权限判断（权限属于策略层）。
 
+import type { AgentPermissionMode } from '../../../shared/types/ipc.ts'
+
 export type PlanRisk = 'low' | 'mid' | 'high'
 export type PlanStepStatus = 'pending' | 'running' | 'success' | 'failed' | 'skipped'
 
@@ -179,7 +181,34 @@ export function summarizeProgress(plan: Plan): PlanProgress {
   return progress
 }
 
-/** 需要先问人的步骤：高风险（写本地之外、花钱、对外发送通常都归到 high）。 */
-export function needsConfirmation(plan: Plan): PlanStep[] {
-  return plan.steps.filter((step) => step.risk === 'high')
+/** 需要先问人的步骤：按权限模式决定，而不是只看 risk。 */
+export function needsConfirmation(
+  plan: Plan,
+  mode: AgentPermissionMode = 'smart'
+): PlanStep[] {
+  return plan.steps.filter((step) => stepNeedsConfirmation(step, mode))
+}
+
+/**
+ * 单步的确认门。默认 smart 与旧行为一致（只拦 risk=high）；
+ * 更严格的模式按 risk / 是否带工具扩大范围。
+ */
+export function stepNeedsConfirmation(
+  step: Pick<PlanStep, 'risk' | 'tool'>,
+  mode: AgentPermissionMode = 'smart'
+): boolean {
+  switch (mode) {
+    case 'full-access':
+      return false
+    case 'plan-only':
+    case 'ask':
+      // 逐次确认 / 仅规划：任何带工具的步骤、或中高风险，都要先问
+      return step.tool !== null || step.risk !== 'low'
+    case 'auto-edit':
+      // 内置工具还没有写文件 / 执行命令能力：在写工具落地前，这一档与 smart 等价
+      return step.risk === 'high'
+    case 'smart':
+    default:
+      return step.risk === 'high'
+  }
 }

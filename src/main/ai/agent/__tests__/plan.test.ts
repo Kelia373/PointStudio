@@ -139,3 +139,26 @@ test('进度汇总与高风险步骤识别', () => {
     '高风险步骤要先问人'
   )
 })
+
+test('权限模式决定确认门：五档各自不同', () => {
+  const p = createPlan(
+    {
+      goal: '五档确认门',
+      steps: [
+        { action: '读', expect: 'ok', risk: 'low' },
+        { action: '读文件', tool: 'read_text_file', input: null, expect: 'ok', risk: 'low' },
+        { action: '中风险', expect: 'ok', risk: 'mid' },
+        { action: '高风险', tool: 'run', input: null, expect: 'ok', risk: 'high' }
+      ],
+      stopConditions: ['出错即停']
+    },
+    { now: NOW }
+  )
+  assert.deepEqual(needsConfirmation(p, 'smart').map((s) => s.id), ['4'])
+  assert.deepEqual(needsConfirmation(p, 'auto-edit').map((s) => s.id), ['4'])
+  assert.deepEqual(needsConfirmation(p, 'ask').map((s) => s.id), ['2', '3', '4'])
+  assert.deepEqual(needsConfirmation(p, 'plan-only').map((s) => s.id), ['2', '3', '4'])
+  assert.deepEqual(needsConfirmation(p, 'full-access').map((s) => s.id), [])
+  // 缺省仍是 smart，保持旧行为
+  assert.deepEqual(needsConfirmation(p).map((s) => s.id), ['4'])
+})

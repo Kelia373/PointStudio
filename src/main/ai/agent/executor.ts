@@ -10,6 +10,7 @@
 //    让用户看到"卡在哪，而不是继续制造半成品"。
 import type { ToolRegistry } from '../tools/registry.ts'
 import { markStep, needsConfirmation, type Plan, type PlanStep } from './plan.ts'
+import type { AgentPermissionMode } from '../../../shared/types/ipc.ts'
 
 export type ExecuteStatus = 'completed' | 'failed' | 'stopped'
 
@@ -37,6 +38,8 @@ export interface ExecuteOptions {
   tools: ToolRegistry
   /** 已被用户确认的高风险步骤 id。 */
   confirmedStepIds?: string[]
+  /** 权限模式：决定哪些步骤需要确认；缺省 smart。 */
+  permissionMode?: AgentPermissionMode
   /** 失败后是否继续，默认 stop。 */
   onFailure?: 'stop' | 'continue'
   /** 每次状态推进后回调，供界面显示「走到哪一步」。 */
@@ -45,7 +48,9 @@ export interface ExecuteOptions {
 
 export async function executePlan(plan: Plan, options: ExecuteOptions): Promise<ExecuteResult> {
   const confirmed = new Set(options.confirmedStepIds ?? [])
-  const unconfirmed = needsConfirmation(plan).filter((step) => !confirmed.has(step.id))
+  const unconfirmed = needsConfirmation(plan, options.permissionMode ?? 'smart').filter(
+    (step) => !confirmed.has(step.id)
+  )
   if (unconfirmed.length > 0) {
     return {
       plan,
