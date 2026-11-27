@@ -3463,6 +3463,7 @@ select:focus {
   width: auto;
   padding: 0 var(--sp-1);
   opacity: 1;
-  color: var(--danger);
+  background: var(--danger);
+  color: var(--on-accent);
   font-size: var(--fs-xs);
 }
