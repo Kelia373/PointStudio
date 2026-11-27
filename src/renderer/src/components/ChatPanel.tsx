@@ -275,7 +275,8 @@ export default function ChatPanel() {
   useEffect(() => {
     window.localStorage.setItem(
       HANDOFF_STORAGE_KEY,
-      JSON.stringify(handoffs.slice(-50))
+      // 落盘也按会话裁剪：全局 slice(-50) 会把别的会话的旧记录一起切掉
+      JSON.stringify(capHandoffs(handoffs))
     )
   }, [handoffs])
 
