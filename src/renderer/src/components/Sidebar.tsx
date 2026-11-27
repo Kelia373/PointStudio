@@ -144,6 +144,7 @@ export default function Sidebar({
   const [newGroupName, setNewGroupName] = useState('')
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null)
   const [renameGroupValue, setRenameGroupValue] = useState('')
+  const [confirmGroupId, setConfirmGroupId] = useState<string | null>(null)
   const [draggingAgentId, setDraggingAgentId] = useState<string | null>(null)
   const [dropGroupId, setDropGroupId] = useState<string | null>(null)
   // 应用内剪贴板：只存配置，不存 id 与时间戳
@@ -810,11 +811,24 @@ export default function Sidebar({
                           title={LIGHT_LABEL[groupBench.state]}
                         />
                         <button
-                          className="side__group-del"
+                          className={`side__group-del${
+                            confirmGroupId === group.id ? ' side__group-del--armed' : ''
+                          }`}
                           type="button"
-                          title="删除小组（不会删除组里的 Agent）"
-                          aria-label="删除小组"
+                          title={
+                            confirmGroupId === group.id
+                              ? '再点一次确认删除（不会删除组里的 Agent）'
+                              : '删除小组（不会删除组里的 Agent）'
+                          }
+                          aria-label={
+                            confirmGroupId === group.id ? '再点一次确认删除小组' : '删除小组'
+                          }
                           onClick={() => {
+                            if (confirmGroupId !== group.id) {
+                              setConfirmGroupId(group.id)
+                              return
+                            }
+                            setConfirmGroupId(null)
                             setGroups((current) => removeGroup(current, group.id))
                             if (groupAxis === group.id) {
                               setGroupAxis(null)
