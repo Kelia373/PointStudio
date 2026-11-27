@@ -51,7 +51,8 @@ export default function Inspector({
   onConfirmPlan,
   focusAgentId = null,
   onAssistantsChanged,
-  agentTabOpen = false
+  agentTabOpen = false,
+  canConfirmPlan = true
 }: {
   tab: InspectorTab
   onTab: (tab: InspectorTab) => void
@@ -79,6 +80,8 @@ export default function Inspector({
   onAssistantsChanged?: () => void
   /** 「智能体」是上下文 tab：只有从 Agent Bench 进来才出现。 */
   agentTabOpen?: boolean
+  /** plan-only 模式下不给「确认并继续」入口。 */
+  canConfirmPlan?: boolean
 }) {
   const params = provider?.params ?? {}
   const details = planRun?.details ?? []
@@ -272,7 +275,7 @@ export default function Inspector({
                     <button className="insp__action" type="button" onClick={onOpenPlan}>
                       打开计划面板
                     </button>
-                    {planRun.status === 'stopped' ? (
+                    {planRun.status === 'stopped' && canConfirmPlan ? (
                       <button
                         className="insp__action insp__action--main"
                         type="button"

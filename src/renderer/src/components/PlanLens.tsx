@@ -11,13 +11,16 @@ import Icon from './Icon'
 export default function PlanLens({
   run,
   elapsedMs,
-  onConfirm
+  onConfirm,
+  canConfirm = true
 }: {
   run: PlanRunState | null
   /** 这一轮的耗时（毫秒）；未知就不显示。 */
   elapsedMs?: number | null
   /** stopped 时「确认并继续」：带上已确认的高风险步骤重跑。 */
   onConfirm: () => void
+  /** plan-only 模式不给执行入口。 */
+  canConfirm?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const view = planLensView(run, { elapsedMs })
@@ -41,7 +44,7 @@ export default function PlanLens({
           </span>
           <span className="plan-lens__toggle">{open ? '收起步骤 ▴' : '展开步骤 ▾'}</span>
         </button>
-        {view.needsConfirm ? (
+        {view.needsConfirm && canConfirm ? (
           <button className="plan-lens__confirm" type="button" onClick={onConfirm}>
             确认并继续
           </button>

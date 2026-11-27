@@ -451,7 +451,7 @@ export default function Sidebar({
           onDragStart={(event) => startAgentDrag(assistant.id, event)}
           onDragEnd={endAgentDrag}
         >
-          <AgentAvatar agentId={assistant.id} name={assistant.name} size={16} />
+          <AgentAvatar agentId={assistant.id} name={assistant.name} avatar={assistant.avatar} size={16} />
         </span>
         <span>{assistant.name}</span>
         <span

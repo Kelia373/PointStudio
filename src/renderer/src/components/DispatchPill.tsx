@@ -20,6 +20,8 @@ export interface DispatchPillProps {
   agentName: string | null
   /** 当前绑定 Agent 的状态；未绑定时为 null，不画灯。 */
   agentState: AgentLightState | null
+  /** 当前绑定 Agent 的手选头像；null 走自动匹配。 */
+  agentAvatar?: string | null
   projectName: string | null
   agents: DispatchAgent[]
   activeAgentId: string | null
@@ -30,6 +32,7 @@ export interface DispatchPillProps {
 export default function DispatchPill({
   agentName,
   agentState,
+  agentAvatar = null,
   projectName,
   agents,
   activeAgentId,
@@ -49,7 +52,12 @@ export default function DispatchPill({
         onClick={() => setOpen((value) => !value)}
       >
         {agentName ? (
-          <AgentAvatar agentId={activeAgentId ?? ''} name={agentName} size={14} />
+          <AgentAvatar
+            agentId={activeAgentId ?? ''}
+            name={agentName}
+            avatar={agentAvatar}
+            size={14}
+          />
         ) : (
           <Icon name="user" size={13} />
         )}

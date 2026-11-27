@@ -64,7 +64,10 @@ export class AssistantService {
     // 否则在那张只有名字和提示词的编辑表单里保存一次，停用状态就被悄悄清掉了。
     const merged: AssistantDraft = {
       ...draft,
-      enabled: draft.enabled ?? items[index].enabled ?? true
+      enabled: draft.enabled ?? items[index].enabled ?? true,
+      // 局部改名 / 启停时，权限模式与头像不能被洗掉
+      permissionMode: draft.permissionMode ?? items[index].permissionMode ?? 'smart',
+      avatar: draft.avatar !== undefined ? draft.avatar : (items[index].avatar ?? null)
     }
 
     // id 与 createdAt 属于身份，不允许被一次更新改掉。

@@ -30,6 +30,15 @@ test('没有关键词时按 id 哈希，稳定且落在池子里', () => {
   assert.ok(AVATAR_KEYS.includes(first))
 })
 
+test('手选头像优先；非法 key 回退到自动匹配', () => {
+  assert.equal(pickAgentAvatar('agent-1', '架构Bot', 'fox'), 'fox')
+  assert.equal(pickAgentAvatar('agent-1', '无名氏', 'penguin'), 'penguin')
+  // 脏字符串不能把头像变空白
+  const fallback = pickAgentAvatar('agent-1', '无名氏', 'not-a-key')
+  assert.equal(fallback, pickAgentAvatar('agent-1', '无名氏'))
+  assert.ok(AVATAR_KEYS.includes(fallback))
+})
+
 test('不同 id 能分散到多张，不会永远同一张', () => {
   const used = new Set<string>()
   for (let index = 0; index < 120; index += 1) {

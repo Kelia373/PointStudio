@@ -25,6 +25,9 @@ function toDto(assistant: Assistant): AssistantDto {
     params: assistant.params,
     // 旧记录没有这个字段：缺省即启用，不是「未知」
     enabled: assistant.enabled !== false,
+    // 旧记录没有权限/头像：缺省 smart + 自动匹配
+    permissionMode: assistant.permissionMode ?? 'smart',
+    avatar: assistant.avatar ?? null,
     createdAt: assistant.createdAt,
     updatedAt: assistant.updatedAt
   }

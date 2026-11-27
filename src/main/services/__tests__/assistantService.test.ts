@@ -186,3 +186,63 @@ test('更新时没传 enabled：停用状态不会被悄悄清掉', async () => 
     assert.equal(renamed.value.enabled, false)
   })
 })
+
+test('新助手默认 smart 权限与自动头像（null）', async () => {
+  await withTempService(async ({ service }) => {
+    const created = await service.create({ name: '默认权限' })
+    assert.equal(created.ok, true)
+    if (!created.ok) return
+    assert.equal(created.value.permissionMode, 'smart')
+    assert.equal(created.value.avatar, null)
+  })
+})
+
+test('创建时写入权限模式与头像，重新打开仍在', async () => {
+  await withTempService(async ({ service, reopen }) => {
+    const created = await service.create({
+      name: '只读助手',
+      permissionMode: 'plan-only',
+      avatar: 'telescope'
+    })
+    assert.equal(created.ok, true)
+    if (!created.ok) return
+    assert.equal(created.value.permissionMode, 'plan-only')
+    assert.equal(created.value.avatar, 'telescope')
+
+    const afterRestart = await reopen().list()
+    assert.equal(afterRestart[0].permissionMode, 'plan-only')
+    assert.equal(afterRestart[0].avatar, 'telescope')
+  })
+})
+
+test('只改名时权限模式与头像不被洗掉', async () => {
+  await withTempService(async ({ service }) => {
+    const created = await service.create({
+      name: '甲',
+      permissionMode: 'full-access',
+      avatar: 'rocket'
+    })
+    assert.equal(created.ok, true)
+    if (!created.ok) return
+
+    const renamed = await service.update(created.value.id, { name: '甲改' })
+    assert.equal(renamed.ok, true)
+    if (!renamed.ok) return
+    assert.equal(renamed.value.permissionMode, 'full-access')
+    assert.equal(renamed.value.avatar, 'rocket')
+  })
+})
+
+test('非法权限模式返回 E_PERMISSION_MODE_INVALID 且不落盘', async () => {
+  await withTempService(async ({ service }) => {
+    const result = await service.create({
+      name: '坏权限',
+      permissionMode: 'root' as never
+    })
+    assert.equal(result.ok, false)
+    if (!result.ok) {
+      assert.ok(result.errors.includes('E_PERMISSION_MODE_INVALID'))
+    }
+    assert.deepEqual(await service.list(), [])
+  })
+})

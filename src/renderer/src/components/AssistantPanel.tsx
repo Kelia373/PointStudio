@@ -10,7 +10,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import ConfirmButton from './ConfirmButton'
 import AgentAvatar from './AgentAvatar'
 import { describeError } from '../../../shared/i18n/errors.ts'
-import type { AssistantDto } from '../../../shared/types/ipc.ts'
+import type {
+  AgentPermissionMode,
+  AssistantDto,
+  ProviderSettingsViewDto
+} from '../../../shared/types/ipc.ts'
+import { AVATAR_KEYS } from '../lib/agentAvatar'
+import { modelChoices } from '../lib/modelOptions'
+import { PERMISSION_MODE_META, PERMISSION_MODE_ORDER } from '../lib/permissionModes'
 
 export default function AssistantPanel({
   onClose,
@@ -27,15 +34,24 @@ export default function AssistantPanel({
   embedded?: boolean
 }) {
   const [assistants, setAssistants] = useState<AssistantDto[]>([])
+  const [provider, setProvider] = useState<ProviderSettingsViewDto | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
+  const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>('smart')
+  const [avatar, setAvatar] = useState('')
+  const [modelId, setModelId] = useState('')
   const [message, setMessage] = useState<string | null>(null)
   // 同一次「打开设置」只自动展开一次：保存后列表刷新不该把表单又弹回来
   const handledFocus = useRef<string | null>(null)
 
   const reload = useCallback(async (): Promise<void> => {
-    setAssistants(await window.pointstudio.assistants.list())
+    const [list, providerView] = await Promise.all([
+      window.pointstudio.assistants.list(),
+      window.pointstudio.settings.readProvider()
+    ])
+    setAssistants(list)
+    setProvider(providerView)
   }, [])
 
   useEffect(() => {
@@ -46,6 +62,9 @@ export default function AssistantPanel({
     setEditingId(assistant.id)
     setName(assistant.name)
     setSystemPrompt(assistant.systemPrompt)
+    setPermissionMode(assistant.permissionMode ?? 'smart')
+    setAvatar(assistant.avatar ?? '')
+    setModelId(assistant.modelId ?? '')
     setMessage(null)
   }
 
@@ -66,9 +85,20 @@ export default function AssistantPanel({
     if (!editingId) {
       return
     }
+    const current = assistants.find((item) => item.id === editingId)
+    if (!current) {
+      return
+    }
     const result = await window.pointstudio.assistants.update(editingId, {
       name,
-      systemPrompt
+      systemPrompt,
+      // update 是整条替换：其余字段必须原样带回，否则保存一次就洗掉模型与参数
+      providerId: current.providerId,
+      modelId: modelId === '' ? null : modelId,
+      params: current.params,
+      enabled: current.enabled ?? true,
+      permissionMode,
+      avatar: avatar === '' ? null : avatar
     })
     if (!result.ok) {
       setMessage(describeError(result.code))
@@ -126,6 +156,58 @@ export default function AssistantPanel({
                   rows={embedded ? 5 : 3}
                   onChange={(event) => setSystemPrompt(event.target.value)}
                 />
+                <label className="assistants__field">
+                  <span className="assistants__field-label">权限模式</span>
+                  <select
+                    className="assistants__input"
+                    value={permissionMode}
+                    aria-label="权限模式"
+                    onChange={(event) =>
+                      setPermissionMode(event.target.value as AgentPermissionMode)
+                    }
+                  >
+                    {PERMISSION_MODE_ORDER.map((mode) => (
+                      <option key={mode} value={mode}>
+                        {PERMISSION_MODE_META[mode].label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="assistants__field">
+                  <span className="assistants__field-label">模型</span>
+                  <select
+                    className="assistants__input"
+                    value={modelId}
+                    aria-label="模型"
+                    onChange={(event) => setModelId(event.target.value)}
+                  >
+                    <option value="">跟随默认</option>
+                    {modelChoices(
+                      assistant.providerId ?? provider?.providerId ?? null,
+                      assistant.modelId
+                    ).map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="assistants__field">
+                  <span className="assistants__field-label">头像</span>
+                  <select
+                    className="assistants__input"
+                    value={avatar}
+                    aria-label="头像"
+                    onChange={(event) => setAvatar(event.target.value)}
+                  >
+                    <option value="">自动匹配</option>
+                    {AVATAR_KEYS.map((key) => (
+                      <option key={key} value={key}>
+                        {key}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="assistants__actions">
                   <button className="assistants__save" type="button" onClick={() => void save()}>
                     保存
@@ -141,7 +223,7 @@ export default function AssistantPanel({
               </div>
             ) : (
               <>
-                <AgentAvatar agentId={assistant.id} name={assistant.name} size={16} />
+                <AgentAvatar agentId={assistant.id} name={assistant.name} avatar={assistant.avatar} size={16} />
                 <span className="assistants__name" title={assistant.systemPrompt}>
                   {assistant.name}
                 </span>

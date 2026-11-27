@@ -31,8 +31,7 @@ import triangularRuler from '../assets/avatars/fluent-3d/triangular-ruler.webp'
 import warning from '../assets/avatars/fluent-3d/warning.webp'
 import { pickAgentAvatar, seededAvatarSvg, type AvatarKey } from '../lib/agentAvatar'
 
-const SOURCES: Record<AvatarKey, string> = {
-  'triangular-ruler': triangularRuler,
+export const AVATAR_SOURCES: Record<AvatarKey, string> = {  'triangular-ruler': triangularRuler,
   'hammer-wrench': hammerWrench,
   'test-tube': testTube,
   magnifier,
@@ -63,15 +62,18 @@ const SOURCES: Record<AvatarKey, string> = {
 export default function AgentAvatar({
   agentId,
   name,
+  avatar = null,
   size = 16,
   className = ''
 }: {
   agentId: string
   name: string
+  /** 手选的 3D 头像 key；null 走自动匹配。 */
+  avatar?: string | null
   size?: number
   className?: string
 }) {
-  const avatarKey = pickAgentAvatar(agentId, name)
+  const avatarKey = pickAgentAvatar(agentId, name, avatar)
   // 只记住失败的那一个 key：换 Agent 后自动回到图片，不需要额外的副作用
   const [failedKey, setFailedKey] = useState<string | null>(null)
   const failed = failedKey === avatarKey
@@ -89,7 +91,7 @@ export default function AgentAvatar({
         />
       ) : (
         <img
-          src={SOURCES[avatarKey]}
+          src={AVATAR_SOURCES[avatarKey]}
           alt=""
           width={size}
           height={size}

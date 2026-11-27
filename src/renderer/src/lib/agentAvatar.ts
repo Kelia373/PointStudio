@@ -147,7 +147,19 @@ export function hashString(input: string): number {
 }
 
 /** 名字优先，认不出来再按 id 哈希。同一个 Agent 永远拿到同一张。 */
-export function pickAgentAvatar(agentId: string, name: string): AvatarKey {
+export function isAvatarKey(value: string): value is AvatarKey {
+  return (AVATAR_KEYS as string[]).includes(value)
+}
+
+export function pickAgentAvatar(
+  agentId: string,
+  name: string,
+  preferredAvatar?: string | null
+): AvatarKey {
+  // 手选优先：只有合法的 AvatarKey 才认，脏字符串回退到自动匹配
+  if (preferredAvatar && isAvatarKey(preferredAvatar)) {
+    return preferredAvatar
+  }
   const haystack = name.toLowerCase()
   if (haystack !== '') {
     for (const [needle, key] of KEYWORDS) {

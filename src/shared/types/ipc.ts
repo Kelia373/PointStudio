@@ -269,6 +269,17 @@ export const ASSISTANT_CHANNELS = {
   remove: 'assistant:remove'
 } as const
 
+/** Agent 权限模式：五档，默认 smart。 */
+export type AgentPermissionMode = 'ask' | 'plan-only' | 'auto-edit' | 'smart' | 'full-access'
+
+export const AGENT_PERMISSION_MODES: readonly AgentPermissionMode[] = [
+  'ask',
+  'plan-only',
+  'auto-edit',
+  'smart',
+  'full-access'
+]
+
 export interface AssistantDto {
   id: string
   name: string
@@ -278,6 +289,10 @@ export interface AssistantDto {
   params: { temperature: number; maxTokens: number; topP: number }
   /** 停用后不再出现在派发候选里。老数据没有这个字段时视为启用。 */
   enabled?: boolean
+  /** 五档权限模式；老数据缺省按 smart。 */
+  permissionMode?: AgentPermissionMode
+  /** 手选的 3D 头像 key；null / 缺省表示按名称自动匹配。 */
+  avatar?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -290,6 +305,8 @@ export interface AssistantDraftRequest {
   modelId?: string | null
   providerId?: string | null
   params?: { temperature?: number; maxTokens?: number; topP?: number }
+  permissionMode?: AgentPermissionMode
+  avatar?: string | null
 }
 
 export interface AssistantBridge {

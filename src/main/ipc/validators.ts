@@ -6,11 +6,13 @@
 // 铁律：渲染进程是**不可信**的。TypeScript 类型在跨进程时不存在，
 // 所以每个入参都必须真的验一遍。
 import type {
+  AgentPermissionMode,
   AgentRunRequest,
   ChatSendRequest,
   CreateConversationRequest,
   ProviderSettingsDraftRequest
 } from '../../shared/types/ipc.ts'
+import { AGENT_PERMISSION_MODES } from '../../shared/types/ipc.ts'
 import type { AssistantDraft } from '../ai/domain/assistant.ts'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -75,6 +77,15 @@ export function isAssistantDraft(value: unknown): value is AssistantDraft {
     return false
   }
   if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
+    return false
+  }
+  if (
+    value.permissionMode !== undefined &&
+    !AGENT_PERMISSION_MODES.includes(value.permissionMode as AgentPermissionMode)
+  ) {
+    return false
+  }
+  if (value.avatar !== undefined && value.avatar !== null && typeof value.avatar !== 'string') {
     return false
   }
   return true

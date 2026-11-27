@@ -13,7 +13,10 @@ import {
   modelSelectOptions,
   type Effort
 } from '../lib/modelOptions'
-import { pendingHighRiskStepIds } from '../lib/planConfirm'
+import {
+  autoConfirmedStepIdsForMode,
+  stepsRequiringApproval
+} from '../lib/planConfirm'
 import { reduceAgentEvent } from '../lib/planRunState'
 import type { ComponentType } from 'react'
 
@@ -22,6 +25,7 @@ import { PluginErrorBoundary } from '../runtime/guard'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
+import AgentCreateDialog from './AgentCreateDialog'
 import DispatchPill from './DispatchPill'
 import MemoryWakeBar from './MemoryWakeBar'
 import PlanLens from './PlanLens'
@@ -144,7 +148,7 @@ export default function ChatPanel() {
   const [assistants, setAssistants] = useField('assistants')
   // 助手列表是异步拉的：没加载完之前不能拿空数组去修剪小组归属
   const [assistantsLoaded, setAssistantsLoaded] = useState(false)
-  const [drafting, setDrafting] = useState(false)
+  const [agentDialogOpen, setAgentDialogOpen] = useState(false)
   const [drawer, setDrawer] = useState<Drawer>(null)
   const [chunkPreview, setChunkPreview] = useState<{
     path: string
@@ -152,8 +156,6 @@ export default function ChatPanel() {
     text: string
   } | null>(null)
   const [planRun, setPlanRun] = useField('planRun')
-  const [assistantName, setAssistantName] = useState('')
-  const [assistantPrompt, setAssistantPrompt] = useState('')
   // 标注模式：开关就是顶栏那个按钮，注释掉就能整块移除（见下方 ANNOTATE 注释）
   const [annotate, setAnnotate] = useState(false)
 
@@ -427,15 +429,11 @@ export default function ChatPanel() {
       }
       if (chunkPreview !== null) {
         setChunkPreview(null)
-        return
-      }
-      if (drafting) {
-        setDrafting(false)
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [drawer, chunkPreview, drafting])
+  }, [drawer, chunkPreview])
 
   /**
    * 发送一轮。
@@ -537,7 +535,16 @@ export default function ChatPanel() {
     if (!plan) {
       return
     }
-    await runPlan(plan.goal, pendingHighRiskStepIds(plan))
+    const mode = boundAssistant?.permissionMode ?? 'smart'
+    // 「仅规划」不给执行入口：只允许看计划，不把写操作放过去
+    if (mode === 'plan-only') {
+      return
+    }
+    const ids =
+      mode === 'full-access'
+        ? autoConfirmedStepIdsForMode(plan, mode)
+        : stepsRequiringApproval(plan, mode)
+    await runPlan(plan.goal, ids)
   }
 
   /** 会话级模型 / 参数：只改当前会话，新会话仍继承全局默认。 */
@@ -605,7 +612,9 @@ export default function ChatPanel() {
       providerId: current.providerId,
       modelId: current.modelId,
       params: current.params,
-      enabled: patch.enabled ?? current.enabled ?? true
+      enabled: patch.enabled ?? current.enabled ?? true,
+      permissionMode: current.permissionMode ?? 'smart',
+      avatar: current.avatar ?? null
     })
     if (!result.ok) {
       setError(describeError(result.code))
@@ -692,29 +701,6 @@ export default function ChatPanel() {
     await submit(prompt, next)
   }
 
-  async function createAssistant(): Promise<void> {
-    const name = assistantName.trim()
-    if (name === '') {
-      return
-    }
-    const created = await window.pointstudio.assistants.create({
-      name,
-      systemPrompt: assistantPrompt.trim()
-    })
-    if (!created.ok) {
-      setError(describeError(created.code))
-      return
-    }
-    setAssistantName('')
-    setAssistantPrompt('')
-    setDrafting(false)
-    setError(null)
-    await refreshAssistants()
-    if (activeId) {
-      await bindAssistant(created.value.id)
-    }
-  }
-
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
@@ -761,6 +747,22 @@ export default function ChatPanel() {
   const activeConversation = conversations.find((item) => item.id === activeId) ?? null
   const boundAssistant =
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
+  const permissionMode = boundAssistant?.permissionMode ?? 'smart'
+  const canConfirmPlan = permissionMode !== 'plan-only'
+
+  // full-access：计划因待确认停住时自动放行一次，不用人再点
+  const autoResumedPlanId = useRef<string | null>(null)
+  useEffect(() => {
+    if (permissionMode !== 'full-access' || planRun?.status !== 'stopped' || !planRun.plan) {
+      return
+    }
+    if (autoResumedPlanId.current === planRun.id) {
+      return
+    }
+    autoResumedPlanId.current = planRun.id
+    void confirmAndResume()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissionMode, planRun?.id, planRun?.status])
 
   // 顶栏派遣胶囊与侧栏共用同一套判定：状态灯不能两处各算一遍
   const agentLights = useMemo(() => {
@@ -902,6 +904,7 @@ export default function ChatPanel() {
             agentState={
               boundAssistant ? (agentLights.get(boundAssistant.id) ?? 'idle') : null
             }
+            agentAvatar={boundAssistant?.avatar ?? null}
             projectName={null}
             // 停用的 Agent 不再进派发候选，但仍在侧栏里看得到、可重新启用
             agents={assistants
@@ -1088,7 +1091,7 @@ export default function ChatPanel() {
                 })
               )
             }}
-            onCreateAgent={() => setDrafting(true)}
+            onCreateAgent={() => setAgentDialogOpen(true)}
             assistantsLoaded={assistantsLoaded}
           />
 
@@ -1107,32 +1110,6 @@ export default function ChatPanel() {
           </PluginErrorBoundary>
         ) : (
           <>
-        {drafting ? (
-          <div className="assistant-form">
-            <input
-              value={assistantName}
-              placeholder="助手名称"
-              onChange={(event) => setAssistantName(event.target.value)}
-            />
-            <input
-              value={assistantPrompt}
-              placeholder="系统提示（可选）：例如「你是严格的代码审查员」"
-              onChange={(event) => setAssistantPrompt(event.target.value)}
-            />
-            <button className="btn-send" type="button" onClick={() => void createAssistant()}>
-              保存
-            </button>
-            <button
-              className="msg__act"
-              type="button"
-              onClick={() => setDrafting(false)}
-              title="取消（Esc）"
-            >
-              取消
-            </button>
-          </div>
-        ) : null}
-
         <Slot name="chat.banner" props={{ sessionId: activeId }} />
 
         {missionChains.length > 0 ? (
@@ -1337,7 +1314,12 @@ export default function ChatPanel() {
           </>
         )}
 
-        <PlanLens run={planRun} elapsedMs={lastRunMs} onConfirm={() => void confirmAndResume()} />
+        <PlanLens
+          run={planRun}
+          elapsedMs={lastRunMs}
+          canConfirm={canConfirmPlan}
+          onConfirm={() => void confirmAndResume()}
+        />
 
         {wakeDismissed ? null : (
           <MemoryWakeBar
@@ -1491,6 +1473,7 @@ export default function ChatPanel() {
         lastRunMs,
         onOpenPlan: () => setDrawer('plan'),
         onConfirmPlan: () => void confirmAndResume(),
+        canConfirmPlan,
         planRun,
         mcpConnections,
         focusAgentId: agentFocus,
@@ -1516,6 +1499,22 @@ export default function ChatPanel() {
       </footer>
 
       {settingsOpen ? <SettingsPage onClose={() => setSettingsOpen(false)} /> : null}
+
+      {agentDialogOpen ? (
+        <AgentCreateDialog
+          provider={provider}
+          existingNames={assistants.map((item) => item.name)}
+          onClose={() => setAgentDialogOpen(false)}
+          onCreated={(assistant) => {
+            setAgentDialogOpen(false)
+            void refreshAssistants()
+            if (activeId) {
+              void bindAssistant(assistant.id)
+            }
+            setInfo(`已创建 ${assistant.name}`)
+          }}
+        />
+      ) : null}
 
       {chunkPreview ? (
         <div className="chunk-preview">
@@ -1552,7 +1551,9 @@ export default function ChatPanel() {
                   details={planRun.details}
                   onClose={() => setDrawer(null)}
                   onConfirm={
-                    planRun.status === 'stopped' ? () => void confirmAndResume() : undefined
+                    planRun.status === 'stopped' && canConfirmPlan
+                      ? () => void confirmAndResume()
+                      : undefined
                   }
                 />
               ) : (

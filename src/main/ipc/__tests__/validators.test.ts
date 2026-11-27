@@ -85,3 +85,13 @@ test('isAssistantDraft：enabled 可选，但给了就必须是布尔', () => {
   assert.equal(isAssistantDraft({ name: 'x', enabled: 'no' }), false)
   assert.equal(isAssistantDraft({ name: 'x', enabled: 0 }), false)
 })
+
+test('isAssistantDraft：permissionMode 只认五档，avatar 只认字符串或 null', () => {
+  assert.equal(isAssistantDraft({ name: 'x', permissionMode: 'smart' }), true)
+  assert.equal(isAssistantDraft({ name: 'x', permissionMode: 'full-access' }), true)
+  assert.equal(isAssistantDraft({ name: 'x', permissionMode: 'root' }), false)
+  assert.equal(isAssistantDraft({ name: 'x', permissionMode: 1 }), false)
+  assert.equal(isAssistantDraft({ name: 'x', avatar: 'fox' }), true)
+  assert.equal(isAssistantDraft({ name: 'x', avatar: null }), true)
+  assert.equal(isAssistantDraft({ name: 'x', avatar: 2 }), false)
+})

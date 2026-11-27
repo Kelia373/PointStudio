@@ -3,6 +3,11 @@
 // 约束：零 IO、零 electron、零 react。校验规则写在这里，是因为它属于业务规则，
 // 不属于边界（ipc）也不属于存储（data）。企业版复用同一份规则，行为才对等。
 
+import {
+  AGENT_PERMISSION_MODES,
+  type AgentPermissionMode
+} from '../../../shared/types/ipc.ts'
+
 export interface ModelParams {
   temperature: number
   maxTokens: number
@@ -20,6 +25,10 @@ export interface Assistant {
   params: ModelParams
   /** 停用后不参与派发。旧数据可能没有这个字段（视为启用）。 */
   enabled?: boolean
+  /** 五档权限模式；旧数据缺省按 smart。 */
+  permissionMode?: AgentPermissionMode
+  /** 手选头像 key；null 表示按名称自动匹配。 */
+  avatar?: string | null
   createdAt: string
   updatedAt: string
 }
@@ -33,6 +42,8 @@ export interface AssistantDraft {
   providerId?: string | null
   modelId?: string | null
   params?: Partial<ModelParams>
+  permissionMode?: AgentPermissionMode
+  avatar?: string | null
 }
 
 export interface AssistantInput {
@@ -42,6 +53,8 @@ export interface AssistantInput {
   providerId: string | null
   modelId: string | null
   params: ModelParams
+  permissionMode: AgentPermissionMode
+  avatar: string | null
 }
 
 export type ValidationResult =
@@ -104,6 +117,16 @@ export function validateAssistantDraft(draft: AssistantDraft): ValidationResult 
     errors.push('E_ENABLED_INVALID')
   }
 
+  const permissionMode = draft.permissionMode ?? 'smart'
+  if (!AGENT_PERMISSION_MODES.includes(permissionMode)) {
+    errors.push('E_PERMISSION_MODE_INVALID')
+  }
+
+  const rawAvatar = draft.avatar
+  if (rawAvatar !== undefined && rawAvatar !== null && typeof rawAvatar !== 'string') {
+    errors.push('E_AVATAR_INVALID')
+  }
+
   if (errors.length > 0) {
     return { ok: false, errors }
   }
@@ -116,7 +139,9 @@ export function validateAssistantDraft(draft: AssistantDraft): ValidationResult 
       systemPrompt: draft.systemPrompt ?? '',
       providerId: draft.providerId ?? null,
       modelId: draft.modelId ?? null,
-      params
+      params,
+      permissionMode,
+      avatar: rawAvatar === undefined || rawAvatar === null || rawAvatar === '' ? null : rawAvatar
     }
   }
 }
