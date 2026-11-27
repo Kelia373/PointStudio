@@ -47,7 +47,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-          cache: pnpm
+          # 不挂 pnpm 缓存：安装用了自定义 --store-dir .pnpm-store，
+          # setup-node 默认按 `pnpm store path` 缓存，post-step 会因路径不存在而把 job 判失败。
 
       - name: 安装依赖
         run: pnpm install --frozen-lockfile --store-dir .pnpm-store
