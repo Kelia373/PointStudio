@@ -98,7 +98,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   const [serviceTrack, setServiceTrack] = useState<'api' | 'cli'>('api')
   const [selectedApiId, setSelectedApiId] = useState('deepseek')
   const [providerQuery, setProviderQuery] = useState('')
-  const [enabledOnly, setEnabledOnly] = useState(false)
+  const [configuredOnly, setConfiguredOnly] = useState(false)
   const [addingProvider, setAddingProvider] = useState(false)
   const [newProviderName, setNewProviderName] = useState('')
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('')
@@ -163,7 +163,8 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   const api = services.api.find((item) => item.id === selectedApiId) ?? services.api[0]
 
   const visibleApi = services.api.filter((item) => {
-    if (enabledOnly && !item.enabled) {
+    // 「已配置」以主进程真实凭据为准（hasKey），不再看目录里的 enabled 布尔位。
+    if (configuredOnly && !accountOf(item.id)?.hasKey) {
       return false
     }
     const needle = providerQuery.trim().toLowerCase()
@@ -576,12 +577,12 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                       onChange={(event) => setProviderQuery(event.target.value)}
                     />
                     <button
-                      className={`settings-rail__filter${enabledOnly ? ' is-on' : ''}`}
+                      className={`settings-rail__filter${configuredOnly ? ' is-on' : ''}`}
                       type="button"
-                      aria-pressed={enabledOnly}
-                      title={enabledOnly ? '显示全部平台' : '只看已启用'}
-                      aria-label={enabledOnly ? '显示全部平台' : '只看已启用'}
-                      onClick={() => setEnabledOnly((value) => !value)}
+                      aria-pressed={configuredOnly}
+                      title={configuredOnly ? '显示全部平台' : '仅看已配置'}
+                      aria-label={configuredOnly ? '显示全部平台' : '仅看已配置'}
+                      onClick={() => setConfiguredOnly((value) => !value)}
                     >
                       <Icon name="filter" size={12} />
                     </button>
@@ -600,11 +601,12 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                             <ProviderLogo providerId={item.id} size={16} />
                           </span>
                           <span className="settings-list__name">{item.name}</span>
-                          {accountOf(item.id)?.hasKey ? (
-                            <span className="settings-dot is-on" title="已有凭据" />
-                          ) : (
-                            <Icon name="chevron-right" size={11} />
-                          )}
+                          <span
+                            className={`settings-dot${accountOf(item.id)?.hasKey ? ' is-on' : ''}`}
+                            title={
+                              accountOf(item.id)?.hasKey ? '已配置凭据' : '未配置凭据'
+                            }
+                          />
                         </button>
                       </li>
                     ))}
@@ -676,19 +678,14 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                           {PROTOCOL_LABEL[api.protocol]} · {api.id}
                         </span>
                       </span>
-                      <label className="settings-toggle" title={api.enabled ? '停用' : '启用'}>
-                        <input
-                          type="checkbox"
-                          checked={api.enabled}
-                          aria-label={`启用 ${api.name}`}
-                          onChange={(event) =>
-                            patchApi(api.id, { enabled: event.target.checked })
-                          }
-                        />
-                        <span className="settings-toggle__track">
-                          <span className="settings-toggle__thumb" />
-                        </span>
-                      </label>
+                      <span
+                        className={`settings-dot${accountOf(api.id)?.hasKey ? ' is-on' : ''}`}
+                        title={
+                          accountOf(api.id)?.hasKey
+                            ? `已配置 ${accountOf(api.id)?.maskedKey}`
+                            : '未配置凭据'
+                        }
+                      />
                     </div>
 
                     <label className="settings__row">
