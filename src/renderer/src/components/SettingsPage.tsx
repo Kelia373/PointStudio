@@ -46,7 +46,7 @@ const SLOT_CARDS: {
   hint: string
   pending?: boolean
 }[] = [
-  { key: 'primaryModel', label: '主对话模型', hint: '默认 Agent 与新会话' },
+  { key: 'primaryModel', label: '主对话模型', hint: '模型由 Agent 决定，此项暂不生效', pending: true },
   { key: 'fastModel', label: '轻量快反模型', hint: '标题、/side、记忆提炼', pending: true },
   { key: 'plannerModel', label: '规划与拆单模型', hint: '计划、Agent 小组拆单', pending: true },
   { key: 'embeddingModel', label: '知识库向量模型', hint: '检索增强的 embedding', pending: true }
