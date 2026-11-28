@@ -553,7 +553,19 @@ export default function ChatPanel() {
 
     const requestId = crypto.randomUUID()
     // 乐观渲染：用户消息与空气泡先上屏，chunk 到达即可追加。
-    setMessages((prev) => startTurn(prev, { requestId, text, route }))
+    // 空气泡带上「这一轮的真实作者」，否则流式全程身份栏都是中性品牌标。
+    setMessages((prev) =>
+      startTurn(prev, {
+        requestId,
+        text,
+        route,
+        attribution: {
+          ...(boundAssistant?.id ? { assistantId: boundAssistant.id } : {}),
+          ...(activeProviderId ? { providerId: activeProviderId } : {}),
+          ...(activeModelLabel ? { modelId: activeModelLabel } : {})
+        }
+      })
+    )
     if (textOverride === undefined) {
       setDraft('')
     }

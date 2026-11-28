@@ -378,12 +378,43 @@ export default function Sidebar({
     }
   }, [groupMenu])
 
+  /**
+   * 内置通用助手在渲染层恒存在。
+   *
+   * 主进程启动收编失败（assistants.json 损坏 / 写盘失败）时，`assistants` 里没有它，
+   * 于是「它的专题」与会话都没有渲染点——用户看到的是整块消失。这里合成一行兜底，
+   * 保证会话至少可见、可点。
+   */
+  const effectiveAssistants = useMemo(() => {
+    if (assistants.some((item) => item.id === DEFAULT_ASSISTANT_ID)) {
+      return assistants
+    }
+    const synthetic: AssistantDto = {
+      id: DEFAULT_ASSISTANT_ID,
+      name: '通用助手',
+      systemPrompt: '',
+      providerId: null,
+      modelId: null,
+      params: { temperature: 0.7, maxTokens: 2048, topP: 1 },
+      enabled: true,
+      permissionMode: 'smart',
+      avatar: null,
+      builtin: true,
+      createdAt: '1970-01-01T00:00:00.000Z',
+      updatedAt: '1970-01-01T00:00:00.000Z'
+    }
+    return [synthetic, ...assistants]
+  }, [assistants])
+
   const filteredAgents = useMemo(
     () =>
       pinBuiltinAgent(
-        sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode)
+        sortAgents(
+          filterAgents(effectiveAssistants, { keyword: agentKeyword, hideDisabled }),
+          sortMode
+        )
       ),
-    [assistants, agentKeyword, hideDisabled, sortMode]
+    [effectiveAssistants, agentKeyword, hideDisabled, sortMode]
   )
   const filterActive =
     groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
@@ -391,12 +422,12 @@ export default function Sidebar({
     // 全员归属：无主 / 孤儿单聊兜底进通用助手专题，侧栏不再有「自由对话」这一桶。
     () =>
       filterBuckets(
-        partitionConversations(conversations, assistants, {
+        partitionConversations(conversations, effectiveAssistants, {
           defaultAssistantId: DEFAULT_ASSISTANT_ID
         }),
         keyword
       ),
-    [conversations, assistants, keyword]
+    [conversations, effectiveAssistants, keyword]
   )
 
   useEffect(() => {

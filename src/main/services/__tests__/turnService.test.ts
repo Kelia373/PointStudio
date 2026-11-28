@@ -248,3 +248,35 @@ test('分叉带 adoptTo：小组 / 无主会话落到通用助手专题', async 
     }
   })
 })
+
+test('分叉复制保留归因：历史回复不因分叉退化成中性标', async () => {
+  await withTurns(async ({ service }) => {
+    const source = await service.create({ assistantId: 'a1', title: '源会话' })
+    assert.equal(source.ok, true)
+    if (!source.ok) return
+
+    const user = await service.appendMessage(source.value.id, { role: 'user', content: '问' })
+    const reply = await service.appendMessage(source.value.id, {
+      role: 'assistant',
+      content: '答',
+      assistantId: 'a1',
+      providerId: 'deepseek',
+      modelId: 'deepseek-chat'
+    })
+    assert.equal(user.ok && reply.ok, true)
+    if (!user.ok || !reply.ok) return
+
+    const branched = await branchConversation(service, {
+      conversationId: source.value.id,
+      upToMessageId: reply.value.id
+    })
+    assert.equal(branched.ok, true)
+    if (!branched.ok) return
+
+    const copied = await service.listMessages(branched.value.id)
+    const assistant = copied.find((message) => message.role === 'assistant')
+    assert.equal(assistant?.assistantId, 'a1')
+    assert.equal(assistant?.providerId, 'deepseek')
+    assert.equal(assistant?.modelId, 'deepseek-chat')
+  })
+})

@@ -86,3 +86,18 @@ test('removeMessage 按 id 移除，重复调用幂等', () => {
   assert.deepEqual(once.map((item) => item.id), ['a1'])
   assert.deepEqual(removeMessage(once, 'u1').map((item) => item.id), ['a1'])
 })
+
+test('startTurn：乐观渲染的占位回复带归因，流式期间不退回品牌标', () => {
+  const next = startTurn([], {
+    requestId: 'req-1',
+    text: '你好',
+    attribution: { assistantId: 'a1', providerId: 'deepseek', modelId: 'deepseek-chat' }
+  })
+  const placeholder = next.find((message) => message.id === 'req-1')
+  assert.equal(placeholder?.assistantId, 'a1')
+  assert.equal(placeholder?.providerId, 'deepseek')
+  assert.equal(placeholder?.modelId, 'deepseek-chat')
+
+  const plain = startTurn([], { requestId: 'req-2', text: 'hi' })
+  assert.equal(plain[1].assistantId, undefined, '不传归因就不带字段')
+})
