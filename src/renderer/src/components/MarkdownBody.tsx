@@ -104,7 +104,7 @@ export default function MarkdownBody({
           const Tag = `h${block.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
           return (
             <Tag key={index} className="md__heading">
-              {block.text}
+              <Inline tokens={parseInlineTokens(block.text)} />
             </Tag>
           )
         }

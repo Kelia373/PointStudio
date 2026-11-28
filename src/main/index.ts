@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, nativeImage } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, shell } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
@@ -18,6 +18,7 @@ import { resolveProviderConfig, type ProviderSettings } from './ai/domain/provid
 import { JsonFileStore } from './data/fileStore.ts'
 import { buildDataPaths } from './core/paths.ts'
 import { resolveAppIconPath } from './core/appIcon.ts'
+import { isSafeExternalUrl } from './core/externalLink.ts'
 import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
@@ -79,6 +80,28 @@ function createWindow(): void {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
+    }
+  })
+
+  // 外链统一交给系统浏览器：不额外开 Electron 子窗口，也不让页面自己导航走。
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+  window.webContents.on('will-navigate', (event, url) => {
+    const current = window.webContents.getURL()
+    try {
+      if (current !== '' && new URL(url).origin === new URL(current).origin) {
+        return
+      }
+    } catch {
+      // 畸形 URL 按外部处理
+    }
+    event.preventDefault()
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url)
     }
   })
 
