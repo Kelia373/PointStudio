@@ -213,3 +213,39 @@ test('replaceTextRange：框选替换（含覆盖胶囊）后光标落在插入�
   assert.equal(replaced.text, 'a  b')
   assert.equal(replaced.caret, 2)
 })
+
+test('落点合法性：目标节点容量必须 >= offset（range.setStart 不会抛）', () => {
+  const resolve = (nodes: ReadonlyArray<EditorDomNode>, path: ReadonlyArray<number>): EditorDomNode | undefined => {
+    let current: EditorDomNode | undefined
+    let list: ReadonlyArray<EditorDomNode> = nodes
+    for (const index of path) {
+      current = list[index]
+      if (current === undefined) {
+        return undefined
+      }
+      list = current.kind === 'text' ? [] : current.children ?? []
+    }
+    return current
+  }
+
+  const nodes: EditorDomNode[] = [text('ab'), chip(1), br(), text('cd'), br(true)]
+  const total = nodes.reduce((sum, node) => sum + nodeLogicalLength(node), 0)
+  for (let offset = 0; offset <= total; offset += 1) {
+    const caret = setLogicalCaretOffset(nodes, offset)
+    if (caret.path.length === 0) {
+      // 根容器落点：子节点数必须容得下这个 offset。
+      assert.ok(nodes.length >= caret.offset, `root offset=${offset}`)
+      continue
+    }
+    const target = resolve(nodes, caret.path)
+    assert.notEqual(target, undefined, `path 解析不到节点：${caret.path.join('/')}`)
+    if (target === undefined) {
+      continue
+    }
+    const capacity = target.kind === 'text' ? target.text.length : (target.children ?? []).length
+    assert.ok(
+      capacity >= caret.offset,
+      `落点非法：offset=${offset} path=${caret.path.join('/')} capacity=${capacity}`
+    )
+  }
+})
