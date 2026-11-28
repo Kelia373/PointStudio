@@ -2,8 +2,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { createDefaultModelServicesState } from '../modelServices.ts'
-import type { ProviderAccountViewDto } from '../../../../shared/types/ipc.ts'
+import {
+  createDefaultModelServicesState,
+  parseModelServicesState,
+  serializeModelServicesState
+} from '../modelServices.ts'
+import type {
+  ModelCapabilitiesDto,
+  ProviderAccountViewDto,
+  ReasoningEffortDto
+} from '../../../../shared/types/ipc.ts'
 import {
   EFFORT_DISPLAY_ORDER,
   EFFORT_SHORT_LABEL,
@@ -15,7 +23,6 @@ import {
   resolvePickerModelCapabilities,
   sortPickerProviders
 } from '../modelPicker.ts'
-import type { ModelCapabilitiesDto } from '../../../../shared/types/ipc.ts'
 
 function account(
   providerId: string,
@@ -189,4 +196,86 @@ test('跨端规则一致性：主进程与渲染层对同一批模型推断结�
       `${providerId}/${modelId} 两端推断不一致`
     )
   }
+})
+
+test('P2-B：OpenAI 兼容来源只亮三档，opencode-go 的 Claude 仍五档', () => {
+  const services = createDefaultModelServicesState()
+  const openrouter = services.api.find((item) => item.id === 'openrouter')
+  assert.ok(openrouter)
+  const openaiLine = resolvePickerModelCapabilities(
+    { ...services, api: services.api.map((item) => item.id === 'openrouter' ? { ...item, models: [...item.models, 'claude-sonnet-4.5'] } : item) },
+    'openrouter',
+    'claude-sonnet-4.5'
+  )
+  assert.deepEqual(openaiLine.supportedEfforts, ['low', 'mid', 'high'])
+
+  const anthropicLine = resolvePickerModelCapabilities(
+    services,
+    'opencode-go',
+    'claude-sonnet-4-5'
+  )
+  assert.deepEqual(anthropicLine.supportedEfforts, ['low', 'mid', 'high', 'xhigh', 'max'])
+})
+
+test('P2-A 已知边界：能力画像不持久化，unselectable 标记保留', () => {
+  const services = createDefaultModelServicesState()
+  const marked = {
+    ...services,
+    api: services.api.map((provider) =>
+      provider.id === 'openrouter'
+        ? {
+            ...provider,
+            models: ['a'],
+            modelCapabilities: {
+              a: { supportsTools: true, supportedEfforts: ['low', 'mid', 'high'] as ReasoningEffortDto[], effortMode: 'reasoning_effort' as const }
+            }
+          }
+        : provider
+    )
+  }
+  const parsed = parseModelServicesState(serializeModelServicesState(marked))
+  const provider = parsed.api.find((item) => item.id === 'openrouter')
+  assert.equal(provider?.modelCapabilities, undefined, '重启后两侧一起回退规则表')
+})
+
+test('P2-A：unselectableModels 仍持久化，-free 灰显不因重启丢失', () => {
+  const services = createDefaultModelServicesState()
+  const marked = {
+    ...services,
+    api: services.api.map((provider) =>
+      provider.id === 'opencode-go'
+        ? { ...provider, unselectableModels: { 'glm-4.5-free': '仅官方客户端' } }
+        : provider
+    )
+  }
+  const parsed = parseModelServicesState(serializeModelServicesState(marked))
+  assert.equal(
+    parsed.api.find((item) => item.id === 'opencode-go')?.unselectableModels?.['glm-4.5-free'],
+    '仅官方客户端'
+  )
+})
+
+test('P3-2：serialize 不写能力画像，但保留 unselectableModels', () => {
+  const services = createDefaultModelServicesState()
+  const marked = {
+    ...services,
+    api: services.api.map((provider) =>
+      provider.id === 'opencode-go'
+        ? {
+            ...provider,
+            modelCapabilities: {
+              'kimi-k2.5': {
+                supportsTools: true,
+                supportedEfforts: ['low', 'mid', 'high'] as ReasoningEffortDto[],
+                effortMode: 'reasoning_effort' as const
+              }
+            },
+            unselectableModels: { 'glm-4.5-free': '仅官方客户端' }
+          }
+        : provider
+    )
+  }
+  const raw = serializeModelServicesState(marked)
+  assert.equal(raw.includes('modelCapabilities'), false, '能力画像不落 localStorage')
+  assert.equal(raw.includes('unselectableModels'), true, '不可选标记仍保留')
 })

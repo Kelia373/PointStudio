@@ -194,3 +194,43 @@ test('OpenAI 兼容线：reasoning_effort 只对支持调档的模型发出', as
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 })
+
+test('P2-B：OpenAI 兼容线把 xhigh/max 夹到 high，不发上游不认识的值', async () => {
+  const bodies: string[] = []
+  const server = createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      bodies.push(body)
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.write('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n')
+      response.write('data: [DONE]\n\n')
+      response.end()
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const port = (server.address() as AddressInfo).port
+  try {
+    const provider = new OpenAiCompatibleProvider({
+      id: 'openrouter',
+      defaultBaseUrl: `http://127.0.0.1:${port}`,
+      defaultModel: 'claude-sonnet-4.5'
+    })
+    for await (const _chunk of provider.streamChat({
+      apiKey: 'test-key',
+      baseUrl: `http://127.0.0.1:${port}`,
+      model: 'claude-sonnet-4.5',
+      supportedEfforts: ['low', 'mid', 'high', 'xhigh', 'max'],
+      messages: [{ role: 'user', content: 'hi' }],
+      params: { effort: 'max' }
+    })) {
+      // 消费
+    }
+    const body = JSON.parse(bodies[0]) as Record<string, unknown>
+    assert.equal(body.reasoning_effort, 'high')
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
+})

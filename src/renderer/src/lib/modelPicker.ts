@@ -164,6 +164,27 @@ export function filterPickerModels(models: readonly PickerModel[], query: string
 }
 
 /** 优先读拉取缓存；没有就按规则表推断。 */
+const OPENAI_LINE_EFFORTS: readonly ReasoningEffortDto[] = ['low', 'mid', 'high']
+
+/**
+ * OpenAI 兼容线只认 low/medium/high：UI 也只展示这三档，避免「亮了但发不出去」。
+ * 其它协议（opencode-go 的 Anthropic 线、deepseek、本地）保持模型真实档位。
+ */
+function visibleEfforts(
+  protocol: string,
+  caps: ModelCapabilitiesDto
+): ModelCapabilitiesDto {
+  if (protocol !== 'openai-compatible') {
+    return caps
+  }
+  return {
+    ...caps,
+    supportedEfforts: caps.supportedEfforts.filter((effort) =>
+      OPENAI_LINE_EFFORTS.includes(effort)
+    )
+  }
+}
+
 export function resolvePickerModelCapabilities(
   services: ModelServicesState,
   providerId: string,
@@ -171,11 +192,13 @@ export function resolvePickerModelCapabilities(
 ): ModelCapabilitiesDto {
   const api = services.api.find((item) => item.id === providerId)
   const local = services.local.find((item) => item.id === providerId)
-  return (
+  const caps =
     api?.modelCapabilities?.[modelId] ??
     local?.modelCapabilities?.[modelId] ??
     inferRendererCapabilities(providerId, modelId)
-  )
+  // OpenCode Go 自带双线路（Claude 走 Anthropic 线），不受 OpenAI 三档限制。
+  const protocol = providerId === 'opencode-go' ? 'opencode-go' : (api?.protocol ?? 'ollama')
+  return visibleEfforts(protocol, caps)
 }
 
 /**

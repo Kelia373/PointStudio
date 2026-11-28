@@ -10,7 +10,7 @@ import { AUTO_ROUTE_MODEL, MODEL_LABEL } from './modelOptions.ts'
 export const MODEL_SERVICES_KEY = 'pointstudio.modelServices'
 
 export type ModelServiceKind = 'api' | 'cli' | 'local'
-import type { ModelCapabilitiesDto, ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+import type { ModelCapabilitiesDto } from '../../../shared/types/ipc.ts'
 
 export type ApiProtocolKind = 'openai-compatible' | 'deepseek' | 'anthropic' | 'gemini'
 export type CliEnginePresetId =
@@ -502,7 +502,17 @@ export function createDefaultModelServicesState(): ModelServicesState {
 
 
 export function serializeModelServicesState(state: ModelServicesState): string {
-  return JSON.stringify(state)
+  // 能力画像是本次会话的临时缓存（重启两侧一起回退规则表），不写进 localStorage；
+  // unselectableModels 是静态标记，照常保留。
+  const strip = <T extends { modelCapabilities?: unknown }>(provider: T): Omit<T, 'modelCapabilities'> => {
+    const { modelCapabilities: _ignored, ...rest } = provider
+    return rest
+  }
+  return JSON.stringify({
+    ...state,
+    api: state.api.map(strip),
+    local: state.local.map(strip)
+  })
 }
 
 /**
@@ -663,38 +673,6 @@ export function removeCustomApiProvider(
   return { ...state, api: state.api.filter((item) => item.id !== id) }
 }
 
-function capabilityMap(value: unknown): Record<string, ModelCapabilitiesDto> | undefined {
-  if (typeof value !== 'object' || value === null) {
-    return undefined
-  }
-  const out: Record<string, ModelCapabilitiesDto> = {}
-  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof raw !== 'object' || raw === null) {
-      continue
-    }
-    const record = raw as Record<string, unknown>
-    const efforts = Array.isArray(record['supportedEfforts'])
-      ? record['supportedEfforts'].filter(
-          (item): item is ReasoningEffortDto =>
-            item === 'low' || item === 'mid' || item === 'high' || item === 'xhigh' || item === 'max'
-        )
-      : []
-    const mode = record['effortMode']
-    if (
-      typeof record['supportsTools'] !== 'boolean' ||
-      (mode !== 'none' && mode !== 'reasoning_effort' && mode !== 'thinking_budget' && mode !== 'fixed')
-    ) {
-      continue
-    }
-    out[key] = {
-      supportsTools: record['supportsTools'],
-      supportedEfforts: efforts,
-      effortMode: mode
-    }
-  }
-  return Object.keys(out).length > 0 ? out : undefined
-}
-
 function stringMap(value: unknown): Record<string, string> | undefined {
   if (typeof value !== 'object' || value === null) {
     return undefined
@@ -761,9 +739,9 @@ function sanitizeApiList(value: unknown): ApiProviderProfile[] {
       defaultModel: stringOf(record['defaultModel'], models[0] ?? ''),
       ...(typeof record['hasKey'] === 'boolean' ? { hasKey: record['hasKey'] } : {}),
       ...(typeof record['maskedKey'] === 'string' ? { maskedKey: record['maskedKey'] } : {}),
-      ...(capabilityMap(record['modelCapabilities'])
-        ? { modelCapabilities: capabilityMap(record['modelCapabilities']) }
-        : {}),
+      // 能力画像不持久化：主进程的 discovery 缓存是内存态，两侧一起在重启后
+      // 回退规则表，避免「UI 亮档、发送侧没有缓存」的不对称（已知边界，下一单落盘）。
+
       ...(stringMap(record['unselectableModels'])
         ? { unselectableModels: stringMap(record['unselectableModels']) }
         : {})
@@ -846,9 +824,6 @@ function sanitizeLocalList(value: unknown): LocalRuntimeProfile[] {
         typeof record['keepAliveMinutes'] === 'number' && record['keepAliveMinutes'] >= 0
           ? record['keepAliveMinutes']
           : 30,
-      ...(capabilityMap(record['modelCapabilities'])
-        ? { modelCapabilities: capabilityMap(record['modelCapabilities']) }
-        : {}),
       ...(stringMap(record['unselectableModels'])
         ? { unselectableModels: stringMap(record['unselectableModels']) }
         : {})
