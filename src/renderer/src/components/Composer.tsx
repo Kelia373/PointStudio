@@ -156,7 +156,8 @@ function selectionRangeOf(el: HTMLElement): { start: number; end: number } | nul
   return start <= end ? { start, end } : { start: end, end: start }
 }
 
-function applyCaret(el: HTMLElement, offset: number): void {  const caret = setLogicalCaretOffset(toEditorNodes(el.childNodes), offset)
+function applyCaret(el: HTMLElement, offset: number): void {
+  const caret = setLogicalCaretOffset(toEditorNodes(el.childNodes), offset)
   const node = resolvePath(el, caret.path) ?? el
   const selection = window.getSelection()
   if (selection === null) {

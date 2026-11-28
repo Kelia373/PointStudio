@@ -172,8 +172,11 @@ export function registerAttachmentsIpc(options: AttachmentsIpcOptions): void {
         }
 
         // 资源管理器 Ctrl+C 复制的本地图片文件：只贴第一张，多选交给拖入。
-        const localPaths =
-          fileNameWPaths.length > 0 ? fileNameWPaths : filePathsFromUriList(uriList)
+        // 两条来源合并去重：FileNameW 若是带 DROPFILES 头的二进制，解出来会是
+        // 垃圾路径，不能因此把本来可用的 uri-list 整条弃掉。
+        const localPaths = [
+          ...new Set([...fileNameWPaths, ...filePathsFromUriList(uriList)])
+        ]
         if (drafts.length === 0 && localPaths.length > 0) {
           for (const file of localPaths) {
             const mime = MIME_BY_EXT[extname(file).toLowerCase()]
