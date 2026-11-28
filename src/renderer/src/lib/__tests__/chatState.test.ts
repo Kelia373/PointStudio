@@ -7,6 +7,7 @@ import {
   markStatus,
   removeMessage,
   startTurn,
+  storedToUiMessages,
   type UiMessage
 } from '../chatState.ts'
 
@@ -85,6 +86,35 @@ test('removeMessage 按 id 移除，重复调用幂等', () => {
   const once = removeMessage(messages(), 'u1')
   assert.deepEqual(once.map((item) => item.id), ['a1'])
   assert.deepEqual(removeMessage(once, 'u1').map((item) => item.id), ['a1'])
+})
+
+test('storedToUiMessages：落库消息的 images 与归因三字段都必须带回界面', () => {
+  const images = [
+    { id: '11111111-1111-4111-8111-111111111111', mimeType: 'image/png' as const, name: 'a.png', sizeBytes: 12 }
+  ]
+  const mapped = storedToUiMessages([
+    {
+      id: 'm1',
+      role: 'user',
+      content: '[Image #1] 看图',
+      status: 'complete',
+      images
+    },
+    {
+      id: 'm2',
+      role: 'assistant',
+      content: '好',
+      status: 'complete',
+      assistantId: 'a1',
+      providerId: 'deepseek',
+      modelId: 'deepseek-chat'
+    }
+  ])
+  assert.deepEqual(mapped[0].images, images)
+  assert.equal(mapped[1].images, undefined, '无图消息不带字段')
+  assert.equal(mapped[1].assistantId, 'a1', '历史归因不能被映射抹掉')
+  assert.equal(mapped[1].providerId, 'deepseek')
+  assert.equal(mapped[1].modelId, 'deepseek-chat')
 })
 
 test('startTurn：乐观渲染的占位回复带归因，流式期间不退回品牌标', () => {

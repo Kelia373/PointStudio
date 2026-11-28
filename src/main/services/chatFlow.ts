@@ -9,6 +9,30 @@ import type { SearchHit } from '../ai/domain/search.ts'
 import { formatHitsForPrompt } from './retrievalService.ts'
 import type { ConversationService } from './conversationService.ts'
 import { streamReplyText, type ChatEngineDeps, type ReplyOptions } from './chatEngine.ts'
+import { capabilitiesForSend } from '../ai/providers/modelCapabilities.ts'
+import type { ImageMimeTypeDto, MessageImageDto } from '../../shared/types/ipc.ts'
+
+/** 把消息里的附图 id 读成 base64；读不出来的单张直接跳过（不崩整条会话）。 */
+async function readImages(
+  deps: ChatFlowDeps,
+  images: MessageImageDto[] | undefined
+): Promise<Array<{ mimeType: ImageMimeTypeDto; base64: string }>> {
+  if (!images || images.length === 0 || !deps.readImage) {
+    return []
+  }
+  const out: Array<{ mimeType: ImageMimeTypeDto; base64: string }> = []
+  for (const image of images) {
+    try {
+      const read = await deps.readImage(image.id)
+      if (read !== null) {
+        out.push({ mimeType: read.mimeType, base64: read.base64 })
+      }
+    } catch {
+      continue
+    }
+  }
+  return out
+}
 
 /**
  * 只需要「按 id 取助手」这一个能力，所以不收 AssistantService 整个类。
@@ -52,6 +76,10 @@ export interface ChatFlowDeps {
   }) => void | Promise<void>
   /** 群聊 @ 成员：本轮由该 Agent 接管，缺省用会话绑定的 Agent。 */
   assistantOverride?: string | null
+  /** 读取附图 base64（缺省表示不支持图片：带图时按读不出处理）。 */
+  readImage?: (
+    id: string
+  ) => Promise<{ base64: string; mimeType: ImageMimeTypeDto } | null>
   /** 思考增量：转给界面实时展示。 */
   onReasoning?: (delta: string) => void
   /** 真实用量：转给界面检查器（账本另走 onUsageRecorded）。 */
@@ -120,7 +148,8 @@ async function resolveReplyOptions(
 export async function* streamAssistantReply(
   conversationId: string,
   prompt: string,
-  deps: ChatFlowDeps
+  deps: ChatFlowDeps,
+  images: MessageImageDto[] = []
 ): AsyncGenerator<string, void, unknown> {
   const conversation = await deps.conversations.get(conversationId)
   if (!conversation) {
@@ -130,20 +159,46 @@ export async function* streamAssistantReply(
   // 先取历史（此时还没有本轮这条），再落用户消息——顺序反了就会把本轮算进历史，
   // 模型会看到同一句话两遍。
   const previous = await deps.conversations.listMessages(conversationId)
-  const history: ContextMessage[] = previous.map((message) => ({
-    role: message.role,
-    content: message.content
-  }))
+  const bound = await resolveReplyOptions(conversationId, deps)
+
+  // 视觉拦截在落库之前：模型明确不吃图就直接拒，用户输入框里的草稿和图片都还在。
+  // 注意：内置助手的 providerId / modelId 都是 null，这里必须回落到引擎默认值，
+  // 否则「没显式配模型」的默认路径会直接跳过拦截。
+  if (images.length > 0) {
+    const providerId = bound.providerId ?? deps.engine.provider.id
+    const model = bound.model ?? deps.engine.model
+    if (providerId && model) {
+      const caps = capabilitiesForSend(providerId, model)
+      if (caps.supportsVision === false) {
+        throw new Error('E_VISION_UNSUPPORTED')
+      }
+    }
+  }
+
+  const history: ContextMessage[] = []
+  for (const message of previous) {
+    const past = await readImages(deps, message.images)
+    history.push({
+      role: message.role,
+      content: message.content,
+      ...(past.length > 0 ? { images: past } : {})
+    })
+  }
+  const userImages = await readImages(deps, images)
+  if (images.length > 0 && userImages.length === 0) {
+    // 一张都读不出来（文件被清掉 / 尚未落盘）时不能假装没事：直接报错更好排查。
+    throw new Error('E_IMAGE_UNREADABLE')
+  }
 
   const saved = await deps.conversations.appendMessage(conversationId, {
     role: 'user',
-    content: prompt
+    content: prompt,
+    ...(images.length > 0 ? { images } : {})
   })
   if (!saved.ok) {
     throw new Error(saved.errors[0] ?? 'E_UNKNOWN')
   }
 
-  const bound = await resolveReplyOptions(conversationId, deps)
   const limits = deps.contextLimits ?? {
     maxMessages: CONTEXT_MAX_MESSAGES,
     maxTokens: CONTEXT_MAX_TOKENS
@@ -168,7 +223,13 @@ export async function* streamAssistantReply(
     }
   }
 
-  const options: ReplyOptions = { ...bound, history: trimmed.messages, references, signal: deps.signal }
+  const options: ReplyOptions = {
+    ...bound,
+    history: trimmed.messages,
+    references,
+    signal: deps.signal,
+    ...(userImages.length > 0 ? { userImages } : {})
+  }
   options.onUsage = (sample) => {
     void deps.onUsageRecorded?.({
       providerId: sample.providerId,

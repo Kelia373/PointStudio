@@ -15,6 +15,7 @@ import {
   type TokenUsageSample
 } from './types.ts'
 import { OPENAI_EFFORT, parseOpenAiSseStream } from './openaiCompatible.ts'
+import { toAnthropicMessages, toOpenAiMessages } from './wireMessages.ts'
 
 export const OPENCODE_GO_DEFAULT_BASE_URL = 'https://opencode.ai/inference/go/openai/v1'
 export const OPENCODE_GO_DEFAULT_MODEL = 'kimi-k2.5'
@@ -257,7 +258,7 @@ export class OpencodeGoProvider implements ChatProvider {
   private openAiBody(request: ChatStreamRequest): string {
     return JSON.stringify({
       model: request.model || OPENCODE_GO_DEFAULT_MODEL,
-      messages: request.messages,
+      messages: toOpenAiMessages(request.messages),
       stream: true,
       stream_options: { include_usage: true },
       ...(request.params?.temperature !== undefined
@@ -279,9 +280,9 @@ export class OpencodeGoProvider implements ChatProvider {
       .map((message) => message.content)
       .join('\n\n')
     // Anthropic Messages 要求首条是 user：裁剪后的历史可能以 assistant 开头。
-    const dialogue = request.messages
-      .filter((message) => message.role !== 'system')
-      .map((message) => ({ role: message.role, content: message.content }))
+    const dialogue = toAnthropicMessages(
+      request.messages.filter((message) => message.role !== 'system')
+    )
     while (dialogue.length > 0 && dialogue[0].role !== 'user') {
       dialogue.shift()
     }

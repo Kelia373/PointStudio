@@ -66,6 +66,7 @@ export function inferModelCapabilities(
   raw?: Record<string, unknown>
 ): ModelCapabilitiesDto {
   const id = modelId.toLowerCase()
+  const vision = inferVision(id, raw)
 
   if (raw) {
     const efforts = metadataEfforts(raw)
@@ -75,7 +76,8 @@ export function inferModelCapabilities(
       return {
         supportsTools: tools ?? true,
         supportedEfforts: [],
-        effortMode: 'none'
+        effortMode: 'none',
+        ...(vision === null ? {} : { supportsVision: vision })
       }
     }
     if (efforts !== null) {
@@ -85,22 +87,38 @@ export function inferModelCapabilities(
         effortMode:
           providerId === 'opencode-go' || raw['thinking'] !== undefined
             ? 'thinking_budget'
-            : 'reasoning_effort'
+            : 'reasoning_effort',
+        ...(vision === null ? {} : { supportsVision: vision })
       }
     }
   }
 
   // 嵌入模型没有对话能力，也不该出现在模型位；这里给最保守的画像。
   if (hasAny(id, ['embed', 'rerank'])) {
-    return { supportsTools: false, supportedEfforts: [], effortMode: 'none' }
+    return {
+      supportsTools: false,
+      supportedEfforts: [],
+      effortMode: 'none',
+      supportsVision: false
+    }
   }
 
-  // DeepSeek：chat 不支持调档；reasoner 固定开思考。
+  // DeepSeek：chat 不支持调档；reasoner 固定开思考。两者都不吃图。
   if (id.startsWith('deepseek')) {
     if (hasAny(id, ['reasoner', 'r1'])) {
-      return { supportsTools: true, supportedEfforts: [], effortMode: 'fixed' }
+      return {
+        supportsTools: true,
+        supportedEfforts: [],
+        effortMode: 'fixed',
+        supportsVision: false
+      }
     }
-    return { supportsTools: true, supportedEfforts: [], effortMode: 'none' }
+    return {
+      supportsTools: true,
+      supportedEfforts: [],
+      effortMode: 'none',
+      supportsVision: false
+    }
   }
 
   // OpenAI 推理族：o1 / o3 / o4 / gpt-5。gpt-5.2+ 与 codex 多一档 xhigh。
@@ -113,18 +131,29 @@ export function inferModelCapabilities(
     return {
       supportsTools: true,
       supportedEfforts: wide ? ['low', 'mid', 'high', 'xhigh'] : THREE,
-      effortMode: 'reasoning_effort'
+      effortMode: 'reasoning_effort',
+      ...(vision === null ? {} : { supportsVision: vision })
     }
   }
 
   // Claude 3.7 / 4 系：Anthropic 的 thinking budget 五档。
   if (id.includes('claude')) {
-    return { supportsTools: true, supportedEfforts: [...FIVE], effortMode: 'thinking_budget' }
+    return {
+      supportsTools: true,
+      supportedEfforts: [...FIVE],
+      effortMode: 'thinking_budget',
+      supportsVision: vision ?? true
+    }
   }
 
   // Gemini 2.5 / 3：reasoning_effort 三档。
   if (id.includes('gemini-2.5') || id.startsWith('gemini-3')) {
-    return { supportsTools: true, supportedEfforts: [...THREE], effortMode: 'reasoning_effort' }
+    return {
+      supportsTools: true,
+      supportedEfforts: [...THREE],
+      effortMode: 'reasoning_effort',
+      supportsVision: vision ?? true
+    }
   }
 
   // 国内推理变体：kimi thinking / qwen qwq / glm z1。走 OpenAI 兼容线。
@@ -135,12 +164,94 @@ export function inferModelCapabilities(
     return {
       supportsTools: true,
       supportedEfforts: [...THREE],
-      effortMode: providerId === 'opencode-go' ? 'thinking_budget' : 'reasoning_effort'
+      effortMode: providerId === 'opencode-go' ? 'thinking_budget' : 'reasoning_effort',
+      ...(vision === null ? {} : { supportsVision: vision })
     }
   }
 
   // 其余普通模型：能带工具，但不能调思考强度。
-  return { supportsTools: true, supportedEfforts: [], effortMode: 'none' }
+  return {
+    supportsTools: true,
+    supportedEfforts: [],
+    effortMode: 'none',
+    ...(vision === null ? {} : { supportsVision: vision })
+  }
+}
+
+/** 明确不吃图的模型族：命中就硬拦，不把图发出去白烧一次配额。 */
+const TEXT_ONLY = [
+  'deepseek-chat',
+  'deepseek-reasoner',
+  'deepseek-coder',
+  'qwq',
+  'o1-mini',
+  'o3-mini'
+]
+
+/** 已知能吃图的模型族。 */
+const VISION_FAMILIES = [
+  'gpt-4o',
+  'gpt-4.1',
+  'gpt-5',
+  'o1',
+  'o3',
+  'o4-mini',
+  'claude-3',
+  'claude-sonnet-4',
+  'claude-opus-4',
+  'gemini',
+  'kimi-k2.5',
+  'qwen-vl',
+  'qwen2.5-vl',
+  'qwen3-vl',
+  'glm-4v',
+  'pixtral',
+  'llava',
+  'minicpm-v',
+  'gemma3'
+]
+
+/**
+ * 视觉能力画像：上游元数据优先，其次裸 ID 规则，最后 undefined（未知放行）。
+ * 未知就返回 null 而不是 false——自定义模型别被规则误杀。
+ */
+function inferVision(id: string, raw?: Record<string, unknown>): boolean | null {
+  const declared = metadataVision(raw)
+  if (declared !== null) {
+    return declared
+  }
+  if (TEXT_ONLY.some((family) => id === family || id.startsWith(`${family}-`))) {
+    return false
+  }
+  if (hasAny(id, ['-vision', 'vision-', 'vl-', '-vl', 'omni'])) {
+    return true
+  }
+  if (VISION_FAMILIES.some((family) => id === family || id.startsWith(`${family}-`) || id.startsWith(family))) {
+    return true
+  }
+  return null
+}
+
+/** 上游元数据：architecture.modality / input_modalities 里有没有 image。 */
+function metadataVision(raw: Record<string, unknown> | undefined): boolean | null {
+  if (!raw) {
+    return null
+  }
+  const architecture = raw['architecture']
+  if (typeof architecture === 'object' && architecture !== null) {
+    const modality = (architecture as Record<string, unknown>)['modality']
+    if (typeof modality === 'string') {
+      return modality.includes('image')
+    }
+  }
+  const inputs = raw['input_modalities']
+  if (Array.isArray(inputs)) {
+    const values = inputs.filter((item): item is string => typeof item === 'string')
+    if (values.length > 0) {
+      return values.includes('image')
+    }
+  }
+  return null
 }
 
 /** 只有 upsteam 明确标了 -free 之类不可直选时，工具能力才降级。 */

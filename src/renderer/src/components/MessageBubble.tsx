@@ -4,7 +4,10 @@ import { useState } from 'react'
 
 import type { HandoffEnvelopeDto, RouteDecisionDto } from '../../../shared/types/ipc.ts'
 import { Slot } from '../runtime/SlotRenderer'
+import type { MessageImageDto } from '../../../shared/types/ipc.ts'
+import { shouldShowMessageText } from '../lib/imageTokens'
 import ConfirmButton from './ConfirmButton'
+import { ImageLightbox, ImageThumbs, InlineImageText, type LightboxState } from './ChatImages'
 import DualTrack from './DualTrack'
 import HandoffPill from './HandoffPill'
 import MemorySpark from './MemorySpark'
@@ -50,7 +53,8 @@ export default function MessageBubble({
   onEdit,
   onBranch,
   actionsDisabled = false,
-  assistantMeta = null
+  assistantMeta = null,
+  images = []
 }: {
   role: BubbleRole
   content: string
@@ -95,8 +99,11 @@ export default function MessageBubble({
   actionsDisabled?: boolean
   /** 助手消息的身份栏信息；不传则回退旧的「品牌标 + PointStudio」，兼容老调用方。 */
   assistantMeta?: AssistantBubbleMeta | null
+  /** 用户提问的附图元数据（助手消息为空）。 */
+  images?: MessageImageDto[]
 }) {
   const [editing, setEditing] = useState(false)
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
   const [draftEdit, setDraftEdit] = useState(content)
   function commitEdit(): void {
     const next = draftEdit.trim()
@@ -206,11 +213,30 @@ export default function MessageBubble({
           </div>
         </div>
       ) : (
-        <div className="msg__body">
-          {content}
-          {streaming ? <span className="msg__caret" /> : null}
-        </div>
+        <>
+          {images.length > 0 ? (
+            <ImageThumbs images={images} onOpen={(start) => setLightbox({ images, start })} />
+          ) : null}
+          {shouldShowMessageText(content, images.length) ? (
+            <div className="msg__body">
+              {images.length > 0 ? (
+                <InlineImageText
+                  text={content}
+                  imageCount={images.length}
+                  onOpen={(start) => setLightbox({ images, start })}
+                />
+              ) : (
+                content
+              )}
+              {streaming ? <span className="msg__caret" /> : null}
+            </div>
+          ) : streaming ? (
+            <span className="msg__caret" />
+          ) : null}
+        </>
       )}
+
+      <ImageLightbox state={lightbox} onClose={() => setLightbox(null)} />
 
       {references.length > 0 ? (
         <div className="msg__refs">

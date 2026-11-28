@@ -6,7 +6,7 @@
 //
 // 约定：所有函数**返回新数组**，不修改入参——React 靠引用变化判断是否重渲染。
 
-import type { RouteDecisionDto, HandoffEnvelopeDto } from '../../../shared/types/ipc.ts'
+import type { RouteDecisionDto, HandoffEnvelopeDto, MessageImageDto } from '../../../shared/types/ipc.ts'
 
 export type UiMessageStatus = 'complete' | 'error' | 'streaming'
 
@@ -29,6 +29,8 @@ export interface UiMessage {
   assistantId?: string
   providerId?: string
   modelId?: string
+  /** 附图元数据（用户提问才有）。 */
+  images?: MessageImageDto[]
 }
 
 /**
@@ -42,14 +44,23 @@ export function startTurn(
     requestId: string
     text: string
     route?: RouteDecisionDto | null
+    /** 本轮附图：乐观气泡立即显示缩略图，避免流式期间闪一下。 */
+    images?: MessageImageDto[]
     /** 这一轮真正的作者：填当前值不违反「不改写历史」——流式这一刻它就是作者。 */
     attribution?: { assistantId?: string; providerId?: string; modelId?: string }
   }
 ): UiMessage[] {
+  const images = input.images ?? []
   const attribution = input.attribution ?? {}
   return [
     ...messages,
-    { id: `local-${input.requestId}`, role: 'user', content: input.text, status: 'complete' },
+    {
+      id: `local-${input.requestId}`,
+      role: 'user',
+      content: input.text,
+      status: 'complete',
+      ...(images.length > 0 ? { images } : {})
+    },
     {
       id: input.requestId,
       role: 'assistant',
@@ -118,4 +129,38 @@ export function markStatus(
 export function removeMessage(messages: UiMessage[], id: string): UiMessage[] {
   const next = messages.filter((message) => message.id !== id)
   return next.length === messages.length ? messages : next
+}
+
+/** 把落库消息映射成界面消息：**必须带上 images**，否则 onDone 覆盖后附图会消失。 */
+export function storedToUiMessages(
+  stored: ReadonlyArray<{
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    status: 'complete' | 'error'
+    references?: Array<{ chunkId: string; source: string }>
+    reasoning?: string
+    reasoningMs?: number
+    assistantId?: string
+    providerId?: string
+    modelId?: string
+    route?: RouteDecisionDto | null
+    images?: MessageImageDto[]
+  }>
+): UiMessage[] {
+  return stored.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status: message.status,
+    references: message.references,
+    ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+    ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+    // 归因必须原样带回：这是「历史归因」的唯一出口，缺了就退化成品牌标。
+    ...(message.assistantId ? { assistantId: message.assistantId } : {}),
+    ...(message.providerId ? { providerId: message.providerId } : {}),
+    ...(message.modelId ? { modelId: message.modelId } : {}),
+    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
+    route: message.route ?? null
+  }))
 }

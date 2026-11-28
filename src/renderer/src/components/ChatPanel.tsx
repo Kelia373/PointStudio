@@ -10,7 +10,14 @@ import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { withBuiltinAssistant } from '../lib/assistantDefaults'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
-import { appendChunk, appendReasoning, markStatus, startTurn, type UiMessage } from '../lib/chatState'
+import {
+  appendChunk,
+  appendReasoning,
+  markStatus,
+  startTurn,
+  storedToUiMessages,
+  type UiMessage
+} from '../lib/chatState'
 import { copyToClipboard } from '../lib/clipboard'
 import {
   AUTO_ROUTE_MODEL,
@@ -52,7 +59,13 @@ import {
   providerDisplayName
 } from '../lib/modelServices'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
-import { EFFORT_SHORT_LABEL, resolveConversationComposerPolicy } from '../lib/modelPicker'
+import {
+  EFFORT_SHORT_LABEL,
+  resolveConversationComposerPolicy,
+  resolvePickerModelCapabilities
+} from '../lib/modelPicker'
+import { renumber, type PendingImage } from '../lib/imageTokens'
+import type { MessageImageDto } from '../../../shared/types/ipc.ts'
 import { AGENT_GROUPS_KEY, parseAgentGroups } from '../lib/agentGroups'
 import { findAgentHomeConversation } from '../lib/conversationBuckets'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
@@ -157,6 +170,15 @@ export default function ChatPanel() {
   const [conversations, setConversations] = useField('conversations')
   const [activeId, setActiveId] = useField('activeId')
   const [draft, setDraft] = useState('')
+  // 待发图片：与 Composer 受控共享，切会话清空。
+  const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
+  // 本轮快照：onError 兜底回滚时用（后端未落库时把内容还回输入框）。
+  const inflightSnapshot = useRef<{ text: string; images: PendingImage[] } | null>(null)
+  // onError 的订阅闭包会用到「最新」草稿，用 ref 避开展示层陈旧闭包。
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const pendingImagesRef = useRef(pendingImages)
+  pendingImagesRef.current = pendingImages
   // 群聊里被 @ 的成员：发送时只有恰好一个时由该成员接管本轮。
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
   // 小组增删改成员后自增，避免 @ 候选每帧去 localStorage 解析一次。
@@ -370,21 +392,7 @@ export default function ChatPanel() {
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
     const stored = await window.pointstudio.conversations.messages(conversationId)
-    setMessages(
-      stored.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        status: message.status,
-        references: message.references,
-        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
-        ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
-        ...(typeof message.assistantId === 'string' ? { assistantId: message.assistantId } : {}),
-        ...(typeof message.providerId === 'string' ? { providerId: message.providerId } : {}),
-        ...(typeof message.modelId === 'string' ? { modelId: message.modelId } : {}),
-        route: message.route ?? null
-      }))
-    )
+    setMessages(storedToUiMessages(stored))
   }, [])
 
   // 订阅主进程推回来的流式事件。返回的清理函数必须调用，否则会重复追加。
@@ -411,6 +419,8 @@ export default function ChatPanel() {
     })
 
     const offDone = window.pointstudio.chat.onDone(({ id }) => {
+      // 真正有产出/结束才丢弃快照；error 分支需要它回滚。
+      inflightSnapshot.current = null
       setMessages((prev) => markStatus(prev, id, 'complete'))
       setBusy(false)
       setInflightId(null)
@@ -436,7 +446,20 @@ export default function ChatPanel() {
     })
 
     const offError = window.pointstudio.chat.onError(({ id, code }) => {
-      setMessages((prev) => markStatus(prev, id, 'error', `（${describeError(code)}）`))
+      if (code === 'E_VISION_UNSUPPORTED') {
+        // 视觉拦截发生在落库前：撤掉本轮乐观气泡，把草稿与图片还回输入框。
+        const snapshot = inflightSnapshot.current
+        inflightSnapshot.current = null
+        setMessages((prev) =>
+          prev.filter((message) => message.id !== id && message.id !== `local-${id}`)
+        )
+        if (snapshot !== null) {
+          restoreSnapshot(snapshot.text, snapshot.images)
+        }
+        setError(describeError(code))
+      } else {
+        setMessages((prev) => markStatus(prev, id, 'error', `（${describeError(code)}）`))
+      }
       setBusy(false)
       setInflightId(null)
       setInflightConversationId(null)
@@ -532,12 +555,40 @@ export default function ChatPanel() {
    */
   async function submit(
     textOverride?: string,
-    routeOverride?: RouteDecisionDto | null
+    routeOverride?: RouteDecisionDto | null,
+    imagesOverride?: MessageImageDto[]
   ): Promise<void> {
     const text = (textOverride ?? draft).trim()
     const conversationId = activeId
-    if (text === '' || busy || !conversationId) {
+    // 唯一快照。历史重发（给了 textOverride）不读输入框里的待发图，
+    // 否则会把用户正在打的图片偷塞进历史请求。
+    const snapshot =
+      textOverride === undefined
+        ? { text: textOverride ?? draft, images: pendingImages }
+        : {
+            text: textOverride,
+            images: (imagesOverride ?? []).map((dto, index) => ({
+              index: index + 1,
+              dto,
+              previewUrl: ''
+            }))
+          }
+    const outgoingImages = snapshot.images.map((image) => image.dto)
+    if ((text === '' && outgoingImages.length === 0) || busy || !conversationId) {
       return
+    }
+
+    // 前置视觉拦截：明确不吃图的模型，不落库、不乐观渲染、不清输入框。
+    if (outgoingImages.length > 0) {
+      const caps = resolvePickerModelCapabilities(
+        readModelServices(),
+        activeProviderId ?? provider?.providerId ?? '',
+        activeModelLabel
+      )
+      if (caps.supportsVision === false) {
+        setError(describeError('E_VISION_UNSUPPORTED'))
+        return
+      }
     }
 
     const route =
@@ -563,13 +614,18 @@ export default function ChatPanel() {
       validMentionIds.length === 1 ? validMentionIds[0] : boundAssistant?.id
 
     const requestId = crypto.randomUUID()
-    // 乐观渲染：用户消息与空气泡先上屏，chunk 到达即可追加。
+    // 记快照：后端拦截（自动路由 / catalog 未命中）时用 onError 回滚。
+    // 只有普通发送才记快照：历史重发的图片是列表里现成的（previewUrl 为空），
+    // 若错误回填会把破图塞回输入框，而历史消息本来就在列表里。
+    inflightSnapshot.current = textOverride === undefined ? snapshot : null
+    // 乐观渲染：用户消息（含附图缩略图）与空气泡先上屏，chunk 到达即可追加。
     // 空气泡带上「这一轮的真实作者」，否则流式全程身份栏都是中性品牌标。
     setMessages((prev) =>
       startTurn(prev, {
         requestId,
         text,
         route,
+        ...(outgoingImages.length > 0 ? { images: outgoingImages } : {}),
         attribution: {
           ...(replyOwnerId ? { assistantId: replyOwnerId } : {}),
           ...(activeProviderId ? { providerId: activeProviderId } : {}),
@@ -579,6 +635,7 @@ export default function ChatPanel() {
     )
     if (textOverride === undefined) {
       setDraft('')
+      setPendingImages([])
     }
     setBusy(true)
     setInflightId(requestId)
@@ -596,18 +653,48 @@ export default function ChatPanel() {
       conversationId,
       text,
       // 群聊只 @ 了一个成员时，由该成员接管本轮；多 @/未 @ 仍由会话绑定的组长回答。
-      ...(validMentionIds.length === 1 ? { assistantId: validMentionIds[0] } : {})
+      ...(validMentionIds.length === 1 ? { assistantId: validMentionIds[0] } : {}),
+      // 无图时省略字段（isMessageImages 拒收空数组）。
+      ...(outgoingImages.length > 0 ? { images: outgoingImages } : {})
     })
     if (result.ok) {
       setMode(result.mode)
       setMentionedIds([])
+      // 不能在这里清快照：主进程先同步返回 ok，再异步推 error（视觉拦截走这条），
+      // 提前清会让 onError 的回滚拿不到内容。清空点放在 onDone / 首个 chunk。
       return
     }
     setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
+    restoreSnapshot(snapshot.text, snapshot.images)
     setBusy(false)
     setInflightId(null)
     setInflightConversationId(null)
     runStartedAt.current = null
+  }
+
+  /**
+   * 失败回填：不覆盖用户新输入。
+   * - 输入框空 → 直接放回；
+   * - 已有新内容 → 原文本前插（附图的快照在前，保证旧胶囊仍指旧图），整体重排编号。
+   */
+  function restoreSnapshot(text: string, images: PendingImage[]): void {
+    if (text.trim() === '' && images.length === 0) {
+      return
+    }
+    const latestDraft = draftRef.current
+    const latestImages = pendingImagesRef.current
+    const hasNewContent = latestDraft.trim() !== '' || latestImages.length > 0
+    if (!hasNewContent) {
+      setDraft(text)
+      setPendingImages(images)
+      return
+    }
+    const mergedImages = [...images, ...latestImages]
+    const mergedText = text === '' ? latestDraft : latestDraft === '' ? text : `${text}\n${latestDraft}`
+    const merged = renumber(mergedText, mergedImages)
+    setDraft(merged.text)
+    setPendingImages(merged.images)
+    setWarn('上一条未发出，内容已放回输入框顶部')
   }
 
   async function editAndResend(messageId: string, text: string): Promise<void> {
@@ -1077,8 +1164,16 @@ export default function ChatPanel() {
         .map((agent) => ({ id: agent.id, name: agent.name })),
     [activeGroup, assistants]
   )
+  const prevActiveIdRef = useRef<string | null>(null)
   useEffect(() => {
     setMentionedIds([])
+    // 切会话必须清掉待发图，否则 A 会话贴了图没发、切到 B 会串进去；
+    // 草稿里残留的孤立 [Image #N] 也一并剥掉（首次挂载不清，避免抹掉恢复的草稿）。
+    if (prevActiveIdRef.current !== null && prevActiveIdRef.current !== activeId) {
+      setPendingImages([])
+      setDraft((current) => current.replace(/\[Image #\d+\]\s*/g, ''))
+    }
+    prevActiveIdRef.current = activeId
   }, [activeId])
   const composerModelPolicy = resolveConversationComposerPolicy({
     assistantId: activeConversation?.assistantId ?? null,
@@ -1659,7 +1754,8 @@ export default function ChatPanel() {
                     onDelete: () => void removeTurn(message.id),
                     ...(message.role === 'user'
                       ? {
-                          onResend: () => void submit(message.content),
+                          onResend: () =>
+                            void submit(message.content, null, message.images ?? []),
                           onEdit: (next: string) => void editAndResend(message.id, next)
                         }
                       : {}),
@@ -1702,7 +1798,8 @@ export default function ChatPanel() {
                         providerId: message.providerId ?? null,
                         modelLabel: message.modelId ?? null
                       }
-                    })()
+                    })(),
+                    images: message.images ?? []
                   }}
                 />
               ))}
@@ -1760,7 +1857,7 @@ export default function ChatPanel() {
           props={{
           draft,
           busy,
-          canSend: !busy && draft.trim() !== '' && activeId !== null,
+          canSend: !busy && (draft.trim() !== '' || pendingImages.length > 0) && activeId !== null,
           model: autoRoute ? AUTO_ROUTE_MODEL : defaultModelValue,
           models: modelSelectOptions(
             provider?.providerId ?? null,
@@ -1771,6 +1868,8 @@ export default function ChatPanel() {
             activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens
           ),
           onDraftChange: setDraft,
+          images: pendingImages,
+          onImagesChange: setPendingImages,
           onModelChange: (next: string) => {
             if (next === AUTO_ROUTE_MODEL) {
               // 协同路由是策略不是模型：不落库，只影响这一轮怎么走

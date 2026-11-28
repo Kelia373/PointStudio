@@ -55,10 +55,66 @@ function hasAny(haystack: string, needles: readonly string[]): boolean {
 }
 
 /** 与主进程规则表对齐的兜底推断；只在没有 fetchModels 缓存时使用。 */
+const RENDERER_TEXT_ONLY = [
+  'deepseek-chat',
+  'deepseek-reasoner',
+  'deepseek-coder',
+  'qwq',
+  'o1-mini',
+  'o3-mini'
+]
+
+const RENDERER_VISION = [
+  'gpt-4o',
+  'gpt-4.1',
+  'gpt-5',
+  'o1',
+  'o3',
+  'o4-mini',
+  'claude-3',
+  'claude-sonnet-4',
+  'claude-opus-4',
+  'gemini',
+  'kimi-k2.5',
+  'qwen-vl',
+  'qwen2.5-vl',
+  'qwen3-vl',
+  'glm-4v',
+  'pixtral',
+  'llava',
+  'minicpm-v',
+  'gemma3'
+]
+
+function rendererVision(id: string): boolean | undefined {
+  // 嵌入 / 重排模型不吃图，与主进程保持同一条判定。
+  if (hasAny(id, ['embed', 'rerank'])) {
+    return false
+  }
+  if (RENDERER_TEXT_ONLY.some((family) => id === family || id.startsWith(`${family}-`))) {
+    return false
+  }
+  if (hasAny(id, ['-vision', 'vision-', 'vl-', '-vl', 'omni'])) {
+    return true
+  }
+  if (RENDERER_VISION.some((family) => id === family || id.startsWith(family))) {
+    return true
+  }
+  return undefined
+}
+
+/** 与主进程规则表对齐的兜底推断；只在没有 fetchModels 缓存时使用。 */
 export function inferRendererCapabilities(
   providerId: string,
   modelId: string
 ): ModelCapabilitiesDto {
+  const caps = baseRendererCapabilities(providerId, modelId)
+  const vision = rendererVision(modelId.toLowerCase())
+  // 未知就保持 undefined：别让兜底规则把自定义视觉模型误判成纯文本。
+  return vision === undefined ? caps : { ...caps, supportsVision: vision }
+}
+
+function baseRendererCapabilities(providerId: string, modelId: string): ModelCapabilitiesDto {
   const id = modelId.toLowerCase()
   const none: ModelCapabilitiesDto = {
     supportsTools: true,

@@ -5,7 +5,7 @@
 import type { ChatProvider, ChatStreamParams, TokenUsageSample } from '../ai/providers/types.ts'
 import type { ProviderParams } from '../ai/domain/providerSettings.ts'
 import type { ContextMessage } from '../ai/domain/context.ts'
-import type { ChatMode } from '../../shared/types/ipc.ts'
+import type { ChatMode, ImageMimeTypeDto } from '../../shared/types/ipc.ts'
 import { capabilitiesForSend } from '../ai/providers/modelCapabilities.ts'
 import { buildReplyChunks } from './chatReply.ts'
 
@@ -45,6 +45,8 @@ export interface ReplyOptions {
   params?: ChatStreamParams
   /** 已裁剪过的历史消息（不含本轮输入）。 */
   history?: ContextMessage[]
+  /** 本轮用户附图（base64 已读好）；没有就不带这个字段。 */
+  userImages?: Array<{ mimeType: ImageMimeTypeDto; base64: string }>
   /** 检索到的参考片段（已格式化）。非空时拼在本轮输入前面，并保留来源标注。 */
   references?: string
   /** 中断信号：用户点「停止」时由外壳触发。 */
@@ -121,8 +123,18 @@ export async function* streamReplyText(
       : `以下是从工作区检索到的参考片段，回答时请标注来源：\n\n${references}\n\n问题：${prompt}`
   const messages = [
     ...(systemPrompt === '' ? [] : [{ role: 'system' as const, content: systemPrompt }]),
-    ...history.map((item) => ({ role: item.role, content: item.content })),
-    { role: 'user' as const, content: userContent }
+    ...history.map((item) => ({
+      role: item.role,
+      content: item.content,
+      ...(item.images && item.images.length > 0 ? { images: item.images } : {})
+    })),
+    {
+      role: 'user' as const,
+      content: userContent,
+      ...(options.userImages && options.userImages.length > 0
+        ? { images: options.userImages }
+        : {})
+    }
   ]
   const model = options.model?.trim() ? options.model : active.model
   // 只把「这个模型真实支持哪些档」交给 provider；具体发法由各 provider 按 wire 决定。

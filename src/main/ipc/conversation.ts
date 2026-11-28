@@ -51,6 +51,7 @@ function toMessageDto(message: Message): MessageDto {
     ...(typeof message.assistantId === 'string' ? { assistantId: message.assistantId } : {}),
     ...(typeof message.providerId === 'string' ? { providerId: message.providerId } : {}),
     ...(typeof message.modelId === 'string' ? { modelId: message.modelId } : {}),
+    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
     createdAt: message.createdAt
   }
 }
@@ -58,6 +59,8 @@ function toMessageDto(message: Message): MessageDto {
 
 export interface ConversationIpcOptions {
   conversations: ConversationService
+  /** 删会话 / 删轮次 / 截断后回调：用于回收不再被引用的附图（可选）。 */
+  onMessagesChanged?: () => Promise<void>
 }
 
 export function registerConversationIpc(options: ConversationIpcOptions): void {
@@ -101,6 +104,9 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await service.remove(id)
+      if (result.ok) {
+        await options.onMessagesChanged?.()
+      }
       return result.ok ? { ok: true, value: true } : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
     }
   )
@@ -150,6 +156,9 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await deleteTurn(service, conversationId, messageId)
+      if (result.ok) {
+        await options.onMessagesChanged?.()
+      }
       return result.ok
         ? { ok: true, value: result.value }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
@@ -198,6 +207,9 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
       const result = await truncateFrom(service, conversationId, fromMessageId)
+      if (result.ok) {
+        await options.onMessagesChanged?.()
+      }
       return result.ok
         ? { ok: true, value: result.value }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }

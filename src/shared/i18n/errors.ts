@@ -12,6 +12,14 @@ export const ERROR_MESSAGES: Record<string, string> = {
   E_NOT_FOUND: '找不到对应的内容，可能已被删除',
   E_CANCELLED: '已取消',
   E_BUILTIN_PROTECTED: '这是系统内置的通用助手，不能停用或删除；可以改名、换头像和模型。',
+  E_IMAGE_INVALID: '图片数据不可识别，请重新选择文件',
+  E_IMAGE_TYPE: '只支持 PNG / JPEG / WebP / GIF 图片（SVG 不可用）',
+  E_IMAGE_TOO_LARGE: '单张图片不能超过 10 MB',
+  E_IMAGE_UNREADABLE: '读取不到图片文件，可能已被删除，请重新添加',
+  E_TOO_MANY_IMAGES: '一条消息最多 6 张图片',
+  E_BAD_IMAGE: '图片信息不完整，请重新添加',
+  E_VISION_UNSUPPORTED:
+    '当前模型不支持识图，请在右侧 Agent 设置中切换支持视觉的模型（如 kimi-k2.5 / GPT-4o / Claude / Gemini / Qwen-VL）',
 
   // 模型平台
   E_UPSTREAM: '模型平台出错了，稍后重试或换个平台',

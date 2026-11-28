@@ -21,6 +21,8 @@ export interface DataPaths {
   workspaceIndex: string
   /** 工作区文件内容所在目录。 */
   workspaceRoot: string
+  /** 聊天附图（图片本体单独落盘，绝不进 messages.json）。 */
+  attachmentsDir: string
   /** 崩溃报告目录。 */
   crashDir: string
 }
@@ -37,6 +39,7 @@ export function buildDataPaths(userDataDir: string): DataPaths {
     usageLedger: join(dataDir, 'usage-ledger.json'),
     workspaceIndex: join(dataDir, 'workspace.json'),
     workspaceRoot: join(dataDir, 'workspace'),
+    attachmentsDir: join(dataDir, 'attachments'),
     crashDir: join(dataDir, 'crash')
   }
 }

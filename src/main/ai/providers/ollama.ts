@@ -11,6 +11,7 @@ import {
   type ChatProvider,
   type ChatStreamRequest
 } from './types.ts'
+import { toOllamaMessages } from './wireMessages.ts'
 
 export const OLLAMA_DEFAULT_BASE_URL = 'http://127.0.0.1:11434'
 export const OLLAMA_DEFAULT_MODEL = 'qwen2.5'
@@ -94,7 +95,7 @@ export class OllamaProvider implements ChatProvider {
     const baseUrl = (request.baseUrl || OLLAMA_DEFAULT_BASE_URL).replace(/\/+$/, '')
     const body = JSON.stringify({
       model: request.model || OLLAMA_DEFAULT_MODEL,
-      messages: request.messages,
+      messages: toOllamaMessages(request.messages),
       stream: true,
       options: {
         ...(request.params?.temperature !== undefined

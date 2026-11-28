@@ -56,7 +56,11 @@ import {
   type ProviderSettingsViewDto,
   type SettingsBridge,
   CLIPBOARD_CHANNELS,
-  type ClipboardBridge
+  type ClipboardBridge,
+  ATTACHMENT_CHANNELS,
+  type AttachmentsBridge,
+  type MessageImageDto,
+  type SaveAttachmentRequest
 } from '../shared/types/ipc.ts'
 
 type Unsubscribe = () => void
@@ -214,6 +218,13 @@ const backup: BackupBridge = {
     >
 }
 
+const attachments: AttachmentsBridge = {
+  save: (request: SaveAttachmentRequest): Promise<IpcResult<MessageImageDto>> =>
+    ipcRenderer.invoke(ATTACHMENT_CHANNELS.save, request) as Promise<IpcResult<MessageImageDto>>,
+  readDataUrl: (id: string): Promise<IpcResult<string>> =>
+    ipcRenderer.invoke(ATTACHMENT_CHANNELS.readDataUrl, id) as Promise<IpcResult<string>>
+}
+
 const mcp: McpBridge = {
   list: (): Promise<McpConnectionDto[]> =>
     ipcRenderer.invoke(MCP_CHANNELS.list) as Promise<McpConnectionDto[]>,
@@ -240,7 +251,8 @@ const api: PointStudioApi = {
   agent,
   backup,
   mcp,
-  clipboard: clipboardBridge
+  clipboard: clipboardBridge,
+  attachments
 }
 
 contextBridge.exposeInMainWorld('pointstudio', api)
