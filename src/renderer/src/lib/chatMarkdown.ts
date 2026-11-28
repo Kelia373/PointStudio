@@ -68,7 +68,7 @@ export function parseMarkdownBlocks(source: string): MarkdownBlock[] {
       const codeLines: string[] = []
       let closed = false
       while (index < lines.length) {
-        if (/^\s*```\s*$/.test(lines[index])) {
+        if (/^\s*```\s*[\w#+.-]*\s*$/.test(lines[index])) {
           closed = true
           index += 1
           break
@@ -145,7 +145,11 @@ export function parseMarkdownBlocks(source: string): MarkdownBlock[] {
         /^\s*```/.test(current) ||
         isHr(current) ||
         isQuote(current) ||
-        isList(current)
+        isList(current) ||
+        // 紧贴段落的表格也要断开，否则整张表会被吞进段落。
+        (current.includes('|') &&
+          index + 1 < lines.length &&
+          isTableSeparator(lines[index + 1]))
       ) {
         break
       }

@@ -241,7 +241,9 @@ export default function Inspector({
               </div>
               <div className="kv">
                 <span className="kv__k">首字延迟</span>
-                <span className="kv__v">{formatMs(firstTokenMs)}</span>
+                <span className="kv__v">
+                  {firstTokenMs === null ? '未统计' : formatMs(firstTokenMs)}
+                </span>
               </div>
             </div>
 

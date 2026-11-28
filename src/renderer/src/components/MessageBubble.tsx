@@ -153,7 +153,7 @@ export default function MessageBubble({
               className="msg__act"
               type="button"
               onClick={commitEdit}
-              disabled={draftEdit.trim() === ''}
+              disabled={draftEdit.trim() === '' || streaming}
             >
               保存并重发
             </button>
@@ -193,6 +193,7 @@ export default function MessageBubble({
             className="msg__act"
             type="button"
             title="编辑后从这句重新发"
+            disabled={streaming}
             onClick={() => {
               setDraftEdit(content)
               setEditing(true)

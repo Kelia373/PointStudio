@@ -371,14 +371,15 @@ export default function ChatPanel() {
   // 订阅主进程推回来的流式事件。返回的清理函数必须调用，否则会重复追加。
   useEffect(() => {
     const offChunk = window.pointstudio.chat.onChunk(({ id, chunk, kind }) => {
+      // 首字延迟按「任何 kind 的第一个 chunk」算：推理模型先吐思考也算已响应。
+      if (runStartedAt.current !== null) {
+        setFirstTokenMs((current) => current ?? Date.now() - (runStartedAt.current ?? Date.now()))
+      }
       if (kind === 'reasoning') {
         setMessages((prev) => appendReasoning(prev, id, chunk))
         return
       }
       setMessages((prev) => appendChunk(prev, id, chunk))
-      if (runStartedAt.current !== null) {
-        setFirstTokenMs((current) => current ?? Date.now() - (runStartedAt.current ?? Date.now()))
-      }
     })
 
     const offUsage = window.pointstudio.chat.onUsage((usage) => {
@@ -567,7 +568,8 @@ export default function ChatPanel() {
   }
 
   async function editAndResend(messageId: string, text: string): Promise<void> {
-    if (!activeId) {
+    // 生成中不裁剪历史：否则删完消息却因 busy 不重发，会留下没有问题的助手回复。
+    if (!activeId || busy) {
       return
     }
     const cut = await window.pointstudio.conversations.truncateFrom(activeId, messageId)

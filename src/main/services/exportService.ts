@@ -42,7 +42,7 @@ export function renderConversationMarkdown(
     if (message.reasoning) {
       lines.push('<details><summary>深度思考</summary>')
       lines.push('')
-      lines.push(message.reasoning)
+      lines.push(message.reasoning.replaceAll('</details>', '&lt;/details&gt;'))
       lines.push('')
       lines.push('</details>')
       lines.push('')

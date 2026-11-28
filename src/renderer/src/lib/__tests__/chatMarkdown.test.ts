@@ -84,3 +84,15 @@ test('行内链接只放行 https/http/mailto', () => {
   assert.equal(parseInlineTokens('[a](mailto:x@y.z)')[0].type, 'link')
   assert.equal(parseInlineTokens('[a](file:///etc/passwd)')[0].type, 'text')
 })
+
+test('紧贴段落的表格会断开；闭合围栏允许带语言', () => {
+  const blocks = parseMarkdownBlocks('说明|列\n| a | b |\n| --- | --- |\n| 1 | 2 |')
+  // 第一行既是段落又像表头但没有分隔行下一行？这里用标准两行表头验证
+  const proper = parseMarkdownBlocks('说明文字\n| a | b |\n| --- | --- |\n| 1 | 2 |')
+  assert.equal(proper[0].type, 'paragraph')
+  assert.equal(proper[1].type, 'table')
+  assert.equal(blocks.length > 0, true)
+
+  const fence = parseMarkdownBlocks('```ts\nconst a = 1\n```js')
+  assert.deepEqual(fence[0], { type: 'code', lang: 'ts', code: 'const a = 1', closed: true })
+})
