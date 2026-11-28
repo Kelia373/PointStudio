@@ -39,7 +39,7 @@ import { nextActivePage } from '../lib/pageNav'
 import { partitionConversations } from '../lib/conversationBuckets'
 import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { registry } from '../runtime/registry'
-import { Slot, useRegistryVersion } from '../runtime/SlotRenderer'
+import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
 import SessionItem from './SessionItem'
 import AgentAvatar from './AgentAvatar'
@@ -560,12 +560,17 @@ export default function Sidebar({
               <ul className="side__list side__topics-list">
                 {topics.map((conversation) => (
                   <li key={conversation.id}>
-                    <SessionItem
-                      conversation={conversation}
-                      active={conversation.id === activeId}
-                      onSelect={() => onSelect(conversation.id)}
-                      onRemove={() => onRemove(conversation.id)}
-                      onRename={(title) => onRenameConversation(conversation.id, title)}
+                    <Overridable
+                      name="sidebar.sessionItem"
+                      fallback={SessionItem}
+                      props={{
+                        conversation,
+                        active: conversation.id === activeId,
+                        onSelect: () => onSelect(conversation.id),
+                        onRemove: () => onRemove(conversation.id),
+                        onRename: (title: string) =>
+                          onRenameConversation(conversation.id, title)
+                      }}
                     />
                   </li>
                 ))}
@@ -919,14 +924,17 @@ export default function Sidebar({
                             <ul className="side__list side__group-chats">
                               {(buckets.groupChatsById[group.id] ?? []).map((conversation) => (
                                 <li key={conversation.id}>
-                                  <SessionItem
-                                    conversation={conversation}
-                                    active={conversation.id === activeId}
-                                    onSelect={() => onSelect(conversation.id)}
-                                    onRemove={() => onRemove(conversation.id)}
-                                    onRename={(title) =>
-                                      onRenameConversation(conversation.id, title)
-                                    }
+                                  <Overridable
+                                    name="sidebar.sessionItem"
+                                    fallback={SessionItem}
+                                    props={{
+                                      conversation,
+                                      active: conversation.id === activeId,
+                                      onSelect: () => onSelect(conversation.id),
+                                      onRemove: () => onRemove(conversation.id),
+                                      onRename: (title: string) =>
+                                        onRenameConversation(conversation.id, title)
+                                    }}
                                   />
                                 </li>
                               ))}
