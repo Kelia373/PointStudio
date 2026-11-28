@@ -7,13 +7,16 @@ import { useEffect, useMemo, useState } from 'react'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import type { McpConnectionDto, ProviderSettingsViewDto } from '../../../shared/types/ipc.ts'
 import Icon from './Icon'
+import ProviderLogo from './ProviderLogo'
 import { AUTO_ROUTE_MODEL, MODEL_LABEL } from '../lib/modelOptions'
 import {
   MODEL_SERVICES_KEY,
+  addCustomApiProvider,
   buildCliInvocationPreview,
   collectModelPositionOptions,
   modelDisplayLabel,
   parseModelServicesState,
+  removeCustomApiProvider,
   serializeModelServicesState,
   type ApiProviderProfile,
   type CliEngineProfile,
@@ -45,6 +48,22 @@ const TRANSPORTS: { value: CliEngineProfile['transport']; label: string }[] = [
   { value: 'oneshot-text', label: 'oneshot-text' }
 ]
 
+const PROTOCOL_LABEL: Record<ApiProviderProfile['protocol'], string> = {
+  deepseek: 'DeepSeek 原生',
+  'openai-compatible': 'OpenAI 兼容',
+  anthropic: 'Anthropic',
+  gemini: 'Gemini'
+}
+
+/** 列表里的等宽命令预览：可执行文件 + 当前最常用的一档权限标志。 */
+function cliSignature(engine: CliEngineProfile): string {
+  const flag =
+    engine.permissionFlags.smart ||
+    engine.permissionFlags['full-access'] ||
+    engine.permissionFlags['auto-edit']
+  return flag === '' ? engine.executable : `${engine.executable} ${flag}`
+}
+
 function splitModels(text: string): string[] {
   return text
     .split(/[,，\n]/)
@@ -64,7 +83,13 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
   const [serviceTrack, setServiceTrack] = useState<'api' | 'cli'>('api')
   const [selectedApiId, setSelectedApiId] = useState('deepseek')
-  const [selectedCliId, setSelectedCliId] = useState('opencode')
+  const [providerQuery, setProviderQuery] = useState('')
+  const [enabledOnly, setEnabledOnly] = useState(false)
+  const [addingProvider, setAddingProvider] = useState(false)
+  const [newProviderName, setNewProviderName] = useState('')
+  const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('')
+  const [newProviderModel, setNewProviderModel] = useState('')
+  const [expandedCliId, setExpandedCliId] = useState<string | null>(null)
   const [apiKey, setApiKey] = useState('')
   const [previewMode, setPreviewMode] = useState<AgentPermissionMode>('smart')
   const [mcpName, setMcpName] = useState('')
@@ -72,7 +97,10 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
   const section = findSettingsSection(sectionId)
   const groups = useMemo(() => filterSettingsGroups(query), [query])
-  const modelOptions = useMemo(() => collectModelPositionOptions(services), [services])
+  const modelOptions = useMemo(
+    () => collectModelPositionOptions(services, provider?.providerId ?? null),
+    [services, provider?.providerId]
+  )
   const slotValues = useMemo(
     () => [AUTO_ROUTE_MODEL, ...modelOptions.map((option) => option.value)],
     [modelOptions]
@@ -104,7 +132,47 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   }, [onClose])
 
   const api = services.api.find((item) => item.id === selectedApiId) ?? services.api[0]
-  const cli = services.cli.find((item) => item.id === selectedCliId) ?? services.cli[0]
+
+  const visibleApi = services.api.filter((item) => {
+    if (enabledOnly && !item.enabled) {
+      return false
+    }
+    const needle = providerQuery.trim().toLowerCase()
+    if (needle === '') {
+      return true
+    }
+    return (
+      item.name.toLowerCase().includes(needle) ||
+      item.id.toLowerCase().includes(needle) ||
+      item.models.some((model) => model.toLowerCase().includes(needle))
+    )
+  })
+
+  function createProvider(): void {
+    if (newProviderName.trim() === '' || newProviderBaseUrl.trim() === '') {
+      setMessage('自定义服务商需要名称与 Base URL')
+      return
+    }
+    const next = addCustomApiProvider(services, {
+      name: newProviderName,
+      baseUrl: newProviderBaseUrl,
+      model: newProviderModel
+    })
+    const added = next.api[next.api.length - 1]
+    setServices(next)
+    setSelectedApiId(added.id)
+    setAddingProvider(false)
+    setNewProviderName('')
+    setNewProviderBaseUrl('')
+    setNewProviderModel('')
+    setMessage(`已添加 ${added.name}，可以继续填模型与凭据`)
+  }
+
+  function removeProvider(id: string): void {
+    setServices((current) => removeCustomApiProvider(current, id))
+    setSelectedApiId('deepseek')
+    setMessage('已删除自定义服务商')
+  }
 
   function patchApi(id: string, patch: Partial<ApiProviderProfile>): void {
     setServices((current) => ({
@@ -244,13 +312,22 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                         {MODEL_LABEL[value] ?? modelDisplayLabel(value, services)}
                       </option>
                     ))}
+                    {services.slots[card.key] !== '' &&
+                    !slotValues.includes(services.slots[card.key]) ? (
+                      <option value={services.slots[card.key]}>
+                        {modelDisplayLabel(services.slots[card.key], services)}
+                        （当前服务商未提供）
+                      </option>
+                    ) : null}
                   </select>
                 </label>
               ))}
             </div>
             <p className="settings-note">
-              主对话模型用于新建会话；已有会话保留各自的模型覆盖。其余三个槽位目前只保存配置，
-              等对应调用方（标题/规划/向量）接入后生效。
+              只列主进程当前服务商（DeepSeek 或 Ollama）的模型：请求只能覆盖 model，
+              地址与凭据仍走主进程那一家。其它服务商先保存配置，等第 2 笔多服务商
+              凭据库接入后才会出现在这里。主对话模型用于新建会话，已有会话保留各自的
+              模型覆盖；其余三个槽位目前只保存配置。
             </p>
           </>
         )
@@ -281,34 +358,131 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
             {serviceTrack === 'api' ? (
               <div className="settings-split">
-                <ul className="settings-list">
-                  {services.api.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        className={`settings-list__item${
-                          item.id === api?.id ? ' is-on' : ''
-                        }`}
-                        type="button"
-                        onClick={() => setSelectedApiId(item.id)}
-                      >
-                        <span>{item.name}</span>
-                        <span className={`settings-dot${item.enabled ? ' is-on' : ''}`} />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <div className="settings-rail">
+                  <div className="settings-rail__search">
+                    <Icon name="search" size={12} />
+                    <input
+                      value={providerQuery}
+                      placeholder="搜索模型平台..."
+                      aria-label="搜索模型平台"
+                      onChange={(event) => setProviderQuery(event.target.value)}
+                    />
+                    <button
+                      className={`settings-rail__filter${enabledOnly ? ' is-on' : ''}`}
+                      type="button"
+                      aria-pressed={enabledOnly}
+                      title={enabledOnly ? '显示全部平台' : '只看已启用'}
+                      aria-label={enabledOnly ? '显示全部平台' : '只看已启用'}
+                      onClick={() => setEnabledOnly((value) => !value)}
+                    >
+                      <Icon name="filter" size={12} />
+                    </button>
+                  </div>
+                  <ul className="settings-list">
+                    {visibleApi.map((item) => (
+                      <li key={item.id}>
+                        <button
+                          className={`settings-list__item${
+                            item.id === api?.id ? ' is-on' : ''
+                          }`}
+                          type="button"
+                          onClick={() => setSelectedApiId(item.id)}
+                        >
+                          <span className="settings-list__logo">
+                            <ProviderLogo providerId={item.id} size={16} />
+                          </span>
+                          <span className="settings-list__name">{item.name}</span>
+                          {item.enabled ? (
+                            <span className="settings-dot is-on" />
+                          ) : (
+                            <Icon name="chevron-right" size={11} />
+                          )}
+                        </button>
+                      </li>
+                    ))}
+                    {visibleApi.length === 0 ? (
+                      <li className="settings-note">没有匹配的平台。</li>
+                    ) : null}
+                  </ul>
+                  {addingProvider ? (
+                    <div className="settings-rail__new">
+                      <input
+                        className="settings__input"
+                        value={newProviderName}
+                        placeholder="服务商名称"
+                        aria-label="服务商名称"
+                        onChange={(event) => setNewProviderName(event.target.value)}
+                      />
+                      <input
+                        className="settings__input"
+                        value={newProviderBaseUrl}
+                        placeholder="https://api.example.com/v1"
+                        aria-label="Base URL"
+                        onChange={(event) => setNewProviderBaseUrl(event.target.value)}
+                      />
+                      <input
+                        className="settings__input"
+                        value={newProviderModel}
+                        placeholder="首个模型（可选）"
+                        aria-label="首个模型"
+                        onChange={(event) => setNewProviderModel(event.target.value)}
+                      />
+                      <div className="settings-rail__new-actions">
+                        <button
+                          className="settings__save"
+                          type="button"
+                          onClick={() => createProvider()}
+                        >
+                          创建
+                        </button>
+                        <button
+                          className="settings__clear"
+                          type="button"
+                          onClick={() => setAddingProvider(false)}
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      className="settings-rail__add"
+                      type="button"
+                      onClick={() => setAddingProvider(true)}
+                    >
+                      <Icon name="plus" size={12} />
+                      添加服务商
+                    </button>
+                  )}
+                </div>
+
                 {api ? (
                   <div className="settings-form">
-                    <label className="settings__row">
-                      <span className="settings__label">启用</span>
-                      <input
-                        type="checkbox"
-                        checked={api.enabled}
-                        onChange={(event) =>
-                          patchApi(api.id, { enabled: event.target.checked })
-                        }
-                      />
-                    </label>
+                    <div className="settings-detail__head">
+                      <span className="settings-detail__logo">
+                        <ProviderLogo providerId={api.id} size={28} />
+                      </span>
+                      <span className="settings-detail__title">
+                        <span className="settings-detail__name">{api.name}</span>
+                        <span className="settings-detail__badge">
+                          {PROTOCOL_LABEL[api.protocol]} · {api.id}
+                        </span>
+                      </span>
+                      <label className="settings-toggle" title={api.enabled ? '停用' : '启用'}>
+                        <input
+                          type="checkbox"
+                          checked={api.enabled}
+                          aria-label={`启用 ${api.name}`}
+                          onChange={(event) =>
+                            patchApi(api.id, { enabled: event.target.checked })
+                          }
+                        />
+                        <span className="settings-toggle__track">
+                          <span className="settings-toggle__thumb" />
+                        </span>
+                      </label>
+                    </div>
+
                     <label className="settings__row">
                       <span className="settings__label">Base URL</span>
                       <input
@@ -382,192 +556,254 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                       </>
                     ) : (
                       <p className="settings-note">
-                        本期只有 DeepSeek 与 Ollama 走主进程凭据；其余 API 先保存配置，
-                        Key 接入留后续主进程专题。
+                        {api.id === 'opencode-go'
+                          ? 'OpenCode Go 暂只保存地址与模型；/inference/go/v1/models 与 /usage 的真实链路留到下期主进程专题。'
+                          : '本期只有 DeepSeek 与 Ollama 走主进程凭据；其余 API 先保存配置，Key 接入留后续主进程专题。'}
                       </p>
                     )}
+
+                    {api.id.startsWith('custom-') ? (
+                      <button
+                        className="settings__clear"
+                        type="button"
+                        onClick={() => removeProvider(api.id)}
+                      >
+                        删除这个自定义服务商
+                      </button>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
             ) : (
-              <div className="settings-split">
-                <ul className="settings-list">
-                  {services.cli.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        className={`settings-list__item${
-                          item.id === cli?.id ? ' is-on' : ''
-                        }`}
-                        type="button"
-                        onClick={() => setSelectedCliId(item.id)}
-                      >
-                        <span>{item.name}</span>
-                        <span className={`settings-dot${item.enabled ? ' is-on' : ''}`} />
-                      </button>
+              <ul className="settings-cli">
+                {services.cli.map((engine) => {
+                  const open = expandedCliId === engine.id
+                  return (
+                    <li
+                      key={engine.id}
+                      className={`settings-cli__row${open ? ' is-open' : ''}`}
+                    >
+                      <div className="settings-cli__line">
+                        <span className="settings-cli__logo">
+                          <ProviderLogo providerId={engine.id} size={22} />
+                        </span>
+                        <span className="settings-cli__text">
+                          <span className="settings-cli__name">{engine.name}</span>
+                          <code className="settings-cli__cmd">{cliSignature(engine)}</code>
+                        </span>
+                        <span
+                          className="settings-cli__mode"
+                          role="group"
+                          aria-label={`${engine.name} 启动方式`}
+                        >
+                          {(['chat', 'cli'] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              className={engine.launchMode === mode ? 'is-on' : ''}
+                              type="button"
+                              aria-pressed={engine.launchMode === mode}
+                              onClick={() => patchCli(engine.id, { launchMode: mode })}
+                            >
+                              {mode === 'chat' ? '聊天' : 'CLI'}
+                            </button>
+                          ))}
+                        </span>
+                        <label
+                          className="settings-toggle"
+                          title={engine.enabled ? '停用该引擎' : '启用该引擎'}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={engine.enabled}
+                            aria-label={`启用 ${engine.name}`}
+                            onChange={(event) =>
+                              patchCli(engine.id, { enabled: event.target.checked })
+                            }
+                          />
+                          <span className="settings-toggle__track">
+                            <span className="settings-toggle__thumb" />
+                          </span>
+                        </label>
+                        <button
+                          className="settings-cli__more"
+                          type="button"
+                          aria-expanded={open}
+                          aria-label={`展开 ${engine.name} 配置`}
+                          onClick={() => setExpandedCliId(open ? null : engine.id)}
+                        >
+                          <Icon name="chevron-right" size={13} />
+                        </button>
+                      </div>
+
+                      {open ? (
+                        <div className="settings-cli__body">
+                          <label className="settings__row">
+                            <span className="settings__label">可执行命令</span>
+                            <input
+                              className="settings__input"
+                              value={engine.executable}
+                              onChange={(event) =>
+                                patchCli(engine.id, { executable: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label className="settings__row">
+                            <span className="settings__label">通信协议</span>
+                            <select
+                              className="settings__input"
+                              value={engine.transport}
+                              onChange={(event) =>
+                                patchCli(engine.id, {
+                                  transport: event.target
+                                    .value as CliEngineProfile['transport']
+                                })
+                              }
+                            >
+                              {TRANSPORTS.map((item) => (
+                                <option key={item.value} value={item.value}>
+                                  {item.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="settings__row">
+                            <span className="settings__label">
+                              参数模板（{`{{workspace}} {{model}} {{prompt}}`}）
+                            </span>
+                            <input
+                              className="settings__input"
+                              value={engine.argsTemplate}
+                              onChange={(event) =>
+                                patchCli(engine.id, {
+                                  argsTemplate: event.target.value
+                                })
+                              }
+                            />
+                          </label>
+                          {(['auto-edit', 'smart', 'full-access'] as const).map((mode) => (
+                            <label className="settings__row" key={mode}>
+                              <span className="settings__label">权限参数 · {mode}</span>
+                              <input
+                                className="settings__input"
+                                value={engine.permissionFlags[mode]}
+                                onChange={(event) =>
+                                  patchCli(engine.id, {
+                                    permissionFlags: {
+                                      ...engine.permissionFlags,
+                                      [mode]: event.target.value
+                                    }
+                                  })
+                                }
+                              />
+                            </label>
+                          ))}
+                          <div className="settings__row">
+                            <span className="settings__label">命令预览</span>
+                            <select
+                              className="settings__input"
+                              value={previewMode}
+                              onChange={(event) =>
+                                setPreviewMode(event.target.value as AgentPermissionMode)
+                              }
+                            >
+                              <option value="auto-edit">auto-edit</option>
+                              <option value="smart">smart</option>
+                              <option value="full-access">full-access</option>
+                            </select>
+                          </div>
+                          <pre className="settings-preview">
+                            {buildCliInvocationPreview(engine, {
+                              permissionMode: previewMode,
+                              workspace: 'D:/Project/PointStudio',
+                              model: 'deepseek-chat',
+                              prompt: '修复登录'
+                            })}
+                          </pre>
+                        </div>
+                      ) : null}
                     </li>
-                  ))}
-                </ul>
-                {cli ? (
-                  <div className="settings-form">
-                    <label className="settings__row">
-                      <span className="settings__label">启用该引擎</span>
-                      <input
-                        type="checkbox"
-                        checked={cli.enabled}
-                        onChange={(event) =>
-                          patchCli(cli.id, { enabled: event.target.checked })
-                        }
-                      />
-                    </label>
-                    <label className="settings__row">
-                      <span className="settings__label">可执行命令</span>
-                      <input
-                        className="settings__input"
-                        value={cli.executable}
-                        onChange={(event) =>
-                          patchCli(cli.id, { executable: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label className="settings__row">
-                      <span className="settings__label">通信协议</span>
-                      <select
-                        className="settings__input"
-                        value={cli.transport}
-                        onChange={(event) =>
-                          patchCli(cli.id, {
-                            transport: event.target.value as CliEngineProfile['transport']
-                          })
-                        }
-                      >
-                        {TRANSPORTS.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="settings__row">
-                      <span className="settings__label">
-                        参数模板（{`{{workspace}} {{model}} {{prompt}}`}）
-                      </span>
-                      <input
-                        className="settings__input"
-                        value={cli.argsTemplate}
-                        onChange={(event) =>
-                          patchCli(cli.id, { argsTemplate: event.target.value })
-                        }
-                      />
-                    </label>
-                    {(['auto-edit', 'smart', 'full-access'] as const).map((mode) => (
-                      <label className="settings__row" key={mode}>
-                        <span className="settings__label">权限参数 · {mode}</span>
-                        <input
-                          className="settings__input"
-                          value={cli.permissionFlags[mode]}
-                          onChange={(event) =>
-                            patchCli(cli.id, {
-                              permissionFlags: { ...cli.permissionFlags, [mode]: event.target.value }
-                            })
-                          }
-                        />
-                      </label>
-                    ))}
-                    <div className="settings__row">
-                      <span className="settings__label">命令预览</span>
-                      <select
-                        className="settings__input"
-                        value={previewMode}
-                        onChange={(event) =>
-                          setPreviewMode(event.target.value as AgentPermissionMode)
-                        }
-                      >
-                        <option value="auto-edit">auto-edit</option>
-                        <option value="smart">smart</option>
-                        <option value="full-access">full-access</option>
-                      </select>
-                    </div>
-                    <pre className="settings-preview">
-                      {buildCliInvocationPreview(cli, {
-                        permissionMode: previewMode,
-                        workspace: 'D:/Project/PointStudio',
-                        model: 'deepseek-chat',
-                        prompt: '修复登录'
-                      })}
-                    </pre>
-                  </div>
-                ) : null}
-              </div>
+                  )
+                })}
+              </ul>
             )}
           </div>
         )
 
       case 'local-models':
         return (
-          <div className="settings-card-grid">
-            {services.local.map((runtime) => (
-              <div key={runtime.id} className="settings-card">
-                <span className="settings-card__title">{runtime.name}</span>
-                <label className="settings__row">
-                  <span className="settings__label">启用</span>
-                  <input
-                    type="checkbox"
-                    checked={runtime.enabled}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { enabled: event.target.checked })
-                    }
-                  />
-                </label>
-                <label className="settings__row">
-                  <span className="settings__label">Base URL</span>
-                  <input
-                    className="settings__input"
-                    value={runtime.baseUrl}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { baseUrl: event.target.value })
-                    }
-                  />
-                </label>
-                <label className="settings__row">
-                  <span className="settings__label">模型（逗号分隔）</span>
-                  <input
-                    className="settings__input"
-                    value={runtime.models.join(', ')}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { models: splitModels(event.target.value) })
-                    }
-                  />
-                </label>
-                <label className="settings__row">
-                  <span className="settings__label">numCtx</span>
-                  <input
-                    className="settings__input"
-                    type="number"
-                    value={runtime.numCtx}
-                    onChange={(event) =>
-                      patchLocal(runtime.id, { numCtx: Number(event.target.value) || 0 })
-                    }
-                  />
-                </label>
-                {runtime.id === 'ollama' ? (
-                  <>
-                    <button
-                      className="settings__save"
-                      type="button"
-                      onClick={() => void saveOllama(runtime)}
-                    >
-                      写入主进程
-                    </button>
+          <>
+            <div className="settings-card-grid">
+              {services.local.map((runtime) => (
+                <div key={runtime.id} className="settings-card">
+                  <span className="settings-card__title">{runtime.name}</span>
+                  <label className="settings__row">
+                    <span className="settings__label">启用</span>
+                    <input
+                      type="checkbox"
+                      checked={runtime.enabled}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { enabled: event.target.checked })
+                      }
+                    />
+                  </label>
+                  <label className="settings__row">
+                    <span className="settings__label">Base URL</span>
+                    <input
+                      className="settings__input"
+                      value={runtime.baseUrl}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { baseUrl: event.target.value })
+                      }
+                    />
+                  </label>
+                  <label className="settings__row">
+                    <span className="settings__label">模型（逗号分隔）</span>
+                    <input
+                      className="settings__input"
+                      value={runtime.models.join(', ')}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { models: splitModels(event.target.value) })
+                      }
+                    />
+                  </label>
+                  <label className="settings__row">
+                    <span className="settings__label">numCtx</span>
+                    <input
+                      className="settings__input"
+                      type="number"
+                      value={runtime.numCtx}
+                      onChange={(event) =>
+                        patchLocal(runtime.id, { numCtx: Number(event.target.value) || 0 })
+                      }
+                    />
+                  </label>
+                  {runtime.id === 'ollama' ? (
+                    <>
+                      <button
+                        className="settings__save"
+                        type="button"
+                        onClick={() => void saveOllama(runtime)}
+                      >
+                        写入主进程
+                      </button>
+                      <p className="settings-note">
+                        写入主进程只送 Base URL 与首个模型；numCtx / keepAlive 仅本地保存。
+                      </p>
+                    </>
+                  ) : (
                     <p className="settings-note">
-                      写入主进程只送 Base URL 与首个模型；numCtx / keepAlive 仅本地保存。
+                      {runtime.name} 只保存在渲染层配置，主进程真链路留后续专题。
                     </p>
-                  </>
-                ) : (
-                  <p className="settings-note">LM Studio 仅渲染层配置，主进程接入留后续。</p>
-                )}
-              </div>
+                  )}
+                </div>
             ))}
-          </div>
+            </div>
+            <p className="settings-note">
+              已知边界：主进程当前只保存一行 provider 配置，写 Ollama 会覆盖 DeepSeek
+              那一行（反之亦然），切回来需要重新填 Key。多服务商凭据库排在下一单，
+              这里先按「同一时间只用一家」使用。
+            </p>
+          </>
         )
 
       case 'browser':

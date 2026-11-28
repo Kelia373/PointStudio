@@ -725,7 +725,13 @@ export default function ChatPanel() {
     if (primary === '' || primary === AUTO_ROUTE_MODEL) {
       return
     }
-    await window.pointstudio.conversations.setModel(conversationId, { model: primary })
+    const applied = await window.pointstudio.conversations.setModel(conversationId, {
+      model: primary
+    })
+    if (!applied.ok) {
+      // 不静默吞错：新会话会退回 provider 默认模型，得让用户知道
+      setError(`主对话模型未生效：${describeError(applied.code)}`)
+    }
   }
 
   async function createConversation(): Promise<void> {
@@ -892,13 +898,15 @@ export default function ChatPanel() {
     [memoryTick, boundAssistant, draft]
   )
   const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
+  // parse 按原始字符串缓存：这里每帧只做一次 getItem + 字符串比较，不会重复 JSON.parse
   const modelServicesView = readModelServices()
   const primarySlot = modelServicesView.slots.primaryModel
   const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
   const defaultModelValue = activeConversation?.model ?? (provider?.model || slotFallback)
-  const externalModelValues = collectModelPositionOptions(modelServicesView).map(
-    (option) => option.value
-  )
+  const externalModelValues = collectModelPositionOptions(
+    modelServicesView,
+    provider?.providerId ?? null
+  ).map((option) => option.value)
   const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
   return (

@@ -17,6 +17,13 @@ export type CliEnginePresetId =
   | 'devin'
   | 'claude-code'
   | 'codex'
+  | 'cursor'
+  | 'kimi-cli'
+  | 'qwen-code'
+  | 'openclaw'
+  | 'codebuddy'
+  | 'continue'
+  | 'mistral-vibe'
   | 'custom-command'
 export type CliTransportMode = 'stdio-jsonl' | 'acp' | 'oneshot-text'
 
@@ -39,6 +46,8 @@ export interface CliEngineProfile {
   preset: CliEnginePresetId
   name: string
   enabled: boolean
+  /** 右侧「聊天 | CLI」分段：chat = 会话式，cli = 命令行引擎。 */
+  launchMode: 'chat' | 'cli'
   executable: string
   transport: CliTransportMode
   argsTemplate: string
@@ -48,7 +57,7 @@ export interface CliEngineProfile {
 }
 
 export interface LocalRuntimeProfile {
-  id: 'ollama' | 'lm-studio'
+  id: 'ollama' | 'lm-studio' | 'vllm'
   kind: 'local'
   name: string
   enabled: boolean
@@ -94,6 +103,7 @@ const FLAGS = {
   'full-access': '--dangerously-skip-permissions'
 } as const
 
+/** 完整预置目录：14 API / 13 CLI / 3 本地，首次打开与坏数据回退都用它。 */
 export function createDefaultModelServicesState(): ModelServicesState {
   return {
     api: [
@@ -108,19 +118,29 @@ export function createDefaultModelServicesState(): ModelServicesState {
         defaultModel: 'deepseek-chat'
       },
       {
-        id: 'siliconflow',
+        id: 'opencode-go',
         kind: 'api',
-        name: 'OpenAI 兼容 / SiliconFlow',
+        name: 'OpenCode Go',
         protocol: 'openai-compatible',
         enabled: false,
-        baseUrl: 'https://api.siliconflow.cn/v1',
-        models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct'],
-        defaultModel: 'deepseek-ai/DeepSeek-V3'
+        baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+        models: ['kimi-k2.5', 'deepseek-v3', 'glm-4.5'],
+        defaultModel: 'kimi-k2.5'
+      },
+      {
+        id: 'openai',
+        kind: 'api',
+        name: 'OpenAI',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.openai.com/v1',
+        models: ['gpt-5.1', 'gpt-5-mini'],
+        defaultModel: 'gpt-5.1'
       },
       {
         id: 'anthropic',
         kind: 'api',
-        name: 'Anthropic',
+        name: 'Anthropic / Claude',
         protocol: 'anthropic',
         enabled: false,
         baseUrl: 'https://api.anthropic.com/v1',
@@ -130,57 +150,112 @@ export function createDefaultModelServicesState(): ModelServicesState {
       {
         id: 'gemini',
         kind: 'api',
-        name: 'Gemini',
+        name: 'Google Gemini',
         protocol: 'gemini',
         enabled: false,
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
         models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
         defaultModel: 'gemini-2.5-pro'
+      },
+      {
+        id: 'moonshot',
+        kind: 'api',
+        name: '月之暗面 Kimi',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.moonshot.cn/v1',
+        models: ['moonshot-v1-128k', 'kimi-k2'],
+        defaultModel: 'moonshot-v1-128k'
+      },
+      {
+        id: 'minimax',
+        kind: 'api',
+        name: 'MiniMax',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.minimax.chat/v1',
+        models: ['MiniMax-M2', 'abab6.5s-chat'],
+        defaultModel: 'MiniMax-M2'
+      },
+      {
+        id: 'zhipu',
+        kind: 'api',
+        name: '智谱 GLM',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+        models: ['glm-4.5', 'glm-4.5-air'],
+        defaultModel: 'glm-4.5'
+      },
+      {
+        id: 'qwen',
+        kind: 'api',
+        name: '通义千问',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+        models: ['qwen-max', 'qwen-plus'],
+        defaultModel: 'qwen-max'
+      },
+      {
+        id: 'volcengine',
+        kind: 'api',
+        name: '火山方舟 / 豆包',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+        models: ['doubao-seed-1.6', 'doubao-pro-32k'],
+        defaultModel: 'doubao-seed-1.6'
+      },
+      {
+        id: 'siliconflow',
+        kind: 'api',
+        name: '硅基流动',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.siliconflow.cn/v1',
+        models: ['deepseek-ai/DeepSeek-V3', 'Qwen/Qwen2.5-72B-Instruct'],
+        defaultModel: 'deepseek-ai/DeepSeek-V3'
+      },
+      {
+        id: 'openrouter',
+        kind: 'api',
+        name: 'OpenRouter',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://openrouter.ai/api/v1',
+        models: ['openai/gpt-5.1', 'anthropic/claude-sonnet-4.5', 'deepseek/deepseek-chat'],
+        defaultModel: 'openai/gpt-5.1'
+      },
+      {
+        id: 'xai',
+        kind: 'api',
+        name: 'xAI / Grok',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.x.ai/v1',
+        models: ['grok-4', 'grok-3-mini'],
+        defaultModel: 'grok-4'
+      },
+      {
+        id: 'mistral',
+        kind: 'api',
+        name: 'Mistral',
+        protocol: 'openai-compatible',
+        enabled: false,
+        baseUrl: 'https://api.mistral.ai/v1',
+        models: ['mistral-large-latest', 'codestral-latest'],
+        defaultModel: 'mistral-large-latest'
       }
     ],
     cli: [
-      {
-        id: 'opencode',
-        kind: 'cli',
-        preset: 'opencode',
-        name: 'OpenCode',
-        enabled: true,
-        executable: 'opencode',
-        transport: 'stdio-jsonl',
-        argsTemplate: 'run --cwd {{workspace}} --model {{model}} "{{prompt}}"',
-        permissionFlags: { ...FLAGS },
-        cwdPolicy: 'workspace'
-      },
-      {
-        id: 'paseo',
-        kind: 'cli',
-        preset: 'paseo',
-        name: 'Paseo',
-        enabled: false,
-        executable: 'paseo',
-        transport: 'acp',
-        argsTemplate: '--workspace {{workspace}} --model {{model}} --prompt "{{prompt}}"',
-        permissionFlags: { ...FLAGS },
-        cwdPolicy: 'workspace'
-      },
-      {
-        id: 'devin',
-        kind: 'cli',
-        preset: 'devin',
-        name: 'Devin',
-        enabled: false,
-        executable: 'devin',
-        transport: 'oneshot-text',
-        argsTemplate: 'run --workspace {{workspace}} "{{prompt}}"',
-        permissionFlags: { ...FLAGS },
-        cwdPolicy: 'workspace'
-      },
       {
         id: 'claude-code',
         kind: 'cli',
         preset: 'claude-code',
         name: 'Claude Code',
         enabled: false,
+        launchMode: 'cli',
         executable: 'claude',
         transport: 'stdio-jsonl',
         argsTemplate: '-p "{{prompt}}" --output-format stream-json',
@@ -197,10 +272,157 @@ export function createDefaultModelServicesState(): ModelServicesState {
         preset: 'codex',
         name: 'Codex CLI',
         enabled: false,
+        launchMode: 'cli',
         executable: 'codex',
         transport: 'stdio-jsonl',
         argsTemplate: 'exec --cd {{workspace}} "{{prompt}}"',
+        permissionFlags: { 'auto-edit': '--full-auto', smart: '--full-auto', 'full-access': '--full-auto' },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'opencode',
+        kind: 'cli',
+        preset: 'opencode',
+        name: 'OpenCode',
+        enabled: true,
+        launchMode: 'cli',
+        executable: 'opencode',
+        transport: 'stdio-jsonl',
+        argsTemplate: 'run --cwd {{workspace}} --model {{model}} "{{prompt}}"',
         permissionFlags: { ...FLAGS },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'paseo',
+        kind: 'cli',
+        preset: 'paseo',
+        name: 'Paseo',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'paseo',
+        transport: 'acp',
+        argsTemplate: '--workspace {{workspace}} "{{prompt}}"',
+        permissionFlags: { ...FLAGS },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'cursor',
+        kind: 'cli',
+        preset: 'cursor',
+        name: 'Cursor',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'cursor-agent',
+        transport: 'stdio-jsonl',
+        argsTemplate: '--workspace {{workspace}} "{{prompt}}"',
+        permissionFlags: { 'auto-edit': '--yolo', smart: '', 'full-access': '--yolo' },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'kimi-cli',
+        kind: 'cli',
+        preset: 'kimi-cli',
+        name: 'Kimi CLI',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'kimi',
+        transport: 'stdio-jsonl',
+        argsTemplate: '--workspace {{workspace}} "{{prompt}}"',
+        permissionFlags: { 'auto-edit': '--auto', smart: '', 'full-access': '--auto' },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'qwen-code',
+        kind: 'cli',
+        preset: 'qwen-code',
+        name: 'Qwen Code',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'qwen',
+        transport: 'stdio-jsonl',
+        argsTemplate: '--workspace {{workspace}} "{{prompt}}"',
+        permissionFlags: {
+          'auto-edit': '--approval-mode yolo',
+          smart: '',
+          'full-access': '--approval-mode yolo'
+        },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'devin',
+        kind: 'cli',
+        preset: 'devin',
+        name: 'Devin',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'devin',
+        transport: 'oneshot-text',
+        argsTemplate: 'run --workspace {{workspace}} "{{prompt}}"',
+        permissionFlags: {
+          'auto-edit': '--permission-mode bypass',
+          smart: '',
+          'full-access': '--permission-mode bypass --respect-workspace-trust false'
+        },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'openclaw',
+        kind: 'cli',
+        preset: 'openclaw',
+        name: 'OpenClaw',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'openclaw',
+        transport: 'stdio-jsonl',
+        argsTemplate: '--prompt "{{prompt}}"',
+        permissionFlags: { ...FLAGS },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'codebuddy',
+        kind: 'cli',
+        preset: 'codebuddy',
+        name: 'CodeBuddy',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'codebuddy',
+        transport: 'stdio-jsonl',
+        argsTemplate: '--prompt "{{prompt}}"',
+        permissionFlags: {
+          'auto-edit': '',
+          smart: '',
+          'full-access': '--dangerously-skip-permissions'
+        },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'continue',
+        kind: 'cli',
+        preset: 'continue',
+        name: 'Continue',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'cn',
+        transport: 'oneshot-text',
+        argsTemplate: '-p "{{prompt}}"',
+        permissionFlags: { 'auto-edit': '--allow "*"', smart: '', 'full-access': '--allow "*"' },
+        cwdPolicy: 'workspace'
+      },
+      {
+        id: 'mistral-vibe',
+        kind: 'cli',
+        preset: 'mistral-vibe',
+        name: 'Mistral Vibe',
+        enabled: false,
+        launchMode: 'cli',
+        executable: 'vibe',
+        transport: 'oneshot-text',
+        argsTemplate: '--prompt "{{prompt}}"',
+        permissionFlags: {
+          'auto-edit': '--agent auto-approve',
+          smart: '',
+          'full-access': '--agent auto-approve'
+        },
         cwdPolicy: 'workspace'
       },
       {
@@ -209,9 +431,10 @@ export function createDefaultModelServicesState(): ModelServicesState {
         preset: 'custom-command',
         name: 'Custom Command',
         enabled: false,
-        executable: 'command',
+        launchMode: 'cli',
+        executable: 'my-agent',
         transport: 'oneshot-text',
-        argsTemplate: '{{prompt}}',
+        argsTemplate: '--prompt "{{prompt}}"',
         permissionFlags: { 'auto-edit': '', smart: '', 'full-access': '' },
         cwdPolicy: 'custom',
         customCwd: ''
@@ -237,6 +460,16 @@ export function createDefaultModelServicesState(): ModelServicesState {
         models: ['local-model'],
         numCtx: 8192,
         keepAliveMinutes: 30
+      },
+      {
+        id: 'vllm',
+        kind: 'local',
+        name: 'vLLM',
+        enabled: false,
+        baseUrl: 'http://127.0.0.1:8000/v1',
+        models: ['meta-llama/Llama-3.1-8B-Instruct'],
+        numCtx: 8192,
+        keepAliveMinutes: 30
       }
     ],
     slots: {
@@ -256,12 +489,57 @@ export function createDefaultModelServicesState(): ModelServicesState {
   }
 }
 
+
 export function serializeModelServicesState(state: ModelServicesState): string {
   return JSON.stringify(state)
 }
 
-/** 坏数据只回退到默认值，绝不让设置页白屏。 */
+/**
+ * 坏数据只回退到默认值，绝不让设置页白屏。
+ *
+ * 结果按原始字符串缓存：ChatPanel 每帧都会读一次状态，同一份 localStorage
+ * 只解析一遍，输入与流式输出不再重复 JSON.parse 全量 sanitize。
+ *
+ * 缓存值是**共享**的，所以返回前整体冻结（对象、数组与每个条目）：
+ * 任何原地 `push` / `sort` / `state.api[0].enabled = ...` 都会直接抛错，
+ * 而不是静默污染同一份 localStorage 的所有读者。需要改状态请照
+ * SettingsPage 的写法复制出新对象。不可变契约只靠注释挡不住，交给运行时。
+ */
 export function parseModelServicesState(raw: string | null): ModelServicesState {
+  if (cachedRaw === raw && cachedState !== null) {
+    return cachedState
+  }
+  const parsed = freezeDeep(parseModelServicesUncached(raw))
+  cachedRaw = raw
+  cachedState = parsed
+  return parsed
+}
+
+let cachedRaw: string | null | undefined
+let cachedState: ModelServicesState | null = null
+
+function freezeDeep(state: ModelServicesState): ModelServicesState {
+  for (const item of state.api) {
+    Object.freeze(item)
+    Object.freeze(item.models)
+  }
+  for (const item of state.cli) {
+    Object.freeze(item)
+    Object.freeze(item.permissionFlags)
+  }
+  for (const item of state.local) {
+    Object.freeze(item)
+    Object.freeze(item.models)
+  }
+  Object.freeze(state.api)
+  Object.freeze(state.cli)
+  Object.freeze(state.local)
+  Object.freeze(state.slots)
+  Object.freeze(state.browser)
+  return Object.freeze(state)
+}
+
+function parseModelServicesUncached(raw: string | null): ModelServicesState {
   const base = createDefaultModelServicesState()
   if (!raw) {
     return base
@@ -282,9 +560,9 @@ export function parseModelServicesState(raw: string | null): ModelServicesState 
   const slots = record['slots']
   const browser = record['browser']
   return {
-    api: api.length > 0 ? api : base.api,
-    cli: cli.length > 0 ? cli : base.cli,
-    local: local.length > 0 ? local : base.local,
+    api: mergePresets(api, base.api),
+    cli: mergePresets(cli, base.cli),
+    local: mergePresets(local, base.local),
     slots: {
       primaryModel: stringOf((slots as Record<string, unknown>)?.['primaryModel'], base.slots.primaryModel),
       fastModel: stringOf((slots as Record<string, unknown>)?.['fastModel'], base.slots.fastModel),
@@ -305,6 +583,75 @@ function stringOf(value: unknown, fallback: string): string {
   return typeof value === 'string' ? value : fallback
 }
 
+/**
+ * 老缓存增量合并：已有 id 保留用户改过的配置，新增预置按默认顺序补进来，
+ * 自定义服务商（不在预置里）追加在末尾。
+ *
+ * 注意是**整条替换**（`byId.get(id) ?? item`），不是字段级合并：
+ * 老条目缺的新字段只能靠 sanitize 的默认值兜，以后给预置加字段时记得
+ * 在 sanitize 里给一个合理默认，否则老用户永远拿不到。
+ */
+function mergePresets<T extends { id: string }>(saved: T[], defaults: T[]): T[] {
+  if (saved.length === 0) {
+    return defaults
+  }
+  const byId = new Map(saved.map((item) => [item.id, item]))
+  const known = new Set(defaults.map((item) => item.id))
+  return [
+    ...defaults.map((item) => byId.get(item.id) ?? item),
+    ...saved.filter((item) => !known.has(item.id))
+  ]
+}
+
+/** 自定义 API 服务商：id 从名称生成，重复时由 add 去重。 */
+export function createCustomApiProvider(draft: {
+  name: string
+  baseUrl: string
+  model?: string
+}): ApiProviderProfile {
+  const slug =
+    draft.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'provider'
+  const model = (draft.model ?? '').trim()
+  return {
+    id: `custom-${slug}`,
+    kind: 'api',
+    name: draft.name.trim() || '自定义服务商',
+    protocol: 'openai-compatible',
+    enabled: true,
+    baseUrl: draft.baseUrl.trim(),
+    models: model === '' ? [] : [model],
+    defaultModel: model
+  }
+}
+
+export function addCustomApiProvider(
+  state: ModelServicesState,
+  draft: { name: string; baseUrl: string; model?: string }
+): ModelServicesState {
+  const provider = createCustomApiProvider(draft)
+  let id = provider.id
+  let index = 2
+  while (state.api.some((item) => item.id === id)) {
+    id = `${provider.id}-${index}`
+    index += 1
+  }
+  return { ...state, api: [...state.api, { ...provider, id }] }
+}
+
+/** 只允许删除自定义服务商；内置项只能停用。 */
+export function removeCustomApiProvider(
+  state: ModelServicesState,
+  id: string
+): ModelServicesState {
+  if (!id.startsWith('custom-')) {
+    return state
+  }
+  return { ...state, api: state.api.filter((item) => item.id !== id) }
+}
+
 function stringList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return []
@@ -319,6 +666,13 @@ const CLI_PRESETS: CliEnginePresetId[] = [
   'devin',
   'claude-code',
   'codex',
+  'cursor',
+  'kimi-cli',
+  'qwen-code',
+  'openclaw',
+  'codebuddy',
+  'continue',
+  'mistral-vibe',
   'custom-command'
 ]
 const CLI_TRANSPORTS: CliTransportMode[] = ['stdio-jsonl', 'acp', 'oneshot-text']
@@ -385,6 +739,7 @@ function sanitizeCliList(value: unknown): CliEngineProfile[] {
       preset,
       name: record['name'],
       enabled: record['enabled'] === true,
+      launchMode: record['launchMode'] === 'chat' ? 'chat' : 'cli',
       executable: stringOf(record['executable'], ''),
       transport,
       argsTemplate: stringOf(record['argsTemplate'], '{{prompt}}'),
@@ -410,7 +765,11 @@ function sanitizeLocalList(value: unknown): LocalRuntimeProfile[] {
       continue
     }
     const record = item as Record<string, unknown>
-    if (record['id'] !== 'ollama' && record['id'] !== 'lm-studio') {
+    if (
+      record['id'] !== 'ollama' &&
+      record['id'] !== 'lm-studio' &&
+      record['id'] !== 'vllm'
+    ) {
       continue
     }
     out.push({
@@ -538,11 +897,35 @@ export function collectAvailableModelOptions(state: ModelServicesState): ModelOp
 }
 
 /**
- * 模型位（新建智能体 / 四槽位 / 输入栏）可选的口径：
- * CLI 引擎还没有执行路径，选成模型只会把 `cli:xxx` 发给 API，所以这里排除。
+ * 模型位（新建智能体 / 四槽位 / 输入栏）可选的口径。
+ *
+ * 只列「主进程当前 provider」的模型：请求只能带 model 覆盖，baseUrl / key 仍走
+ * 唯一那行 provider 设置，所以把别家的模型选进来必然把模型名发错地址。
+ * CLI 引擎同样没有执行路径，`cli:xxx` 只会被当成模型名发出去，也排除。
+ *
+ * activeProviderId 来自 settings.readProvider()：null（还没读到）时返回空，
+ * 由调用方只显示会话当前值，不猜。
  */
-export function collectModelPositionOptions(state: ModelServicesState): ModelOption[] {
-  return collectAvailableModelOptions(state).filter((option) => option.kind !== 'cli')
+export function collectModelPositionOptions(
+  state: ModelServicesState,
+  activeProviderId: string | null
+): ModelOption[] {
+  if (!activeProviderId) {
+    return []
+  }
+  const api = state.api.find((item) => item.id === activeProviderId)
+  if (api) {
+    return api.models.map((model) => ({ value: model, label: model, kind: 'api' }))
+  }
+  const runtime = state.local.find((item) => item.id === activeProviderId)
+  if (runtime) {
+    return runtime.models.map((model) => ({
+      value: model,
+      label: `${runtime.name} · ${model}`,
+      kind: 'local'
+    }))
+  }
+  return []
 }
 
 /** 某个模型标识在下拉里显示什么。 */
