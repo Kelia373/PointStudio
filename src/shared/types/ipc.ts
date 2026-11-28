@@ -16,7 +16,7 @@ export const CHAT_CHANNELS = {
 } as const
 
 /** 错误码是稳定契约：渲染进程按码判断，不解析文案、不看堆栈。 */
-export type ChatErrorCode = 'E_BAD_INPUT' | 'E_INTERNAL' | 'E_UPSTREAM'
+export type ChatErrorCode = 'E_BAD_INPUT' | 'E_INTERNAL' | 'E_UPSTREAM' | 'E_VISION_UNSUPPORTED'
 
 /**
  * `chat:send` 的请求。
@@ -31,6 +31,8 @@ export interface ChatSendRequest {
   text: string
   /** 群聊里被 @ 的成员：本轮由该 Agent 接管回答；缺省用会话绑定的 Agent。 */
   assistantId?: string | null
+  /** 本轮附图（最多 6 张）：图片本体在 attachments/ 目录，这里只带元数据。 */
+  images?: MessageImageDto[]
 }
 
 /**
@@ -178,6 +180,42 @@ export interface MessageReferenceDto {
   source: string
 }
 
+/** 允许的图片类型：白名单之外一律拒收（不做格式嗅探，扩展名与 MIME 同步）。 */
+export const IMAGE_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif'
+] as const
+
+export type ImageMimeTypeDto = (typeof IMAGE_MIME_TYPES)[number]
+
+/** 附图元数据：文件本体在 userData/attachments/<id>.<ext>，绝不塞进 messages.json。 */
+export interface MessageImageDto {
+  /** UUIDv4，对应 attachments/<id>.<ext> */
+  id: string
+  mimeType: ImageMimeTypeDto
+  /** 展示用文件名；缺省 'image'。 */
+  name: string
+  sizeBytes: number
+}
+
+export interface SaveAttachmentRequest {
+  /** data:image/<png|jpeg|webp|gif>;base64,... */
+  dataUrl: string
+  name?: string
+}
+
+export const ATTACHMENT_CHANNELS = {
+  save: 'attachments:save',
+  readDataUrl: 'attachments:readDataUrl'
+} as const
+
+export interface AttachmentsBridge {
+  save: (request: SaveAttachmentRequest) => Promise<IpcResult<MessageImageDto>>
+  readDataUrl: (id: string) => Promise<IpcResult<string>>
+}
+
 export interface MessageDto {
   id: string
   conversationId: string
@@ -197,6 +235,8 @@ export interface MessageDto {
   reasoning?: string
   /** 思考阶段耗时（毫秒）；缺省则不显示秒数。 */
   reasoningMs?: number
+  /** 这条消息携带的图片（用户提问才有）：只存元数据，本体在 attachments/。 */
+  images?: MessageImageDto[]
 }
 
 /**
@@ -543,6 +583,7 @@ export interface PointStudioApi {
   backup: BackupBridge
   mcp: McpBridge
   clipboard: ClipboardBridge
+  attachments: AttachmentsBridge
 }
 
 
@@ -642,6 +683,8 @@ export interface ModelCapabilitiesDto {
   supportedEfforts: ReasoningEffortDto[]
   /** fixed 表示固定开启思考但不可调档（如 deepseek-reasoner）。 */
   effortMode: EffortWireModeDto
+  /** 是否吃图。undefined = 未知（放行，交给上游判），false = 明确不支持。 */
+  supportsVision?: boolean
 }
 
 export interface DiscoveredModelDto {

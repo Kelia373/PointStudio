@@ -4,7 +4,7 @@
 // 会话（Conversation）是「一组消息的容器」；消息（Message）一旦写入就不再变，
 // 编辑是产生新内容并刷新时间，不是原地改写历史语义。
 
-import type { ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+import type { MessageImageDto, ReasoningEffortDto } from '../../../shared/types/ipc.ts'
 
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'complete' | 'error'
@@ -61,6 +61,8 @@ export interface Message {
   reasoning?: string
   /** 思考阶段耗时（毫秒）；缺省则不显示秒数。 */
   reasoningMs?: number
+  /** 附图（用户提问才有）：只存元数据，本体在 attachments/。 */
+  images?: MessageImageDto[]
   createdAt: string
   updatedAt: string
 }
@@ -106,6 +108,28 @@ export function validateMessageContent(raw: string): Validation<string> {
     return { ok: false, errors: ['E_EMPTY_CONTENT'] }
   }
   return { ok: true, value: raw }
+}
+
+/** 图片消息的兜底标题：只贴图不打字时，比「新会话」更有信息量。 */
+export const IMAGE_ONLY_TITLE = '图片消息'
+
+const IMAGE_TOKEN = /\[Image #\d+\]/g
+
+/** 剥掉行内图片占位符 `[Image #N]`，只留自然语言。 */
+export function stripImageTokens(text: string): string {
+  return collapseWhitespace((text ?? '').replace(IMAGE_TOKEN, ' '))
+}
+
+/**
+ * 带图消息的标题：有自然语言就照常用它，纯图才用「图片消息」。
+ * 纯图时 content 可能只有 `[Image #1]` 这种占位符，不能拿它当标题。
+ */
+export function deriveMessageTitle(text: string, hasImages: boolean): string {
+  const plain = stripImageTokens(text)
+  if (plain !== '') {
+    return deriveTitle(plain)
+  }
+  return hasImages ? IMAGE_ONLY_TITLE : DEFAULT_CONVERSATION_TITLE
 }
 
 export function isMessageRole(value: unknown): value is MessageRole {

@@ -4,7 +4,7 @@
 // 重写全部消息。级联关系（删会话连消息）由本层负责，存储层只管整存整取。
 import {
   DEFAULT_CONVERSATION_TITLE,
-  deriveTitle,
+  deriveMessageTitle,
   isMessageRole,
   validateConversationParams,
   validateMessageContent,
@@ -18,6 +18,7 @@ import {
   type MessageRole,
   type MessageStatus
 } from '../ai/domain/conversation.ts'
+import type { MessageImageDto } from '../../shared/types/ipc.ts'
 import type { JsonFileStore } from '../data/fileStore.ts'
 
 export type ServiceResult<T> = { ok: true; value: T } | { ok: false; errors: string[] }
@@ -44,7 +45,11 @@ export interface AppendMessageInput {
   /** 模型深度思考内容；只在非空时落盘。 */
   reasoning?: string
   reasoningMs?: number
+  /** 附图元数据；纯图消息允许 content 为空串。 */
+  images?: MessageImageDto[]
 }
+
+export const MAX_IMAGES_PER_MESSAGE = 6
 
 export class ConversationService {
   private readonly conversations: JsonFileStore<Conversation>
@@ -273,10 +278,27 @@ export class ConversationService {
     if (!isMessageRole(input.role)) {
       return { ok: false, errors: ['E_BAD_ROLE'] }
     }
-    const checked = validateMessageContent(input.content)
-    if (!checked.ok) {
-      return { ok: false, errors: checked.errors }
+    const images = input.images ?? []
+    if (images.length > MAX_IMAGES_PER_MESSAGE) {
+      return { ok: false, errors: ['E_TOO_MANY_IMAGES'] }
     }
+    for (const image of images) {
+      if (
+        typeof image?.id !== 'string' ||
+        typeof image.mimeType !== 'string' ||
+        typeof image.name !== 'string' ||
+        typeof image.sizeBytes !== 'number'
+      ) {
+        return { ok: false, errors: ['E_BAD_IMAGE'] }
+      }
+    }
+
+    // 纯图消息允许没有文字：只有「既没字也没图」才算空消息。
+    const rawContent = typeof input.content === 'string' ? input.content : ''
+    if (rawContent.trim() === '' && images.length === 0) {
+      return { ok: false, errors: ['E_EMPTY_CONTENT'] }
+    }
+    const content = rawContent.trim() === '' ? '' : rawContent
 
     const conversations = await this.conversations.readAll()
     const index = conversations.findIndex((item) => item.id === conversationId)
@@ -289,7 +311,7 @@ export class ConversationService {
       id: this.deps.newId(),
       conversationId,
       role: input.role,
-      content: checked.value,
+      content,
       status: input.status ?? 'complete',
       // 空数组也存成 undefined：旧数据没有这个字段，保持形状一致才好比较与迁移。
       ...(input.references && input.references.length > 0
@@ -299,6 +321,7 @@ export class ConversationService {
       ...(typeof input.reasoningMs === 'number' && input.reasoningMs >= 0
         ? { reasoningMs: input.reasoningMs }
         : {}),
+      ...(images.length > 0 ? { images: images.map((image) => ({ ...image })) } : {}),
       createdAt: now,
       updatedAt: now
     }
@@ -314,7 +337,9 @@ export class ConversationService {
       conversations[index].isHome !== true
     conversations[index] = {
       ...conversations[index],
-      title: shouldDeriveTitle ? deriveTitle(checked.value) : conversations[index].title,
+      title: shouldDeriveTitle
+        ? deriveMessageTitle(content, images.length > 0)
+        : conversations[index].title,
       updatedAt: now
     }
     await this.conversations.writeAll(conversations)

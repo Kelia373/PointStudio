@@ -48,6 +48,7 @@ function toMessageDto(message: Message): MessageDto {
     ...(message.references ? { references: message.references } : {}),
     ...(message.reasoning ? { reasoning: message.reasoning } : {}),
     ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
     createdAt: message.createdAt
   }
 }
