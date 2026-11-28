@@ -30,7 +30,7 @@ export default function ThinkingBlock({
 
   const seconds =
     typeof durationMs === 'number' && durationMs >= 0
-      ? `${(durationMs / 1000).toFixed(1)}s`
+      ? `${(durationMs / 1000).toFixed(1)} 秒`
       : null
 
   return (
@@ -57,7 +57,6 @@ export default function ThinkingBlock({
           <span className="thinking__meta">· {seconds}</span>
         ) : null}
       </button>
-      {open ? <div className="thinking__body">{reasoning}</div> : null}
-    </div>
+      {open ? <div className="thinking__body">{reasoning}</div> : null}    </div>
   )
 }

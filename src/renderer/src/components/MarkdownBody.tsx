@@ -6,6 +6,7 @@ import {
   parseMarkdownBlocks,
   type InlineToken
 } from '../lib/chatMarkdown'
+import { codeLanguageLabel, tokenizeCode } from '../lib/codeHighlight'
 import Icon from './Icon'
 
 function Inline({ tokens }: { tokens: InlineToken[] }) {
@@ -61,10 +62,12 @@ function Inline({ tokens }: { tokens: InlineToken[] }) {
 
 function CodeBlock({ lang, code, closed }: { lang: string; code: string; closed: boolean }) {
   const [copied, setCopied] = useState(false)
+  // 纯 React <span> 着色：不拼 HTML 字符串，模型输出里的标签不会被当成标记。
+  const tokens = tokenizeCode(code, lang)
   return (
     <div className={`md__code${closed ? '' : ' is-streaming'}`}>
       <div className="md__code-head">
-        <span className="md__code-lang">{lang === '' ? 'text' : lang}</span>
+        <span className="md__code-lang">{codeLanguageLabel(lang)}</span>
         <button
           className="md__code-copy"
           type="button"
@@ -83,7 +86,17 @@ function CodeBlock({ lang, code, closed }: { lang: string; code: string; closed:
         </button>
       </div>
       <pre className="md__code-body">
-        <code>{code}</code>
+        <code>
+          {tokens.map((token, index) =>
+            token.kind === 'plain' ? (
+              <span key={index}>{token.value}</span>
+            ) : (
+              <span key={index} className={`syn-${token.kind}`}>
+                {token.value}
+              </span>
+            )
+          )}
+        </code>
       </pre>
     </div>
   )
@@ -103,7 +116,7 @@ export default function MarkdownBody({
         if (block.type === 'heading') {
           const Tag = `h${block.level}` as 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6'
           return (
-            <Tag key={index} className="md__heading">
+            <Tag key={index} className={`md__heading md__heading--${block.level}`}>
               <Inline tokens={parseInlineTokens(block.text)} />
             </Tag>
           )
