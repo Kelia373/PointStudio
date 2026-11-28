@@ -180,6 +180,8 @@ export default function ChatPanel() {
   const [info, setInfo] = useState<string | null>(null)
   // 上下文裁剪只是提醒，不是错误——用单独的 warn 通道，别染成红色
   const [warn, setWarn] = useState<string | null>(null)
+  // 内置助手是渲染层合成的 = 主进程 ensureBuiltin 失败过（写盘失败被 catch 吞掉）。
+  const [builtinMissing, setBuiltinMissing] = useState(false)
   // 用户往上滚时暂停自动滚底，否则生成过程中根本读不了前文
   const [pinnedToBottom, setPinnedToBottom] = useState(true)
   const [assistants, setAssistants] = useField('assistants')
@@ -351,6 +353,8 @@ export default function ChatPanel() {
     const list = await window.pointstudio.assistants.list()
     // 收编失败时主进程可能没有内置助手：渲染层兜底合成一条，
     // 否则它名下的会话没有 Agent 行可挂，侧栏整块看不见。
+    // 但兜底不能顺手把告警也兜掉——合成 = 主进程 ensureBuiltin 那条路失败过，要让人看见。
+    setBuiltinMissing(!list.some((item) => item.id === DEFAULT_ASSISTANT_ID))
     setAssistants(withBuiltinAssistant(list, new Date().toISOString()))
     setAssistantsLoaded(true)
   }, [])
@@ -1538,6 +1542,14 @@ export default function ChatPanel() {
           <div className="banner banner--info">
             <span className="banner__text">{info}</span>
             <button className="banner__close" type="button" aria-label="关闭提示" onClick={() => setInfo(null)}>
+              <Icon name="x" size={12} />
+            </button>
+          </div>
+        ) : null}
+        {builtinMissing ? (
+          <div className="banner banner--warn">
+            <span className="banner__text">内置助手未就绪，数据可能不完整，重启可修复</span>
+            <button className="banner__close" type="button" aria-label="关闭提示" onClick={() => setBuiltinMissing(false)}>
               <Icon name="x" size={12} />
             </button>
           </div>
