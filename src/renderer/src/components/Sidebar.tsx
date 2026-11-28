@@ -38,7 +38,6 @@ import { CHAT_PAGE, nextActivePage } from '../lib/pageNav'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
-import ConfirmButton from './ConfirmButton'
 import SessionItem from './SessionItem'
 import AgentAvatar from './AgentAvatar'
 
@@ -74,7 +73,8 @@ export default function Sidebar({
   workerRuns,
   onInspectWorkerRun,
   onCreateAgent,
-  assistantsLoaded
+  assistantsLoaded,
+  onOpenGroupChat
 }: {
   conversations: ConversationDto[]
   assistants: AssistantDto[]
@@ -112,6 +112,8 @@ export default function Sidebar({
   onCreateAgent: () => void
   /** 助手列表是否已从主进程加载完；未加载时不能修剪小组。 */
   assistantsLoaded: boolean
+  /** 打开（或创建）该小组的聊天。 */
+  onOpenGroupChat: (group: AgentGroupDto) => void
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
@@ -147,6 +149,12 @@ export default function Sidebar({
   const [renameGroupValue, setRenameGroupValue] = useState('')
   const [draggingAgentId, setDraggingAgentId] = useState<string | null>(null)
   const [dropGroupId, setDropGroupId] = useState<string | null>(null)
+  const [groupMenu, setGroupMenu] = useState<{
+    groupId: string
+    x: number
+    y: number
+    submenu: 'members' | 'more' | null
+  } | null>(null)
   // 应用内剪贴板：只存配置，不存 id 与时间戳
   const [clipboard, setClipboard] = useState<AgentClipPayload | null>(() =>
     parseAgentClip(window.localStorage.getItem(AGENT_CLIPBOARD_KEY))
@@ -328,6 +336,30 @@ export default function Sidebar({
     }
     window.localStorage.setItem(AGENT_GROUPS_KEY, JSON.stringify(groups))
   }, [groups, assistantsLoaded])
+
+  // 小组右键菜单：点空白或按 Esc 收起
+  useEffect(() => {
+    if (!groupMenu) {
+      return
+    }
+    const close = (event: MouseEvent): void => {
+      const target = event.target as HTMLElement
+      if (target.closest('.side__group-menu') === null) {
+        setGroupMenu(null)
+      }
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setGroupMenu(null)
+      }
+    }
+    window.addEventListener('mousedown', close)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('mousedown', close)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [groupMenu])
 
   const filteredAgents = useMemo(
     () => sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode),
@@ -790,15 +822,18 @@ export default function Sidebar({
                           <button
                             className="side__group-name"
                             type="button"
-                            title="点击只看这组的会话；双击改名"
-                            onClick={() => {
-                              setGroupAxis(groupAxis === group.id ? null : group.id)
-                              setAgentAxis(null)
-                              setProjectAxis(null)
-                            }}
-                            onDoubleClick={() => {
-                              setRenamingGroupId(group.id)
-                              setRenameGroupValue(group.name)
+                            title="打开小组聊天（右键管理）"
+                            onClick={() => onOpenGroupChat(group)}
+                            onDoubleClick={() => onOpenGroupChat(group)}
+                            onContextMenu={(event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              setGroupMenu({
+                                groupId: group.id,
+                                x: event.clientX,
+                                y: event.clientY,
+                                submenu: null
+                              })
                             }}
                           >
                             <Icon name="users" size={12} />
@@ -810,20 +845,6 @@ export default function Sidebar({
                           className={`side__status side__status--${groupBench.state}`}
                           title={LIGHT_LABEL[groupBench.state]}
                         />
-                        <ConfirmButton
-                          className="side__group-del"
-                          confirmLabel="删?"
-                          title="删除小组（不会删除组里的 Agent）"
-                          ariaLabel="删除小组"
-                          onConfirm={() => {
-                            setGroups((current) => removeGroup(current, group.id))
-                            if (groupAxis === group.id) {
-                              setGroupAxis(null)
-                            }
-                          }}
-                        >
-                          <Icon name="x" size={11} />
-                        </ConfirmButton>
                       </div>
 
                       {group.collapsed ? null : (
@@ -1084,6 +1105,138 @@ export default function Sidebar({
           </>
         ) : null}
       </section>
+
+      {groupMenu
+        ? (() => {
+            const target = groups.find((group) => group.id === groupMenu.groupId)
+            if (!target) {
+              return null
+            }
+            const nowIso = (): string => new Date().toISOString()
+            return (
+              <div
+                className="side__group-menu"
+                role="menu"
+                aria-label={`小组 ${target.name} 菜单`}
+                style={{ left: groupMenu.x, top: groupMenu.y }}
+              >
+                <button
+                  className="side__group-menu-item"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setRenamingGroupId(target.id)
+                    setRenameGroupValue(target.name)
+                    setGroupMenu(null)
+                  }}
+                >
+                  重命名
+                </button>
+                <button
+                  className={`side__group-menu-item${
+                    groupMenu.submenu === 'members' ? ' is-open' : ''
+                  }`}
+                  type="button"
+                  role="menuitem"
+                  aria-haspopup="menu"
+                  aria-expanded={groupMenu.submenu === 'members'}
+                  onMouseEnter={() =>
+                    setGroupMenu((current) =>
+                      current ? { ...current, submenu: 'members' } : current
+                    )
+                  }
+                  onClick={() =>
+                    setGroupMenu((current) =>
+                      current
+                        ? { ...current, submenu: current.submenu === 'members' ? null : 'members' }
+                        : current
+                    )
+                  }
+                >
+                  成员管理
+                  <span className="side__group-menu-arrow">›</span>
+                </button>
+                <button
+                  className={`side__group-menu-item${
+                    groupMenu.submenu === 'more' ? ' is-open' : ''
+                  }`}
+                  type="button"
+                  role="menuitem"
+                  aria-haspopup="menu"
+                  aria-expanded={groupMenu.submenu === 'more'}
+                  onMouseEnter={() =>
+                    setGroupMenu((current) =>
+                      current ? { ...current, submenu: 'more' } : current
+                    )
+                  }
+                  onClick={() =>
+                    setGroupMenu((current) =>
+                      current
+                        ? { ...current, submenu: current.submenu === 'more' ? null : 'more' }
+                        : current
+                    )
+                  }
+                >
+                  更多
+                  <span className="side__group-menu-arrow">›</span>
+                </button>
+
+                {groupMenu.submenu === 'members' ? (
+                  <div className="side__group-submenu" role="menu" aria-label="成员管理">
+                    <span className="side__group-submenu-title">成员（点击切换）</span>
+                    {assistants.length === 0 ? (
+                      <span className="side__group-submenu-empty">还没有 Agent</span>
+                    ) : (
+                      assistants.map((agent) => {
+                        const member = target.memberIds.includes(agent.id)
+                        return (
+                          <button
+                            key={agent.id}
+                            className={`side__group-menu-item${
+                              member ? ' side__group-menu-item--checked' : ''
+                            }`}
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={member}
+                            onClick={() =>
+                              setGroups((current) =>
+                                member
+                                  ? removeAgentFromGroup(current, agent.id, target.id, nowIso())
+                                  : addAgentToGroup(current, agent.id, target.id, 'multi', nowIso())
+                              )
+                            }
+                          >
+                            <span className="side__group-menu-check">{member ? '✓' : ''}</span>
+                            {agent.name}
+                          </button>
+                        )
+                      })
+                    )}
+                  </div>
+                ) : null}
+
+                {groupMenu.submenu === 'more' ? (
+                  <div className="side__group-submenu" role="menu" aria-label="更多操作">
+                    <button
+                      className="side__group-menu-item side__group-menu-item--danger"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setGroups((current) => removeGroup(current, target.id))
+                        if (groupAxis === target.id) {
+                          setGroupAxis(null)
+                        }
+                        setGroupMenu(null)
+                      }}
+                    >
+                      删除小组
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+            )
+          })()
+        : null}
 
       <Slot name="sidebar.bottom" props={{}} />
 

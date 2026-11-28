@@ -6,6 +6,7 @@ import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 import { DeepSeekProvider, parseOpenAiSseStream } from '../deepseek.ts'
+import { OpenAiCompatibleProvider } from '../openaiCompatible.ts'
 import { ProviderError } from '../types.ts'
 
 async function* fromChunks(chunks: Array<string | Uint8Array>): AsyncGenerator<Uint8Array> {
@@ -140,4 +141,56 @@ test('缺少 apiKey 直接拒绝，不发请求', async () => {
       return true
     }
   )
+})
+
+test('OpenAI 兼容线：reasoning_effort 只对支持调档的模型发出', async () => {
+  const bodies: string[] = []
+  const server = createServer((request, response) => {
+    let body = ''
+    request.on('data', (chunk) => {
+      body += chunk
+    })
+    request.on('end', () => {
+      bodies.push(body)
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.write('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n')
+      response.write('data: [DONE]\n\n')
+      response.end()
+    })
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const port = (server.address() as AddressInfo).port
+  try {
+    const provider = new OpenAiCompatibleProvider({
+      id: 'openai',
+      defaultBaseUrl: `http://127.0.0.1:${port}`,
+      defaultModel: 'o3'
+    })
+    for await (const _chunk of provider.streamChat({
+      apiKey: 'test-key',
+      baseUrl: `http://127.0.0.1:${port}`,
+      model: 'o3',
+      supportedEfforts: ['low', 'mid', 'high'],
+      messages: [{ role: 'user', content: 'hi' }],
+      params: { effort: 'mid' }
+    })) {
+      // 消费
+    }
+    for await (const _chunk of provider.streamChat({
+      apiKey: 'test-key',
+      baseUrl: `http://127.0.0.1:${port}`,
+      model: 'deepseek-chat',
+      supportedEfforts: [],
+      messages: [{ role: 'user', content: 'hi' }],
+      params: { effort: 'high' }
+    })) {
+      // 消费
+    }
+    const first = JSON.parse(bodies[0]) as Record<string, unknown>
+    assert.equal(first.reasoning_effort, 'medium')
+    const second = JSON.parse(bodies[1]) as Record<string, unknown>
+    assert.equal('reasoning_effort' in second, false, '普通模型不该带 reasoning_effort')
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
 })

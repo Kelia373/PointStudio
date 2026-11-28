@@ -33,6 +33,7 @@ import {
   type ModelServicesState
 } from '../lib/modelServices'
 import type { AgentPermissionMode } from '../../../shared/types/ipc.ts'
+import { mergeDiscoveredIntoServices } from '../lib/modelPicker'
 import {
   filterSettingsGroups,
   findSettingsSection,
@@ -299,16 +300,9 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
         return
       }
       const discovered = result.value.models
-      const selectable = discovered.filter((item) => item.selectable).map((item) => item.id)
-      const skipped = discovered.length - selectable.length
-      if (selectable.length > 0) {
-        patchApi(profile.id, {
-          models: selectable,
-          defaultModel: selectable.includes(profile.defaultModel)
-            ? profile.defaultModel
-            : selectable[0]
-        })
-      }
+      const selectable = discovered.filter((item) => item.selectable).length
+      const skipped = discovered.length - selectable
+      setServices((current) => mergeDiscoveredIntoServices(current, profile.id, discovered))
       setMessage(
         `✓ 已连通 · 获取 ${discovered.length} 个模型 · ${result.value.latencyMs} ms${
           skipped > 0 ? `（${skipped} 个仅官方客户端可用，未加入）` : ''

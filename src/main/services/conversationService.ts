@@ -31,6 +31,7 @@ export interface CreateConversationInput {
   title?: string
   assistantId?: string | null
   workspaceId?: string | null
+  groupId?: string | null
 }
 
 export interface AppendMessageInput {
@@ -83,6 +84,7 @@ export class ConversationService {
       title,
       assistantId: input.assistantId ?? null,
       workspaceId: input.workspaceId ?? null,
+      groupId: input.groupId ?? null,
       createdAt: now,
       updatedAt: now
     }
@@ -149,6 +151,14 @@ export class ConversationService {
     }
 
     const next: Conversation = { ...items[index], updatedAt: this.deps.now() }
+    // 换服务商却没指定新模型时，旧模型很可能不属于新家，清掉避免漂移。
+    if (
+      patch.providerId !== undefined &&
+      (patch.providerId ?? null) !== (items[index].providerId ?? null) &&
+      patch.model === undefined
+    ) {
+      delete next.model
+    }
 
     if (patch.model !== undefined) {
       const model = validateModelId(patch.model)

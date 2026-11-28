@@ -10,6 +10,8 @@ import { AUTO_ROUTE_MODEL, MODEL_LABEL } from './modelOptions.ts'
 export const MODEL_SERVICES_KEY = 'pointstudio.modelServices'
 
 export type ModelServiceKind = 'api' | 'cli' | 'local'
+import type { ModelCapabilitiesDto, ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+
 export type ApiProtocolKind = 'openai-compatible' | 'deepseek' | 'anthropic' | 'gemini'
 export type CliEnginePresetId =
   | 'opencode'
@@ -38,6 +40,10 @@ export interface ApiProviderProfile {
   defaultModel: string
   hasKey?: boolean
   maskedKey?: string
+  /** fetchModels 拉回的真实能力画像（按模型 id 缓存）。 */
+  modelCapabilities?: Record<string, ModelCapabilitiesDto>
+  /** 不可直选的模型 → 原因（如 -free）。 */
+  unselectableModels?: Record<string, string>
 }
 
 export interface CliEngineProfile {
@@ -65,6 +71,8 @@ export interface LocalRuntimeProfile {
   models: string[]
   numCtx: number
   keepAliveMinutes: number
+  modelCapabilities?: Record<string, ModelCapabilitiesDto>
+  unselectableModels?: Record<string, string>
 }
 
 export interface DefaultModelSlots {
@@ -655,6 +663,51 @@ export function removeCustomApiProvider(
   return { ...state, api: state.api.filter((item) => item.id !== id) }
 }
 
+function capabilityMap(value: unknown): Record<string, ModelCapabilitiesDto> | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined
+  }
+  const out: Record<string, ModelCapabilitiesDto> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw !== 'object' || raw === null) {
+      continue
+    }
+    const record = raw as Record<string, unknown>
+    const efforts = Array.isArray(record['supportedEfforts'])
+      ? record['supportedEfforts'].filter(
+          (item): item is ReasoningEffortDto =>
+            item === 'low' || item === 'mid' || item === 'high' || item === 'xhigh' || item === 'max'
+        )
+      : []
+    const mode = record['effortMode']
+    if (
+      typeof record['supportsTools'] !== 'boolean' ||
+      (mode !== 'none' && mode !== 'reasoning_effort' && mode !== 'thinking_budget' && mode !== 'fixed')
+    ) {
+      continue
+    }
+    out[key] = {
+      supportsTools: record['supportsTools'],
+      supportedEfforts: efforts,
+      effortMode: mode
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function stringMap(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return undefined
+  }
+  const out: Record<string, string> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof raw === 'string') {
+      out[key] = raw
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 function stringList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return []
@@ -707,7 +760,13 @@ function sanitizeApiList(value: unknown): ApiProviderProfile[] {
       models,
       defaultModel: stringOf(record['defaultModel'], models[0] ?? ''),
       ...(typeof record['hasKey'] === 'boolean' ? { hasKey: record['hasKey'] } : {}),
-      ...(typeof record['maskedKey'] === 'string' ? { maskedKey: record['maskedKey'] } : {})
+      ...(typeof record['maskedKey'] === 'string' ? { maskedKey: record['maskedKey'] } : {}),
+      ...(capabilityMap(record['modelCapabilities'])
+        ? { modelCapabilities: capabilityMap(record['modelCapabilities']) }
+        : {}),
+      ...(stringMap(record['unselectableModels'])
+        ? { unselectableModels: stringMap(record['unselectableModels']) }
+        : {})
     })
   }
   return out
@@ -786,7 +845,13 @@ function sanitizeLocalList(value: unknown): LocalRuntimeProfile[] {
       keepAliveMinutes:
         typeof record['keepAliveMinutes'] === 'number' && record['keepAliveMinutes'] >= 0
           ? record['keepAliveMinutes']
-          : 30
+          : 30,
+      ...(capabilityMap(record['modelCapabilities'])
+        ? { modelCapabilities: capabilityMap(record['modelCapabilities']) }
+        : {}),
+      ...(stringMap(record['unselectableModels'])
+        ? { unselectableModels: stringMap(record['unselectableModels']) }
+        : {})
     })
   }
   return out

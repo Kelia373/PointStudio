@@ -141,6 +141,8 @@ export async function* parseOpenAiSseStream(
   yield* drain(true)
 }
 
+const OPENAI_EFFORT: Record<string, string> = { low: 'low', mid: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }
+
 export interface OpenAiCompatibleOptions {
   id: string
   defaultBaseUrl: string
@@ -181,7 +183,13 @@ export class OpenAiCompatibleProvider implements ChatProvider {
         ? { temperature: request.params.temperature }
         : {}),
       ...(request.params?.maxTokens !== undefined ? { max_tokens: request.params.maxTokens } : {}),
-      ...(request.params?.topP !== undefined ? { top_p: request.params.topP } : {})
+      ...(request.params?.topP !== undefined ? { top_p: request.params.topP } : {}),
+      // 只在模型真的支持 reasoning_effort 时才发，普通模型不要乱带参数。
+      ...(request.params?.effort &&
+      request.supportedEfforts?.includes(request.params.effort) &&
+      OPENAI_EFFORT[request.params.effort]
+        ? { reasoning_effort: OPENAI_EFFORT[request.params.effort] }
+        : {})
     })
 
     let response: Response

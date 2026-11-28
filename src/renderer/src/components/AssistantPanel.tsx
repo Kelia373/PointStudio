@@ -13,14 +13,14 @@ import { describeError } from '../../../shared/i18n/errors.ts'
 import type {
   AgentPermissionMode,
   AssistantDto,
-  ProviderAccountViewDto
+  ProviderAccountViewDto,
+  ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
 import { AVATAR_KEYS } from '../lib/agentAvatar'
+import ModelPickerPopover from './ModelPickerPopover'
 import {
   MODEL_SERVICES_KEY,
-  collectModelPositionOptions,
-  parseModelServicesState,
-  providerDisplayName
+  parseModelServicesState
 } from '../lib/modelServices'
 import {
   PERMISSION_MODE_ORDER,
@@ -47,38 +47,16 @@ export default function AssistantPanel({
   const [systemPrompt, setSystemPrompt] = useState('')
   const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>('smart')
   const [avatar, setAvatar] = useState('')
-  // 模型选择编码成 `${providerId}::${modelId}`，保存时拆回两个字段。
-  const [modelSelection, setModelSelection] = useState('')
+  const [picked, setPicked] = useState<{
+    providerId: string | null
+    modelId: string | null
+    effort: ReasoningEffortDto | null
+  }>({ providerId: null, modelId: null, effort: null })
   const [accounts, setAccounts] = useState<ProviderAccountViewDto[]>([])
   const services = useMemo(
     () => parseModelServicesState(window.localStorage.getItem(MODEL_SERVICES_KEY)),
     []
   )
-  const modelGroups = useMemo(() => {
-    const ready = accounts
-      .filter((account) => account.hasKey || account.protocol === 'ollama')
-      .map((account) => account.providerId)
-    const options = collectModelPositionOptions(services, ready)
-    const groups = new Map<string, Array<{ value: string; label: string }>>()
-    for (const option of options) {
-      const providerId = option.providerId ?? ''
-      const modelId = option.modelId ?? option.value
-      const list = groups.get(providerId) ?? []
-      list.push({
-        value: `${providerId}::${modelId}`,
-        label: `${providerDisplayName(providerId, services)} · ${modelId}`
-      })
-      groups.set(providerId, list)
-    }
-    return [...groups.entries()].map(([providerId, items]) => ({
-      providerId,
-      name: providerDisplayName(providerId, services),
-      items
-    }))
-  }, [accounts, services])
-  const pickedModel = modelGroups
-    .flatMap((group) => group.items)
-    .find((item) => item.value === modelSelection)
   const [message, setMessage] = useState<string | null>(null)
   // 同一次「打开设置」只自动展开一次：保存后列表刷新不该把表单又弹回来
   const handledFocus = useRef<string | null>(null)
@@ -102,11 +80,11 @@ export default function AssistantPanel({
     setSystemPrompt(assistant.systemPrompt)
     setPermissionMode((assistant.permissionMode ?? 'smart') as AgentPermissionMode)
     setAvatar(assistant.avatar ?? '')
-    setModelSelection(
-      assistant.providerId && assistant.modelId
-        ? `${assistant.providerId}::${assistant.modelId}`
-        : ''
-    )
+    setPicked({
+      providerId: assistant.providerId,
+      modelId: assistant.modelId,
+      effort: assistant.params.effort ?? null
+    })
     setMessage(null)
   }
 
@@ -135,9 +113,9 @@ export default function AssistantPanel({
       name,
       systemPrompt,
       // update 是整条替换：未改动的字段必须原样带回，否则保存一次就洗掉参数
-      providerId: modelSelection === '' ? null : (pickedModel?.value.split('::')[0] ?? null),
-      modelId: modelSelection === '' ? null : (pickedModel?.value.split('::')[1] ?? null),
-      params: current.params,
+      providerId: picked.providerId,
+      modelId: picked.modelId,
+      params: { ...current.params, effort: picked.effort },
       enabled: current.enabled ?? true,
       permissionMode,
       avatar: avatar === '' ? null : avatar
@@ -222,28 +200,15 @@ export default function AssistantPanel({
                 </label>
                 <label className="assistants__field">
                   <span className="assistants__field-label">模型</span>
-                  <select
-                    className="assistants__input"
-                    value={modelSelection}
-                    aria-label="模型"
-                    onChange={(event) => setModelSelection(event.target.value)}
-                  >
-                    <option value="">跟随默认</option>
-                    {modelGroups.map((group) => (
-                      <optgroup key={group.providerId} label={group.name}>
-                        {group.items.map((item) => (
-                          <option key={item.value} value={item.value}>
-                            {item.label}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                    {modelSelection !== '' && !pickedModel ? (
-                      <option value={modelSelection}>
-                        {modelSelection.replace('::', ' · ')}（当前不可用）
-                      </option>
-                    ) : null}
-                  </select>
+                  <ModelPickerPopover
+                    services={services}
+                    accounts={accounts}
+                    providerId={picked.providerId}
+                    modelId={picked.modelId}
+                    effort={picked.effort}
+                    allowDefault
+                    onChange={setPicked}
+                  />
                 </label>
                 <label className="assistants__field">
                   <span className="assistants__field-label">头像</span>

@@ -10,6 +10,11 @@ import type {
 } from '../../../shared/types/ipc.ts'
 import type { ProviderAccount } from '../domain/providerAccounts.ts'
 import { opencodeModelsUrl, opencodeUsageUrl } from './opencodeGo.ts'
+import {
+  capabilitiesForSelectable,
+  inferModelCapabilities,
+  rememberModelCapabilities
+} from './modelCapabilities.ts'
 
 export type FetchFn = typeof fetch
 
@@ -22,8 +27,13 @@ export interface DiscoveryDeps {
   now: () => number
 }
 
-/** 从多种可能的响应形状里取出模型 id 列表。 */
-function extractModelIds(payload: unknown): string[] {
+/** 从多种可能的响应形状里取出模型条目：id + 原始元数据（能力探测要用）。 */
+interface RawModelItem {
+  id: string
+  raw?: Record<string, unknown>
+}
+
+function extractModelItems(payload: unknown): RawModelItem[] {
   if (typeof payload !== 'object' || payload === null) {
     return []
   }
@@ -33,23 +43,24 @@ function extractModelIds(payload: unknown): string[] {
     : Array.isArray(record['models'])
       ? record['models']
       : []
-  const ids: string[] = []
+  const items: RawModelItem[] = []
   for (const item of list) {
     if (typeof item === 'string') {
-      ids.push(item)
+      items.push({ id: item })
       continue
     }
     if (typeof item === 'object' && item !== null) {
-      const id = (item as Record<string, unknown>)['id']
-      const name = (item as Record<string, unknown>)['name']
+      const raw = item as Record<string, unknown>
+      const id = raw['id']
+      const name = raw['name']
       if (typeof id === 'string') {
-        ids.push(id)
+        items.push({ id, raw })
       } else if (typeof name === 'string') {
-        ids.push(name)
+        items.push({ id: name, raw })
       }
     }
   }
-  return ids
+  return items
 }
 
 function modelsEndpoint(account: ProviderAccount): string {
@@ -95,11 +106,20 @@ export async function fetchProviderModels(
     throw new Error(`E_HTTP_${response.status}`)
   }
   const payload = (await response.json()) as unknown
-  const ids = extractModelIds(payload)
-  const models =
-    account.protocol === 'opencode-go'
-      ? ids.map(normalizeOpencodeModel)
-      : ids.map((id) => ({ id, selectable: true }) satisfies DiscoveredModelDto)
+  const items = extractModelItems(payload)
+  const models: DiscoveredModelDto[] = items.map((item) => {
+    const base: DiscoveredModelDto =
+      account.protocol === 'opencode-go'
+        ? normalizeOpencodeModel(item.id)
+        : { id: item.id, selectable: true }
+    const capabilities = capabilitiesForSelectable(
+      inferModelCapabilities(account.id, base.id, item.raw),
+      base.selectable
+    )
+    return { ...base, capabilities }
+  })
+  // 记下来给发送侧用：UI 与真实参数只有一个能力来源。
+  rememberModelCapabilities(account.id, models)
   return { models, latencyMs: Math.max(0, deps.now() - started) }
 }
 

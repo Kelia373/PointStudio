@@ -4,6 +4,8 @@
 // 会话（Conversation）是「一组消息的容器」；消息（Message）一旦写入就不再变，
 // 编辑是产生新内容并刷新时间，不是原地改写历史语义。
 
+import type { ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'complete' | 'error'
 
@@ -12,6 +14,8 @@ export interface ConversationParams {
   temperature?: number
   maxTokens?: number
   topP?: number
+  /** 思考强度；缺省 / null 表示跟随模型默认。 */
+  effort?: ReasoningEffortDto | null
 }
 
 export interface Conversation {
@@ -28,6 +32,8 @@ export interface Conversation {
   model?: string | null
   /** 会话级服务商覆盖；缺省跟随助手绑定 / 全局默认。 */
   providerId?: string | null
+  /** 小组聊天归属的小组 id；普通会话缺省。 */
+  groupId?: string | null
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParams
   createdAt: string
@@ -155,7 +161,18 @@ export function validateConversationParams(
   const input = value as Record<string, unknown>
   const result: ConversationParams = {}
 
-  const ranges: Array<[keyof ConversationParams, number, number]> = [
+  const effort = input['effort']
+  if (effort !== undefined && effort !== null) {
+    if (
+      typeof effort !== 'string' ||
+      !['low', 'mid', 'high', 'xhigh', 'max'].includes(effort)
+    ) {
+      return { ok: false, error: 'E_BAD_PARAMS' }
+    }
+    result.effort = effort as ReasoningEffortDto
+  }
+
+  const ranges: Array<['temperature' | 'topP' | 'maxTokens', number, number]> = [
     ['temperature', 0, 2],
     ['topP', 0, 1],
     ['maxTokens', 1, 32_000]

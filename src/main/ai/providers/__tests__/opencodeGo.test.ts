@@ -225,3 +225,39 @@ test('Anthropic SSE：非 text_delta 事件被忽略，空行与脏行不炸流'
   )
   assert.equal(text, 'A')
 })
+
+test('Anthropic 线：thinking budget 与首条 assistant 裁剪', async () => {
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.write('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}\n\n')
+      response.write('data: {"type":"message_stop"}\n\n')
+      response.end()
+    },
+    async (baseUrl, requests) => {
+      const provider = new OpencodeGoProvider()
+      for await (const _chunk of provider.streamChat({
+        apiKey: 'oc_sk_test',
+        baseUrl,
+        model: 'claude-sonnet-4-5',
+        supportedEfforts: ['low', 'mid', 'high', 'xhigh', 'max'],
+        messages: [
+          { role: 'assistant', content: '上一轮的回复' },
+          { role: 'user', content: '继续' }
+        ],
+        params: { effort: 'high', maxTokens: 2048 }
+      })) {
+        // 消费
+      }
+      const body = JSON.parse(requests[0].body) as {
+        thinking?: { type: string; budget_tokens: number }
+        max_tokens: number
+        messages: Array<{ role: string; content: string }>
+      }
+      assert.deepEqual(body.thinking, { type: 'enabled', budget_tokens: 4096 })
+      assert.ok(body.max_tokens > 4096, 'max_tokens 必须大于 budget')
+      assert.equal(body.messages[0].role, 'user', '开头 assistant 必须被裁掉')
+      assert.equal(body.messages.length, 1)
+    }
+  )
+})

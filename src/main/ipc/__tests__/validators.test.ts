@@ -9,6 +9,7 @@ import {
   isAgentRunRequest,
   isAssistantDraft,
   isChatSendRequest,
+  isConversationModelPatch,
   isCreateConversationRequest,
   isProviderSettingsDraft,
   isSaveProviderAccountRequest,
@@ -133,4 +134,24 @@ test('isUsageRange：只认四档时间窗', () => {
   assert.equal(isUsageRange('all'), true)
   assert.equal(isUsageRange('1y'), false)
   assert.equal(isUsageRange(null), false)
+})
+
+test('effort 参数：合法五档通过，非法值被拒', () => {
+  assert.equal(isConversationModelPatch({ params: { effort: 'xhigh' } }), true)
+  assert.equal(isConversationModelPatch({ params: { effort: null } }), true)
+  assert.equal(isConversationModelPatch({ params: { effort: 'ultra' } }), false)
+  assert.equal(
+    isAssistantDraft({ name: 'A', params: { effort: 'max' } }),
+    true
+  )
+  assert.equal(
+    isAssistantDraft({ name: 'A', params: { effort: 'huge' } }),
+    false
+  )
+})
+
+test('isCreateConversationRequest：groupId 可选，给了必须是字符串或 null', () => {
+  assert.equal(isCreateConversationRequest({ groupId: 'g-1' }), true)
+  assert.equal(isCreateConversationRequest({ groupId: null }), true)
+  assert.equal(isCreateConversationRequest({ groupId: 42 }), false)
 })

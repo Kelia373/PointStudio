@@ -5,6 +5,8 @@
 // 本文件禁止 import electron / react，也禁止自己读环境变量或配置文件——
 // 密钥、baseUrl 一律由外壳注入进来。
 
+import type { ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+
 export type ChatRole = 'system' | 'user' | 'assistant'
 
 export interface ChatMessageInput {
@@ -16,6 +18,8 @@ export interface ChatStreamParams {
   temperature?: number
   maxTokens?: number
   topP?: number
+  /** 思考强度；缺省 / null 表示跟随模型默认。 */
+  effort?: ReasoningEffortDto | null
 }
 
 export interface ChatStreamRequest {
@@ -29,6 +33,11 @@ export interface ChatStreamRequest {
   sessionId?: string
   /** 收到 SSE 尾帧 usage 时回调；不注入则不解析。 */
   onUsage?: (usage: TokenUsageSample) => void
+  /**
+   * 这条通道真实支持的思考档位（由引擎按模型能力算好）。
+   * 具体怎么落参数由 provider 按自己的 wire 决定，避免「档位」与「发法」分叉。
+   */
+  supportedEfforts?: ReasoningEffortDto[]
 }
 
 /** 一次真实调用的 token 用量（来自平台返回，不是估算）。 */
