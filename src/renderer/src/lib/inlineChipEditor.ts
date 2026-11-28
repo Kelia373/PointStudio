@@ -196,6 +196,21 @@ export interface EditorCaret {
   offset: number
 }
 
+/** 用 `insert` 替换 `[start, end)`，返回新文本与替换后的光标位置。 */
+export function replaceTextRange(
+  text: string,
+  start: number,
+  end: number,
+  insert: string
+): { text: string; caret: number } {
+  const safeStart = Math.max(0, Math.min(start, text.length))
+  const safeEnd = Math.max(safeStart, Math.min(end, text.length))
+  return {
+    text: `${text.slice(0, safeStart)}${insert}${text.slice(safeEnd)}`,
+    caret: safeStart + insert.length
+  }
+}
+
 /**
  * 粘贴净化：只留纯文本。
  *
@@ -234,7 +249,10 @@ export function setLogicalCaretOffset(
         return { path: [...prefix, index], offset: Math.max(0, Math.min(rest, node.text.length)) }
       }
       if (node.tag === 'br' || slotOf(node) !== null) {
-        return { path: [...prefix, index], offset: rest > 0 ? 1 : 0 }
+        // 原子叶子（<br> 无子节点、胶囊 contenteditable=false）不能把 Range
+        // 锚在元素内部：range.setStart(br, 1) 会抛 IndexSizeError。落点交给
+        // 父容器 + 子下标（前 = index，后 = index + 1）。
+        return { path: prefix, offset: rest > 0 ? index + 1 : index }
       }
       if (length === 0) {
         continue

@@ -26,6 +26,7 @@ import {
   caretAfterRenumber,
   getLogicalCaretOffset,
   parseEditorSegments,
+  replaceTextRange,
   sanitizePastedText,
   serializeEditorNodes,
   setLogicalCaretOffset,
@@ -134,8 +135,28 @@ function caretOffsetOf(el: HTMLElement): number | null {
   return getLogicalCaretOffset(toEditorNodes(el.childNodes), path, range.startOffset)
 }
 
-function applyCaret(el: HTMLElement, offset: number): void {
-  const caret = setLogicalCaretOffset(toEditorNodes(el.childNodes), offset)
+/** 选区的逻辑起止（框选替换用）；选区不在编辑区内时返回 null。 */
+function selectionRangeOf(el: HTMLElement): { start: number; end: number } | null {
+  const selection = window.getSelection()
+  if (selection === null || selection.rangeCount === 0) {
+    return null
+  }
+  const range = selection.getRangeAt(0)
+  if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+    return null
+  }
+  const startPath = pathTo(el, range.startContainer)
+  const endPath = pathTo(el, range.endContainer)
+  if (startPath === null || endPath === null) {
+    return null
+  }
+  const nodes = toEditorNodes(el.childNodes)
+  const start = getLogicalCaretOffset(nodes, startPath, range.startOffset)
+  const end = getLogicalCaretOffset(nodes, endPath, range.endOffset)
+  return start <= end ? { start, end } : { start: end, end: start }
+}
+
+function applyCaret(el: HTMLElement, offset: number): void {  const caret = setLogicalCaretOffset(toEditorNodes(el.childNodes), offset)
   const node = resolvePath(el, caret.path) ?? el
   const selection = window.getSelection()
   if (selection === null) {
@@ -225,10 +246,17 @@ function imageFilesOf(data: DataTransfer | null): File[] {
   if (data === null) {
     return []
   }
-  return Array.from(data.items)
-    .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+  const fromItems = Array.from(data.items)
+    .filter((item) => item.kind === 'file')
     .map((item) => item.getAsFile())
     .filter((file): file is File => file !== null)
+  const pool = data.files.length > 0 ? Array.from(data.files) : fromItems
+  // Windows 复制本地图片文件时 File.type 常是空串：按扩展名兜住，别误拒。
+  return pool.filter(
+    (file) =>
+      file.type.startsWith('image/') ||
+      (file.type === '' && /\.(png|jpe?g|webp|gif)$/i.test(file.name))
+  )
 }
 
 export default function Composer({
@@ -308,7 +336,7 @@ export default function Composer({
 
   const candidates = mentionCandidates ?? []
   const mentioned = mentionedIds ?? []
-  const slotKey = images.map((image) => image.index).join(',')
+  const slotKey = images.map((image) => `${image.index}:${image.dto.id}`).join(',')
 
   /** 后缀优先：.svg 一律拒，哪怕 File.type 写着 image/png（宁可多拦一次）。 */
   function mimeOf(file: File): string {
@@ -345,16 +373,28 @@ export default function Composer({
     return caretOffsetOf(el) ?? fallback
   }
 
-  /** 在逻辑光标处插入纯文本（粘贴 / Shift+Enter 共用）。 */
+  /** 用纯文本替换当前选区（粘贴 / Shift+Enter 共用）；框选覆盖胶囊时同步删图。 */
   function insertPlainText(text: string): void {
-    const caret = currentCaret(draft.length)
-    const next = `${draft.slice(0, caret)}${text}${draft.slice(caret)}`
-    onDraftChange(next)
-    pendingCaretRef.current = caret + text.length
+    const el = editorRef.current
+    const range = el !== null ? selectionRangeOf(el) : null
+    const start = range?.start ?? currentCaret(draft.length)
+    const end = range?.end ?? start
+    const replaced = replaceTextRange(draft, start, end, text)
+    let nextText = replaced.text
+    if (onImagesChange !== undefined && images.length > 0) {
+      const synced = syncImagesWithText(nextText, images)
+      if (synced.images.length !== images.length) {
+        onImagesChange(synced.images)
+      }
+      nextText = synced.text
+    }
+    const caret = Math.min(replaced.caret, nextText.length)
+    onDraftChange(nextText)
+    pendingCaretRef.current = caret
     requestAnimationFrame(() => {
       editorRef.current?.focus()
       if (editorRef.current !== null) {
-        applyCaret(editorRef.current, caret + text.length)
+        applyCaret(editorRef.current, caret)
       }
     })
   }
@@ -790,7 +830,13 @@ export default function Composer({
       if (editor !== null && editor.contains(target)) {
         return
       }
-      if (target.closest('input, textarea, [contenteditable="true"]') !== null) {
+      // 无值 contentEditable 的属性值是 ""，modal 打开时也不该抢粘贴。
+      if (
+        target.isContentEditable ||
+        target.closest(
+          'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="dialog"]'
+        ) !== null
+      ) {
         return
       }
     }

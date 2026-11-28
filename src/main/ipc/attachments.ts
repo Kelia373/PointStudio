@@ -4,6 +4,7 @@
 import { clipboard, ipcMain } from 'electron'
 import { readFile, stat } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { MAX_IMAGE_BYTES, type AttachmentService } from '../services/attachmentService.ts'
 
@@ -60,17 +61,24 @@ function filePathsFromUriList(text: string): string[] {
     .filter((line) => line !== '' && !line.startsWith('#'))
     .map((line) => {
       try {
-        const url = new URL(line)
-        if (url.protocol !== 'file:') {
-          return ''
-        }
-        // Windows: /C:/Users/... → C:/Users/...
-        const path = decodeURIComponent(url.pathname)
-        return /^\/[A-Za-z]:/.test(path) ? path.slice(1) : path
+        // fileURLToPath 天然处理盘符、%20 空格、中文用户名与 UNC 路径。
+        return fileURLToPath(line)
       } catch {
         return ''
       }
     })
+    .filter((item) => item !== '')
+}
+
+/**
+ * Windows CF_HDROP 的兜底格式：资源管理器复制文件时可能只给这一个私有类型，
+ * 内容是 UTF-16LE 的路径列表，以 \0 分隔。
+ */
+function filePathsFromFileNameW(buffer: Buffer): string[] {
+  return buffer
+    .toString('utf16le')
+    .split('\u0000')
+    .map((item) => item.trim())
     .filter((item) => item !== '')
 }
 
@@ -117,12 +125,14 @@ export function registerAttachmentsIpc(options: AttachmentsIpcOptions): void {
         const items = await clipboard.read()
         const drafts: ClipboardImageDraft[] = []
         let uriList = ''
+        const fileNameWPaths: string[] = []
 
         for (const item of items) {
           if (drafts.length >= limit) {
             break
           }
-          const imageType = (item.types ?? []).find((type) =>
+          const types = item.types ?? []
+          const imageType = types.find((type) =>
             (CLIPBOARD_IMAGE_TYPES as readonly string[]).includes(type)
           )
           if (imageType !== undefined) {
@@ -141,17 +151,31 @@ export function registerAttachmentsIpc(options: AttachmentsIpcOptions): void {
             }
             continue
           }
-          if ((item.types ?? []).includes('text/uri-list')) {
+          if (types.includes('text/uri-list')) {
             const blob = await item.getType('text/uri-list')
             if (blob instanceof Blob) {
               uriList = await blob.text()
             }
           }
+          // Windows 私有格式：CF_HDROP / FileNameW（UTF-16LE 路径 + \0 分隔）。
+          const fileNameWType = types.find((type) =>
+            type.toLowerCase().includes('filenamew')
+          )
+          if (fileNameWType !== undefined) {
+            const blob = await item.getType(fileNameWType)
+            if (blob instanceof Blob) {
+              fileNameWPaths.push(
+                ...filePathsFromFileNameW(Buffer.from(await blob.arrayBuffer()))
+              )
+            }
+          }
         }
 
         // 资源管理器 Ctrl+C 复制的本地图片文件：只贴第一张，多选交给拖入。
-        if (drafts.length === 0 && uriList !== '') {
-          for (const file of filePathsFromUriList(uriList)) {
+        const localPaths =
+          fileNameWPaths.length > 0 ? fileNameWPaths : filePathsFromUriList(uriList)
+        if (drafts.length === 0 && localPaths.length > 0) {
+          for (const file of localPaths) {
             const mime = MIME_BY_EXT[extname(file).toLowerCase()]
             if (mime === undefined) {
               continue

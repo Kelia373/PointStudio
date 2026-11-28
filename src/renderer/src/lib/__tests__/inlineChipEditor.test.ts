@@ -14,6 +14,7 @@ import {
   sanitizePastedText,
   serializeEditorNodes,
   setLogicalCaretOffset,
+  replaceTextRange,
   type EditorDomNode
 } from '../inlineChipEditor.ts'
 import { removeImageSlot, type PendingImage } from '../imageTokens.ts'
@@ -183,4 +184,32 @@ test('删图后光标重定位：按文字字符锚定，不随重新编号漂�
 
   // 光标在第一张图之前：普通文字没变，位置原样。
   assert.equal(caretAfterRenumber(oldText, next.text, 1), 1)
+})
+
+test('原子节点落点给父容器：<br> 与胶囊不会把 Range 锚到元素内部', () => {
+  // 胶囊：前后两个落点都必须是父容器的子下标（锚进 span 内部会落进
+  // contenteditable=false，锚进 <br> 则 setStart(br,1) 直接 IndexSizeError）。
+  const chipNodes: EditorDomNode[] = [text('ab'), chip(1)]
+  assert.deepEqual(setLogicalCaretOffset(chipNodes, 2), { path: [0], offset: 2 })
+  assert.deepEqual(setLogicalCaretOffset(chipNodes, 2 + '[Image #1]'.length), {
+    path: [],
+    offset: 2
+  })
+
+  const brNodes: EditorDomNode[] = [text('a'), br(), text('b')]
+  assert.deepEqual(setLogicalCaretOffset(brNodes, 1), { path: [0], offset: 1 })
+  assert.deepEqual(setLogicalCaretOffset(brNodes, 2), { path: [], offset: 2 })
+
+  // 互逆性仍然成立：父容器路径能换算出同一个逻辑位置。
+  assert.equal(getLogicalCaretOffset(brNodes, [], 2), 2)
+})
+
+test('replaceTextRange：框选替换（含覆盖胶囊）后光标落在插入文本之后', () => {
+  assert.deepEqual(replaceTextRange('abc', 1, 3, 'Z'), { text: 'aZ', caret: 2 })
+  assert.deepEqual(replaceTextRange('abc', 5, 9, 'X'), { text: 'abcX', caret: 4 })
+
+  // 框选覆盖一整颗胶囊：token 被替换掉，后续文字接上。
+  const replaced = replaceTextRange('a [Image #1] b', 2, 12, '')
+  assert.equal(replaced.text, 'a  b')
+  assert.equal(replaced.caret, 2)
 })
