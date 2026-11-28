@@ -117,7 +117,8 @@ export function renumber(
     .filter((image): image is PendingImage => image !== undefined)
     .map((image, position) => ({ ...image, index: position + 1 }))
 
-  return { text: nextText.replace(/  +/g, ' '), images: nextImages }
+  // 不压空格：编号重排不该动用户正文的排版（缩进、双空格）。
+  return { text: nextText, images: nextImages }
 }
 
 /**

@@ -368,6 +368,11 @@ void app.whenReady().then(async () => {
   })
   registerBackupIpc({ backup: services.backup })
   registerAttachmentsIpc({ attachments })
+  // 启动时清一次孤儿附件：选中即落盘、放弃发送/删缩略图都会留下文件，
+  // 只在删会话时回收会越积越多。
+  void collectReferencedImages()
+    .then((ids) => attachments.pruneUnreferenced(ids))
+    .catch(() => undefined)
   registerClipboardIpc()
 
   // 工具注册表：内置只读工具 + 工作区读取。MCP 工具待传输层落地后再注册。

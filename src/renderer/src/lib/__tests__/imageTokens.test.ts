@@ -127,3 +127,8 @@ test('光标不贴着标记时不动（正常退格交给浏览器）', () => {
   assert.equal(result.text, text)
   assert.equal(result.removedSlot, null)
 })
+
+test('renumber 不再压掉用户正文里的连续空格', () => {
+  const next = renumber('hello  world [Image #1]', images(1))
+  assert.equal(next.text, 'hello  world [Image #1]')
+})
