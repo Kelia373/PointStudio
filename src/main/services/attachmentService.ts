@@ -107,6 +107,37 @@ export class AttachmentService {
     }
   }
 
+  /** 直接从字节落盘：剪贴板截图走这条路，省掉一次 base64 往返。 */
+  async saveBytes(
+    bytes: Buffer,
+    mimeType: string,
+    name?: string
+  ): Promise<ServiceResult<MessageImageDto>> {
+    if (!isAllowedMime(mimeType)) {
+      return { ok: false, errors: ['E_IMAGE_TYPE'] }
+    }
+    if (bytes.length === 0) {
+      return { ok: false, errors: ['E_IMAGE_INVALID'] }
+    }
+    if (bytes.length > MAX_IMAGE_BYTES) {
+      return { ok: false, errors: ['E_IMAGE_TOO_LARGE'] }
+    }
+
+    const id = this.deps.newId()
+    await mkdir(this.dir, { recursive: true })
+    await writeFile(this.pathFor(id, mimeType), bytes)
+
+    return {
+      ok: true,
+      value: {
+        id,
+        mimeType,
+        name: safeName(name),
+        sizeBytes: bytes.length
+      }
+    }
+  }
+
   /** 图元数据 → data URL（渲染层 <img src> 直接用）。 */
   async readDataUrl(id: string): Promise<ServiceResult<string>> {
     const found = await this.locate(id)
