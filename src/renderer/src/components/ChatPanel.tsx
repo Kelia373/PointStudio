@@ -604,7 +604,9 @@ export default function ChatPanel() {
 
     const requestId = crypto.randomUUID()
     // 记快照：后端拦截（自动路由 / catalog 未命中）时用 onError 回滚。
-    inflightSnapshot.current = snapshot
+    // 只有普通发送才记快照：历史重发的图片是列表里现成的（previewUrl 为空），
+    // 若错误回填会把破图塞回输入框，而历史消息本来就在列表里。
+    inflightSnapshot.current = textOverride === undefined ? snapshot : null
     // 乐观渲染：用户消息（含附图缩略图）与空气泡先上屏，chunk 到达即可追加。
     setMessages((prev) =>
       startTurn(prev, {
@@ -1148,8 +1150,16 @@ export default function ChatPanel() {
         .map((agent) => ({ id: agent.id, name: agent.name })),
     [activeGroup, assistants]
   )
+  const prevActiveIdRef = useRef<string | null>(null)
   useEffect(() => {
     setMentionedIds([])
+    // 切会话必须清掉待发图，否则 A 会话贴了图没发、切到 B 会串进去；
+    // 草稿里残留的孤立 [Image #N] 也一并剥掉（首次挂载不清，避免抹掉恢复的草稿）。
+    if (prevActiveIdRef.current !== null && prevActiveIdRef.current !== activeId) {
+      setPendingImages([])
+      setDraft((current) => current.replace(/\[Image #\d+\]\s*/g, ''))
+    }
+    prevActiveIdRef.current = activeId
   }, [activeId])
   const composerModelPolicy = resolveConversationComposerPolicy({
     assistantId: activeConversation?.assistantId ?? null,
