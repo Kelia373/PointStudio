@@ -1,5 +1,7 @@
 // 单条消息。纯展示组件：只有 props，没有状态、没有副作用。
 // 渲染层的硬规则——组件不碰存储、网络、模型。
+import { useState } from 'react'
+
 import type { HandoffEnvelopeDto, RouteDecisionDto } from '../../../shared/types/ipc.ts'
 import { Slot } from '../runtime/SlotRenderer'
 import ConfirmButton from './ConfirmButton'
@@ -8,6 +10,7 @@ import HandoffPill from './HandoffPill'
 import MemorySpark from './MemorySpark'
 import RouteBadge from './RouteBadge'
 import BrandLogo from './BrandLogo'
+import ThinkingBlock from './ThinkingBlock'
 
 export type BubbleRole = 'user' | 'assistant'
 
@@ -29,7 +32,12 @@ export default function MessageBubble({
   handoff = null,
   handoffFrom = '主人',
   handoffTo = '',
-  onOpenInSplit
+  onOpenInSplit,
+  reasoning,
+  reasoningMs,
+  streamingReasoning = false,
+  onEdit,
+  onBranch
 }: {
   role: BubbleRole
   content: string
@@ -62,7 +70,26 @@ export default function MessageBubble({
   handoffFrom?: string
   handoffTo?: string
   onOpenInSplit?: () => void
+  /** 模型思考内容；有值时在正文上方渲染折叠卡。 */
+  reasoning?: string
+  reasoningMs?: number
+  streamingReasoning?: boolean
+  /** 用户消息：原位编辑并重发。 */
+  onEdit?: (next: string) => void
+  /** 通用：从此处分叉为新会话。 */
+  onBranch?: () => void
 }) {
+  const [editing, setEditing] = useState(false)
+  const [draftEdit, setDraftEdit] = useState(content)
+  function commitEdit(): void {
+    const next = draftEdit.trim()
+    if (next === '' || !onEdit) {
+      return
+    }
+    setEditing(false)
+    onEdit(next)
+  }
+
   if (handoff) {
     return (
       <HandoffPill
@@ -92,8 +119,49 @@ export default function MessageBubble({
       </div>
 
       {role === 'assistant' ? (
-        // 长回答走双轨：同一块地方在「结论 / 过程」之间原地换镜头。
-        <DualTrack content={content} streaming={streaming} />
+        <>
+          {reasoning && reasoning.trim() !== '' ? (
+            <ThinkingBlock
+              reasoning={reasoning}
+              streamingReasoning={streamingReasoning}
+              durationMs={reasoningMs}
+            />
+          ) : null}
+          <DualTrack content={content} streaming={streaming} />
+        </>
+      ) : editing ? (
+        <div className="msg__edit">
+          <textarea
+            className="msg__edit-input"
+            value={draftEdit}
+            autoFocus
+            rows={3}
+            onChange={(event) => setDraftEdit(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setEditing(false)
+              }
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                event.preventDefault()
+                commitEdit()
+              }
+            }}
+          />
+          <div className="msg__edit-actions">
+            <button
+              className="msg__act"
+              type="button"
+              onClick={commitEdit}
+              disabled={draftEdit.trim() === ''}
+            >
+              保存并重发
+            </button>
+            <button className="msg__act" type="button" onClick={() => setEditing(false)}>
+              取消
+            </button>
+          </div>
+        </div>
       ) : (
         <div className="msg__body">
           {content}
@@ -120,6 +188,29 @@ export default function MessageBubble({
       ) : null}
 
       <div className="msg__acts">
+        {role === 'user' && onEdit ? (
+          <button
+            className="msg__act"
+            type="button"
+            title="编辑后从这句重新发"
+            onClick={() => {
+              setDraftEdit(content)
+              setEditing(true)
+            }}
+          >
+            编辑
+          </button>
+        ) : null}
+        {onBranch ? (
+          <button
+            className="msg__act"
+            type="button"
+            title="从此处分叉为新对话"
+            onClick={onBranch}
+          >
+            分叉
+          </button>
+        ) : null}
         {onCopy ? (
           <button className="msg__act" type="button" onClick={onCopy}>
             复制

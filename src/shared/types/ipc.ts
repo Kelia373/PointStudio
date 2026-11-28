@@ -11,7 +11,8 @@ export const CHAT_CHANNELS = {
   done: 'chat:done',
   error: 'chat:error',
   notice: 'chat:notice',
-  cancel: 'chat:cancel'
+  cancel: 'chat:cancel',
+  usage: 'chat:usage'
 } as const
 
 /** 错误码是稳定契约：渲染进程按码判断，不解析文案、不看堆栈。 */
@@ -47,6 +48,8 @@ export type ChatSendResult = { ok: true; mode: ChatMode } | { ok: false; code: C
 export interface ChatChunkEvent {
   id: string
   chunk: string
+  /** 缺省为 'content'（正文）；'reasoning' 表示模型的思考增量。 */
+  kind?: 'content' | 'reasoning'
 }
 
 /** 流结束。 */
@@ -58,6 +61,15 @@ export interface ChatDoneEvent {
 export interface ChatNoticeEvent {
   id: string
   droppedCount: number
+}
+
+/** 一轮真实 token 用量（来自平台 usage 尾帧）。 */
+export interface ChatUsageEvent {
+  id: string
+  promptTokens: number
+  completionTokens: number
+  cacheHitTokens: number
+  totalTokens: number
 }
 
 /** 流中途失败。 */
@@ -76,6 +88,7 @@ export interface ChatBridge {
   onDone(listener: (event: ChatDoneEvent) => void): () => void
   onError(listener: (event: ChatErrorEvent) => void): () => void
   onNotice(listener: (event: ChatNoticeEvent) => void): () => void
+  onUsage(listener: (event: ChatUsageEvent) => void): () => void
 }
 
 /** preload 暴露到 window.pointstudio 上的完整形态。 */
@@ -91,7 +104,11 @@ export const CONVERSATION_CHANNELS = {
   setAssistant: 'conversation:set-assistant',
   setModel: 'conversation:set-model',
   deleteTurn: 'conversation:delete-turn',
-  exportMarkdown: 'conversation:export-markdown'
+  exportMarkdown: 'conversation:export-markdown',
+  /** 裁剪：删除指定消息及其后续（用于编辑重发）。 */
+  truncateFrom: 'conversation:truncate-from',
+  /** 分叉：复制截至某条消息的上下文到新会话。 */
+  branch: 'conversation:branch'
 } as const
 
 /** 跨进程传输用的会话形态：只放界面需要显示的字段。 */
@@ -176,6 +193,10 @@ export interface MessageDto {
   missionId?: string | null
   /** 交接 / 派单 / 收据卡；有值时主群只渲染一行瘦胶囊。 */
   handoff?: HandoffEnvelopeDto | null
+  /** 模型深度思考内容；普通无推理回复缺省。 */
+  reasoning?: string
+  /** 思考阶段耗时（毫秒）；缺省则不显示秒数。 */
+  reasoningMs?: number
 }
 
 /**
@@ -271,6 +292,19 @@ export interface ConversationBridge {
   deleteTurn(conversationId: string, messageId: string): Promise<IpcResult<{ removed: number }>>
   /** 导出为 Markdown 文本（界面负责写文件或复制）。 */
   exportMarkdown(conversationId: string): Promise<IpcResult<string>>
+  /** 删除 fromMessageId 及其后的所有消息。 */
+  truncateFrom(
+    conversationId: string,
+    fromMessageId: string
+  ): Promise<IpcResult<{ removed: number }>>
+  /** 复制截至 upToMessageId（含）的消息到新会话。 */
+  branch(request: BranchConversationRequest): Promise<IpcResult<ConversationDto>>
+}
+
+export interface BranchConversationRequest {
+  conversationId: string
+  upToMessageId: string
+  title?: string
 }
 
 

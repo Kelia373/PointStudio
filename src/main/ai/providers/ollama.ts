@@ -16,7 +16,7 @@ export const OLLAMA_DEFAULT_BASE_URL = 'http://127.0.0.1:11434'
 export const OLLAMA_DEFAULT_MODEL = 'qwen2.5'
 
 interface OllamaChunk {
-  message?: { content?: string }
+  message?: { content?: string; thinking?: string }
   done?: boolean
   error?: string
 }
@@ -27,7 +27,8 @@ interface OllamaChunk {
  * 边界与 SSE 版一致：半行、跨 chunk 的多字节字符、末尾无换行。
  */
 export async function* parseOllamaNdjson(
-  chunks: AsyncIterable<Uint8Array>
+  chunks: AsyncIterable<Uint8Array>,
+  onReasoning?: (delta: string) => void
 ): AsyncGenerator<string, void, unknown> {
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
@@ -46,6 +47,10 @@ export async function* parseOllamaNdjson(
     }
     if (parsed.done === true) {
       return { done: true }
+    }
+    const thinking = parsed.message?.thinking
+    if (onReasoning && typeof thinking === 'string' && thinking !== '') {
+      onReasoning(thinking)
     }
     const content = parsed.message?.content
     return {
@@ -130,6 +135,6 @@ export class OllamaProvider implements ChatProvider {
       throw new ProviderError('E_STREAM', '本地模型服务未返回流式响应体')
     }
 
-    yield* parseOllamaNdjson(response.body)
+    yield* parseOllamaNdjson(response.body, request.onReasoning)
   }
 }

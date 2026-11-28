@@ -656,3 +656,42 @@ test('@ 停用的成员时回落会话绑定的组长', async () => {
   assert.deepEqual(seen, ['deepseek-chat'])
   assert.deepEqual(usage, ['agent-a'])
 })
+
+test('思考流落盘：assistant 消息带 reasoning/reasoningMs，下一轮历史不携带思考', async () => {
+  const histories: string[][] = []
+  let round = 0
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      histories.push(request.messages.map((message) => message.content))
+      if (round === 0) {
+        request.onReasoning?.('先想想')
+      }
+      round += 1
+      yield '答案'
+    }
+  }
+  await withFlow(async ({ conversations, conversationId }) => {
+    for await (const _chunk of streamAssistantReply(conversationId, '第一问', {
+      conversations,
+      assistants: { get: async () => null },
+      engine: { provider, apiKey: 'k', baseUrl: 'x', model: 'm' }
+    })) {
+      // 消费
+    }
+    const messages = await conversations.listMessages(conversationId)
+    const assistant = messages.find((item) => item.role === 'assistant')
+    assert.equal(assistant?.reasoning, '先想想')
+    assert.equal(typeof assistant?.reasoningMs, 'number')
+
+    for await (const _chunk of streamAssistantReply(conversationId, '第二问', {
+      conversations,
+      assistants: { get: async () => null },
+      engine: { provider, apiKey: 'k', baseUrl: 'x', model: 'm' }
+    })) {
+      // 消费
+    }
+  })
+  const second = histories[1]
+  assert.equal(second.some((content) => content.includes('先想想')), false)
+})

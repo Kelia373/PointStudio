@@ -16,7 +16,9 @@ import {
 } from './types.ts'
 
 interface DeltaPayload {
-  choices?: Array<{ delta?: { content?: string } }>
+  choices?: Array<{
+    delta?: { content?: string; reasoning_content?: string; reasoning?: string }
+  }>
   usage?: {
     prompt_tokens?: number
     completion_tokens?: number
@@ -49,18 +51,19 @@ function usageFromPayload(parsed: DeltaPayload): TokenUsageSample | null {
 interface LineOutcome {
   done: boolean
   texts: string[]
+  reasoning: string[]
   usage: TokenUsageSample | null
 }
 
 function parseLine(line: string): LineOutcome {
   const trimmed = line.trim()
   if (trimmed === '' || !trimmed.startsWith('data:')) {
-    return { done: false, texts: [], usage: null }
+    return { done: false, texts: [], reasoning: [], usage: null }
   }
 
   const payload = trimmed.slice('data:'.length).trim()
   if (payload === '[DONE]') {
-    return { done: true, texts: [], usage: null }
+    return { done: true, texts: [], reasoning: [], usage: null }
   }
 
   let parsed: DeltaPayload
@@ -68,13 +71,16 @@ function parseLine(line: string): LineOutcome {
     parsed = JSON.parse(payload) as DeltaPayload
   } catch {
     // 单个畸形事件不该炸掉整条流：跳过它继续读后面的内容。
-    return { done: false, texts: [], usage: null }
+    return { done: false, texts: [], reasoning: [], usage: null }
   }
 
-  const content = parsed.choices?.[0]?.delta?.content
+  const delta = parsed.choices?.[0]?.delta
+  const content = delta?.content
+  const reasoning = delta?.reasoning_content ?? delta?.reasoning
   return {
     done: false,
     texts: typeof content === 'string' && content !== '' ? [content] : [],
+    reasoning: typeof reasoning === 'string' && reasoning !== '' ? [reasoning] : [],
     usage: usageFromPayload(parsed)
   }
 }
@@ -91,7 +97,8 @@ function parseLine(line: string): LineOutcome {
  */
 export async function* parseOpenAiSseStream(
   chunks: AsyncIterable<Uint8Array>,
-  onUsage?: (usage: TokenUsageSample) => void
+  onUsage?: (usage: TokenUsageSample) => void,
+  onReasoning?: (delta: string) => void
 ): AsyncGenerator<string, void, unknown> {
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
@@ -112,6 +119,11 @@ export async function* parseOpenAiSseStream(
       buffer = buffer.slice(newlineIndex + 1)
       const outcome = parseLine(line)
       emitUsage(outcome.usage)
+      if (onReasoning) {
+        for (const delta of outcome.reasoning) {
+          onReasoning(delta)
+        }
+      }
       if (outcome.done) {
         return true
       }
@@ -121,6 +133,11 @@ export async function* parseOpenAiSseStream(
     if (flushAll && buffer.trim() !== '') {
       const outcome = parseLine(buffer.replace(/\r$/, ''))
       emitUsage(outcome.usage)
+      if (onReasoning) {
+        for (const delta of outcome.reasoning) {
+          onReasoning(delta)
+        }
+      }
       buffer = ''
       if (!outcome.done) {
         yield* outcome.texts
@@ -230,6 +247,6 @@ export class OpenAiCompatibleProvider implements ChatProvider {
       throw new ProviderError('E_STREAM', '模型平台未返回流式响应体')
     }
 
-    yield* parseOpenAiSseStream(response.body, request.onUsage)
+    yield* parseOpenAiSseStream(response.body, request.onUsage, request.onReasoning)
   }
 }

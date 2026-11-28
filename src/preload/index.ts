@@ -13,6 +13,7 @@ import {
   PROVIDERS_CHANNELS,
   type AssistantBridge,
   type AssistantDto,
+  type BranchConversationRequest,
   type AssistantDraftRequest,
   type ChatBridge,
   type ChatChunkEvent,
@@ -21,6 +22,7 @@ import {
   type ChatNoticeEvent,
   type ChatSendRequest,
   type ChatSendResult,
+  type ChatUsageEvent,
   type ConversationBridge,
   type ConversationDto,
   type ConversationParamsDto,
@@ -83,7 +85,9 @@ const chat: ChatBridge = {
   onError: (listener: (event: ChatErrorEvent) => void): Unsubscribe =>
     subscribe(CHAT_CHANNELS.error, listener),
   onNotice: (listener: (event: ChatNoticeEvent) => void): Unsubscribe =>
-    subscribe(CHAT_CHANNELS.notice, listener)
+    subscribe(CHAT_CHANNELS.notice, listener),
+  onUsage: (listener: (event: ChatUsageEvent) => void): Unsubscribe =>
+    subscribe(CHAT_CHANNELS.usage, listener)
 }
 
 const conversations: ConversationBridge = {
@@ -120,6 +124,17 @@ const conversations: ConversationBridge = {
   exportMarkdown: (conversationId: string): Promise<IpcResult<string>> =>
     ipcRenderer.invoke(CONVERSATION_CHANNELS.exportMarkdown, conversationId) as Promise<
       IpcResult<string>
+    >,
+  truncateFrom: (
+    conversationId: string,
+    fromMessageId: string
+  ): Promise<IpcResult<{ removed: number }>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.truncateFrom, conversationId, fromMessageId) as Promise<
+      IpcResult<{ removed: number }>
+    >,
+  branch: (request: BranchConversationRequest): Promise<IpcResult<ConversationDto>> =>
+    ipcRenderer.invoke(CONVERSATION_CHANNELS.branch, request) as Promise<
+      IpcResult<ConversationDto>
     >
 }
 

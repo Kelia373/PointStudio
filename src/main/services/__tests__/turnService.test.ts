@@ -7,7 +7,7 @@ import { join } from 'node:path'
 
 import { JsonFileStore } from '../../data/fileStore.ts'
 import { ConversationService } from '../conversationService.ts'
-import { deleteTurn, copyMessageText } from '../turnService.ts'
+import { branchConversation, copyMessageText, deleteTurn, truncateFrom } from '../turnService.ts'
 import type { Conversation, Message } from '../../ai/domain/conversation.ts'
 
 async function withTurns(
@@ -105,5 +105,106 @@ test('复制消息文本：原样返回，不改动数据', async () => {
     const text = await copyMessageText(service, conversationId, ids[0])
     assert.equal(text, '第一问')
     assert.equal((await service.listMessages(conversationId)).length, 4)
+  })
+})
+
+test('truncateFrom：删第 2 轮用户消息，后续全清，前面保留', async () => {
+  await withTurns(async ({ service, conversationId, ids }) => {
+    const result = await truncateFrom(service, conversationId, ids[2])
+    assert.equal(result.ok, true)
+    if (result.ok) {
+      assert.equal(result.value.removed, 2)
+    }
+    const left = await service.listMessages(conversationId)
+    assert.deepEqual(left.map((item) => item.content), ['第一问', '第一答'])
+
+    const missing = await truncateFrom(service, conversationId, 'no-such-id')
+    assert.equal(missing.ok, false)
+    assert.equal((await service.listMessages(conversationId)).length, 2)
+  })
+})
+
+test('branchConversation：从第 2 条分叉，源不变，新会话独立拥有前两条', async () => {
+  await withTurns(async ({ service, conversationId, ids }) => {
+    const result = await branchConversation(service, {
+      conversationId,
+      upToMessageId: ids[1]
+    })
+    assert.equal(result.ok, true)
+    if (!result.ok) return
+    assert.notEqual(result.value.id, conversationId)
+    assert.equal((await service.listMessages(conversationId)).length, 4)
+    const copied = await service.listMessages(result.value.id)
+    assert.deepEqual(copied.map((item) => item.content), ['第一问', '第一答'])
+    assert.equal(copied.some((item) => ids.includes(item.id)), false, '消息 ID 必须独立')
+  })
+})
+
+test('branchConversation：主聊天分叉为同 Agent 专题，绝不抢占 isHome', async () => {
+  await withTurns(async ({ service }) => {
+    const home = await service.create({ assistantId: 'a1', isHome: true, title: 'A · 主聊天' })
+    assert.equal(home.ok, true)
+    if (!home.ok) return
+    const added = await service.appendMessage(home.value.id, { role: 'user', content: 'hi' })
+    assert.equal(added.ok, true)
+    if (!added.ok) return
+
+    const branched = await branchConversation(service, {
+      conversationId: home.value.id,
+      upToMessageId: added.value.id
+    })
+    assert.equal(branched.ok, true)
+    if (!branched.ok) return
+    assert.equal(branched.value.assistantId, 'a1')
+    assert.equal(branched.value.isHome, undefined)
+    const source = await service.get(home.value.id)
+    assert.equal(source?.isHome, true)
+  })
+})
+
+test('branchConversation：自由对话继承模型参数，小组分叉落自由对话，标题不超 30 字', async () => {
+  await withTurns(async ({ service }) => {
+    const free = await service.create({ title: '这是一个非常非常非常非常非常非常非常长的会话标题' })
+    assert.equal(free.ok, true)
+    if (!free.ok) return
+    await service.setModel(free.value.id, {
+      model: 'deepseek-chat',
+      providerId: 'deepseek',
+      params: { temperature: 0.3 }
+    })
+    const first = await service.appendMessage(free.value.id, { role: 'user', content: 'q' })
+    assert.equal(first.ok, true)
+    if (!first.ok) return
+    const branched = await branchConversation(service, {
+      conversationId: free.value.id,
+      upToMessageId: first.value.id
+    })
+    assert.equal(branched.ok, true)
+    if (!branched.ok) return
+    assert.equal(branched.value.assistantId, null)
+    assert.equal(branched.value.model, 'deepseek-chat')
+    assert.equal(branched.value.providerId, 'deepseek')
+    assert.equal(branched.value.params?.temperature, 0.3)
+    assert.ok(Array.from(branched.value.title).length <= 30)
+
+    const group = await service.create({
+      title: '小组会话',
+      assistantId: 'a1',
+      groupId: 'g1'
+    })
+    assert.equal(group.ok, true)
+    if (!group.ok) return
+    const msg = await service.appendMessage(group.value.id, { role: 'user', content: 'q' })
+    assert.equal(msg.ok, true)
+    if (!msg.ok) return
+    const fromGroup = await branchConversation(service, {
+      conversationId: group.value.id,
+      upToMessageId: msg.value.id
+    })
+    assert.equal(fromGroup.ok, true)
+    if (fromGroup.ok) {
+      assert.equal(fromGroup.value.assistantId, null)
+      assert.equal(fromGroup.value.groupId, null)
+    }
   })
 })

@@ -51,6 +51,8 @@ export interface ReplyOptions {
   signal?: AbortSignal
   /** 本轮实际接管的 Agent（群聊 @ 覆盖或会话绑定）；只用于记账。 */
   resolvedAssistantId?: string | null
+  /** 模型思考增量。 */
+  onReasoning?: (delta: string) => void
   /** 平台回传真实 token 用量时回调（用于本地账本）。 */
   onUsage?: (sample: { providerId: string; model: string; usage: TokenUsageSample }) => void
 }
@@ -141,6 +143,7 @@ export async function* streamReplyText(
           onUsage: (usage) =>
             options.onUsage?.({ providerId: active.providerId, model, usage })
         }
-      : {})
+      : {}),
+    ...(options.onReasoning ? { onReasoning: options.onReasoning } : {})
   })
 }

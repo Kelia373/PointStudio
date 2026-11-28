@@ -22,6 +22,9 @@ export interface UiMessage {
   missionId?: string | null
   /** 交接卡；有值时主群渲染成一行胶囊。 */
   handoff?: HandoffEnvelopeDto | null
+  /** 模型思考内容 */
+  reasoning?: string
+  reasoningMs?: number
 }
 
 /**
@@ -47,6 +50,19 @@ export function startTurn(
 }
 
 /** 追加一块增量文本；未知 id 直接忽略。 */
+/** 追加模型思考增量（不影响 content）。 */
+export function appendReasoning(messages: UiMessage[], id: string, chunk: string): UiMessage[] {
+  let touched = false
+  const next = messages.map((message) => {
+    if (message.id !== id) {
+      return message
+    }
+    touched = true
+    return { ...message, reasoning: (message.reasoning ?? '') + chunk }
+  })
+  return touched ? next : messages
+}
+
 export function appendChunk(messages: UiMessage[], id: string, chunk: string): UiMessage[] {
   let touched = false
   const next = messages.map((message) => {

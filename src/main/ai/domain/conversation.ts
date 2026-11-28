@@ -57,6 +57,10 @@ export interface Message {
   status: MessageStatus
   /** 可选：旧消息没有这个字段，读取时必须容忍缺失。 */
   references?: MessageReference[]
+  /** 模型深度思考内容；普通无推理回复缺省。 */
+  reasoning?: string
+  /** 思考阶段耗时（毫秒）；缺省则不显示秒数。 */
+  reasoningMs?: number
   createdAt: string
   updatedAt: string
 }

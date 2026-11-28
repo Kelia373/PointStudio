@@ -39,6 +39,14 @@ export function renderConversationMarkdown(
     lines.push(`**${speaker}**${failed}　*${formatTime(message.createdAt)}*`)
     lines.push('')
     // 原样保留内容：代码块、列表、引用都不能被转义破坏。
+    if (message.reasoning) {
+      lines.push('<details><summary>深度思考</summary>')
+      lines.push('')
+      lines.push(message.reasoning)
+      lines.push('')
+      lines.push('</details>')
+      lines.push('')
+    }
     lines.push(message.content)
     lines.push('')
 

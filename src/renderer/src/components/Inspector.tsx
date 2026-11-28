@@ -45,6 +45,8 @@ export default function Inspector({
   effectiveMaxTokens,
   modelFromSession,
   lastRunMs,
+  firstTokenMs = null,
+  lastUsage = null,
   planRun,
   mcpConnections,
   onOpenPlan,
@@ -70,6 +72,15 @@ export default function Inspector({
   /** 模型是否来自会话级覆盖。 */
   modelFromSession: boolean
   lastRunMs: number | null
+  /** 首字延迟（毫秒）；缺省显示未统计。 */
+  firstTokenMs?: number | null
+  /** 本轮真实 token 用量。 */
+  lastUsage?: {
+    promptTokens: number
+    completionTokens: number
+    cacheHitTokens: number
+    totalTokens: number
+  } | null
   planRun: PlanRunState | null
   mcpConnections: McpConnectionDto[]
   onOpenPlan: () => void
@@ -164,7 +175,11 @@ export default function Inspector({
               </div>
               <div className="kv">
                 <span className="kv__k">Token</span>
-                <span className="kv__v">未统计</span>
+                <span className="kv__v">
+                  {lastUsage
+                    ? `入 ${lastUsage.promptTokens} · 出 ${lastUsage.completionTokens} · 缓存 ${lastUsage.cacheHitTokens}`
+                    : '未统计'}
+                </span>
               </div>
             </div>
           </>
@@ -226,7 +241,7 @@ export default function Inspector({
               </div>
               <div className="kv">
                 <span className="kv__k">首字延迟</span>
-                <span className="kv__v">未统计</span>
+                <span className="kv__v">{formatMs(firstTokenMs)}</span>
               </div>
             </div>
 
