@@ -41,6 +41,28 @@ test('三线序列化不得把无图消息改成数组（wireMessages 保形）'
   assert.ok(wire.includes('role: message.role, content: message.content'), '无图分支要保形')
 })
 
+test('粘贴只吃纯文本：先 preventDefault、走净化函数，绝不用 insertHTML', () => {
+  const composer = source('../Composer.tsx')
+  assert.equal(composer.includes('insertHTML'), false, '不允许把外部 HTML 插进编辑区')
+  assert.ok(composer.includes('sanitizePastedText'), '粘贴必须经过净化函数')
+  assert.ok(composer.includes('getData(\'text/plain\')'), '只读 text/plain')
+  const pasteAt = composer.indexOf('function handlePaste')
+  const pasteBody = composer.slice(pasteAt, pasteAt + 900)
+  assert.ok(pasteBody.includes('preventDefault'), '粘贴必须拦掉浏览器默认行为')
+})
+
+test('中文输入法合成期间不重建 DOM、不删胶囊', () => {
+  const composer = source('../Composer.tsx')
+  assert.ok(
+    composer.includes('event.nativeEvent.isComposing || isComposingRef.current'),
+    'keydown 必须先挡合成期'
+  )
+  assert.ok(
+    composer.includes('if (el === null || isComposingRef.current)'),
+    '投影同步必须在合成期直接返回'
+  )
+})
+
 test('输入框不再出现 emoji 占位与独立胶囊行（行内胶囊用矢量图标）', () => {
   const composer = source('../Composer.tsx')
   assert.equal(composer.includes('\u{1F5BC}'), false, '不再用 emoji 当图片占位')

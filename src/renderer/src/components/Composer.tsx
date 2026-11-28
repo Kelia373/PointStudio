@@ -25,6 +25,7 @@ import {
 import {
   getLogicalCaretOffset,
   parseEditorSegments,
+  sanitizePastedText,
   serializeEditorNodes,
   setLogicalCaretOffset,
   type EditorDomNode
@@ -746,10 +747,10 @@ export default function Composer({
     const hasOpaqueFiles = event.clipboardData.files.length > 0
     const text = event.clipboardData.getData('text/plain')
     if (!hasOpaqueFiles && text !== '') {
-      // 只认纯文本：外部网页的富文本样式一律不进编辑区。
-      // 粘进来的 [Image #N] 一律剥掉：同一 slot 出现两次会让胶囊与实体失去 1:1。
+      // 只认纯文本：外部网页的富文本样式一律不进编辑区；
+      // 粘进来的 [Image #N] 与 \r\n 由 sanitizePastedText 统一净化。
       event.preventDefault()
-      const plain = text.replace(/\[Image #\d+\]\s*/g, '')
+      const plain = sanitizePastedText(text)
       if (plain !== '') {
         insertPlainText(plain)
       }

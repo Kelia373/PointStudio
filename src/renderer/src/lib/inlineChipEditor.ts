@@ -159,6 +159,19 @@ export interface EditorCaret {
   offset: number
 }
 
+/**
+ * 粘贴净化：只留纯文本。
+ *
+ * - `\r\n` / `\r` 统一成 `\n`（编辑器内部只用 `\n`，`<br>` 由渲染层生成）；
+ * - 剥掉 `[Image #N]`：同一个 slot 在文字里出现两次，胶囊与实体就不再 1:1；
+ * - 其它一律原样保留（连续空格、缩进、字面量 `<b>` 都当普通文字，JSON 不转义）。
+ *
+ * HTML 永远不会进 DOM：组件里粘贴前先 `preventDefault`，只插文本节点。
+ */
+export function sanitizePastedText(text: string): string {
+  return text.replace(/\r\n?/g, '\n').replace(/\[Image #\d+\]\s*/g, '')
+}
+
 /** 逻辑光标位置 → 节点路径（组件用它落回真实 Selection）。 */
 export function setLogicalCaretOffset(
   nodes: ReadonlyArray<EditorDomNode>,

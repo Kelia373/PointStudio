@@ -10,6 +10,7 @@ import {
   getLogicalCaretOffset,
   nodeLogicalLength,
   parseEditorSegments,
+  sanitizePastedText,
   serializeEditorNodes,
   setLogicalCaretOffset,
   type EditorDomNode
@@ -150,4 +151,18 @@ test('删掉第一张图：剩余图片与胶囊当帧重排成连续 #1..#k', (
     .filter((segment) => segment.type === 'image-ref')
     .map((segment) => (segment.type === 'image-ref' ? segment.slot : 0))
   assert.deepEqual(slots, [1, 2])
+})
+
+test('粘贴净化：只留纯文本，统一换行并剥掉重复的图片引用', () => {
+  assert.equal(sanitizePastedText('第一行\r\n第二行'), '第一行\n第二行')
+  assert.equal(sanitizePastedText('旧的\r换行'), '旧的\n换行')
+
+  // 复制自己输入框里的内容会把 [Image #N] 一起带出来：再粘一次会出现两个
+  // 同号胶囊 → 胶囊与实体失去 1:1，必须在入口剥掉。
+  assert.equal(sanitizePastedText('看 [Image #1] 和 [Image #2]'), '看 和 ')
+  assert.equal(sanitizePastedText('[Image #3]'), '')
+
+  // 用户排版不能动：连续空格、缩进、字面量标签都当普通文字。
+  assert.equal(sanitizePastedText('  hello  world  '), '  hello  world  ')
+  assert.equal(sanitizePastedText('<b>不是富文本</b>'), '<b>不是富文本</b>')
 })
