@@ -52,6 +52,7 @@ import {
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
 import { EFFORT_SHORT_LABEL, resolveConversationComposerPolicy } from '../lib/modelPicker'
 import { AGENT_GROUPS_KEY, parseAgentGroups } from '../lib/agentGroups'
+import { findAgentHomeConversation } from '../lib/conversationBuckets'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
 import { deriveActiveWorkerRuns } from '../lib/workerRuns'
 import { buildMissionChains, filterMessagesByMission } from '../lib/missionTrace'
@@ -156,6 +157,8 @@ export default function ChatPanel() {
   const [draft, setDraft] = useState('')
   // 群聊里被 @ 的成员：发送时只有恰好一个时由该成员接管本轮。
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
+  // 小组增删改成员后自增，避免 @ 候选每帧去 localStorage 解析一次。
+  const [groupsVersion, setGroupsVersion] = useState(0)
   const [busy, setBusy] = useField('busy')
   const [inflightId, setInflightId] = useField('inflightId')
   // 流式时正在输出的是哪条会话（inflightId 是 requestId，不能拿来比会话）
@@ -818,6 +821,67 @@ export default function ChatPanel() {
     setActivePage(CHAT_PAGE)
   }
 
+  /** 单击 Agent 行：进它的常驻主聊天；没有就建一条 isHome。 */
+  async function openAgentHome(agentId: string): Promise<void> {
+    const existing = findAgentHomeConversation(agentId, conversations)
+    if (existing) {
+      setActiveId(existing.id)
+      setActivePage(CHAT_PAGE)
+      return
+    }
+    const agent = assistants.find((item) => item.id === agentId)
+    const created = await window.pointstudio.conversations.create({
+      assistantId: agentId,
+      isHome: true,
+      title: `${Array.from(agent?.name ?? 'Agent').slice(0, 20).join('')} · 主聊天`
+    })
+    if (!created.ok) {
+      setError(describeError(created.code))
+      return
+    }
+    await reloadConversations()
+    setActiveId(created.value.id)
+    setActivePage(CHAT_PAGE)
+  }
+
+  /** 给 Agent 新开专题子会话（不抢主聊天）。 */
+  async function createAgentTopic(agentId: string): Promise<void> {
+    const created = await window.pointstudio.conversations.create({ assistantId: agentId })
+    if (!created.ok) {
+      setError(describeError(created.code))
+      return
+    }
+    await reloadConversations()
+    setActiveId(created.value.id)
+    setActivePage(CHAT_PAGE)
+  }
+
+  /** 右键「开启新主聊天」：旧主聊天自动降级为专题，消息保留。 */
+  async function newAgentHome(agentId: string): Promise<void> {
+    const agent = assistants.find((item) => item.id === agentId)
+    const created = await window.pointstudio.conversations.create({
+      assistantId: agentId,
+      isHome: true,
+      title: `${Array.from(agent?.name ?? 'Agent').slice(0, 20).join('')} · 主聊天`
+    })
+    if (!created.ok) {
+      setError(describeError(created.code))
+      return
+    }
+    await reloadConversations()
+    setActiveId(created.value.id)
+    setActivePage(CHAT_PAGE)
+  }
+
+  async function renameConversation(id: string, title: string): Promise<string | null> {
+    const result = await window.pointstudio.conversations.rename(id, title)
+    if (!result.ok) {
+      return result.code
+    }
+    await reloadConversations()
+    return null
+  }
+
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
@@ -869,7 +933,7 @@ export default function ChatPanel() {
   // 只有真正的小组会话（会话级 groupId）才锁模型；Agent 属于某个小组不影响
   // 它的一对一会话 —— agentGroups 只是侧栏分组，不是会话绑定。
   // 每次都从 localStorage 解析：侧栏刚改完成员，已打开的群聊也能立刻刷新候选。
-  const activeGroup = (() => {
+  const activeGroup = useMemo(() => {
     const groupId = activeConversation?.groupId
     if (!groupId) {
       return null
@@ -879,7 +943,7 @@ export default function ChatPanel() {
         (group) => group.id === groupId
       ) ?? null
     )
-  })()
+  }, [activeConversation?.groupId, groupsVersion])
   const mentionCandidates = (activeGroup?.memberIds ?? [])
     .map((id) => assistants.find((agent) => agent.id === id))
     .filter((agent): agent is NonNullable<typeof agent> => agent !== undefined)
@@ -1268,6 +1332,11 @@ export default function ChatPanel() {
             onCreateAgent={() => setAgentDialogOpen(true)}
             assistantsLoaded={assistantsLoaded}
           onOpenGroupChat={(group) => void openGroupChat(group)}
+          onOpenAgentHome={(agentId) => void openAgentHome(agentId)}
+          onCreateAgentTopic={(agentId) => void createAgentTopic(agentId)}
+          onNewAgentHome={(agentId) => void newAgentHome(agentId)}
+          onRenameConversation={renameConversation}
+          onGroupsChanged={() => setGroupsVersion((value) => value + 1)}
           />
 
           <main

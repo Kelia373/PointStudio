@@ -325,3 +325,64 @@ test('小组聊天：创建时带 groupId，读回后仍在', async () => {
     assert.equal(list.find((item) => item.title === '小组 · UEAS-DEV1')?.groupId, 'g-1')
   })
 })
+
+test('isHome：必须绑定 Agent 且不能是小组会话', async () => {
+  await withService(async ({ service }) => {
+    const noAgent = await service.create({ isHome: true, title: 'x' })
+    assert.equal(noAgent.ok, false)
+    const withGroup = await service.create({
+      isHome: true,
+      assistantId: 'a1',
+      groupId: 'g1'
+    })
+    assert.equal(withGroup.ok, false)
+  })
+})
+
+test('isHome：同一 Agent 只保留一条主聊天，旧主聊天降级保留消息', async () => {
+  await withService(async ({ service }) => {
+    const first = await service.create({ assistantId: 'a1', isHome: true, title: 'A · 主聊天' })
+    const second = await service.create({ assistantId: 'a1', isHome: true, title: 'A · 主聊天' })
+    assert.equal(first.ok && second.ok, true)
+    if (!first.ok || !second.ok) return
+
+    const all = await service.list()
+    const homes = all.filter((item) => item.isHome === true && item.assistantId === 'a1')
+    assert.equal(homes.length, 1)
+    assert.equal(homes[0].id, second.value.id)
+    const old = all.find((item) => item.id === first.value.id)
+    assert.equal(old?.isHome, undefined)
+  })
+})
+
+test('isHome：换绑或解绑时自动清除主聊天标记', async () => {
+  await withService(async ({ service }) => {
+    const home = await service.create({ assistantId: 'a1', isHome: true, title: 'A · 主聊天' })
+    assert.equal(home.ok, true)
+    if (!home.ok) return
+
+    const switched = await service.setAssistant(home.value.id, 'a2')
+    assert.equal(switched.ok, true)
+    if (switched.ok) {
+      assert.equal(switched.value.isHome, undefined)
+    }
+  })
+})
+
+test('isHome：主聊天标题不被首条消息改写，普通会话仍派生标题', async () => {
+  await withService(async ({ service }) => {
+    const home = await service.create({ assistantId: 'a1', isHome: true, title: 'A · 主聊天' })
+    assert.equal(home.ok, true)
+    if (!home.ok) return
+    await service.appendMessage(home.value.id, { role: 'user', content: '帮我改个登录页' })
+    const afterHome = await service.get(home.value.id)
+    assert.equal(afterHome?.title, 'A · 主聊天')
+
+    const topic = await service.create({ assistantId: 'a1' })
+    assert.equal(topic.ok, true)
+    if (!topic.ok) return
+    await service.appendMessage(topic.value.id, { role: 'user', content: '专题第一句' })
+    const afterTopic = await service.get(topic.value.id)
+    assert.equal(afterTopic?.title, '专题第一句')
+  })
+})

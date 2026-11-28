@@ -32,9 +32,10 @@ import {
   type AgentClipPayload
 } from '../lib/agentClipboard'
 import { buildAgentMenuItems, type AgentMenuAction } from '../lib/agentMenu'
-import { computeAgentBenchStatus, computeAgentWorkerLanes, filterSessionsByAxis, LIGHT_LABEL } from '../lib/dispatchFilter'
+import { computeAgentBenchStatus, computeAgentWorkerLanes, LIGHT_LABEL } from '../lib/dispatchFilter'
 import type { PlanRunStatus } from '../lib/planRunState'
-import { CHAT_PAGE, nextActivePage } from '../lib/pageNav'
+import { nextActivePage } from '../lib/pageNav'
+import { partitionConversations } from '../lib/conversationBuckets'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
@@ -74,7 +75,12 @@ export default function Sidebar({
   onInspectWorkerRun,
   onCreateAgent,
   assistantsLoaded,
-  onOpenGroupChat
+  onOpenGroupChat,
+  onOpenAgentHome,
+  onCreateAgentTopic,
+  onNewAgentHome,
+  onRenameConversation,
+  onGroupsChanged
 }: {
   conversations: ConversationDto[]
   assistants: AssistantDto[]
@@ -114,6 +120,16 @@ export default function Sidebar({
   assistantsLoaded: boolean
   /** 打开（或创建）该小组的聊天。 */
   onOpenGroupChat: (group: AgentGroupDto) => void
+  /** 单击 Agent 行：进它的常驻主聊天（没有就建）。 */
+  onOpenAgentHome: (agentId: string) => void
+  /** 给 Agent 新开专题子会话。 */
+  onCreateAgentTopic: (agentId: string) => void
+  /** 右键「开启新主聊天」。 */
+  onNewAgentHome: (agentId: string) => void
+  /** 行内重命名会话；返回错误码，null 表示成功。 */
+  onRenameConversation: (id: string, title: string) => Promise<string | null>
+  /** 小组成员变更后通知上层刷新 @ 候选。 */
+  onGroupsChanged: () => void
 }) {
   const [keyword, setKeyword] = useState('')
   const [moreOpen, setMoreOpen] = useState(false)
@@ -121,7 +137,6 @@ export default function Sidebar({
   const [pinned, setPinned] = useState<Record<string, boolean>>({})
   const inputRef = useRef<HTMLInputElement>(null)
   // 双轴：点 Agent 行 = 只看它跨项目的记录；点项目 = 看该项目下所有 Agent。
-  const [agentAxis, setAgentAxis] = useState<string | null>(null)
   // 工位区：整段可折叠、行上右键出菜单、改名在行内完成
   const [agentsOpen, setAgentsOpen] = useState(true)
   // 项目区：与 Agent Bench 同样是可折叠的分区头
@@ -142,13 +157,13 @@ export default function Sidebar({
   const [groups, setGroups] = useState<AgentGroupDto[]>(() =>
     parseAgentGroups(window.localStorage.getItem(AGENT_GROUPS_KEY))
   )
-  const [groupAxis, setGroupAxis] = useState<string | null>(null)
   const [newGroupOpen, setNewGroupOpen] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null)
   const [renameGroupValue, setRenameGroupValue] = useState('')
   const [draggingAgentId, setDraggingAgentId] = useState<string | null>(null)
   const [dropGroupId, setDropGroupId] = useState<string | null>(null)
+  const [openTopics, setOpenTopics] = useState<Record<string, boolean>>({})
   const [groupMenu, setGroupMenu] = useState<{
     groupId: string
     x: number
@@ -258,7 +273,6 @@ export default function Sidebar({
         false
       )
     )
-    setGroupAxis(null)
   }
 
   async function runMenuAction(action: AgentMenuAction): Promise<void> {
@@ -319,7 +333,6 @@ export default function Sidebar({
         return
     }
   }
-  const [projectAxis, setProjectAxis] = useState<string | null | 'unmounted'>(null)
 
   // 小组只存本机；成员列表跟随助手删除自动修剪。
   // 关键：助手列表没加载完时 assistants=[]，此时修剪会把整组人当幽灵清空并写盘。
@@ -335,6 +348,9 @@ export default function Sidebar({
       return
     }
     window.localStorage.setItem(AGENT_GROUPS_KEY, JSON.stringify(groups))
+    // 通知上层刷新群聊 @ 候选（不再每帧解析 localStorage）。
+    onGroupsChanged()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groups, assistantsLoaded])
 
   // 小组右键菜单：点空白或按 Esc 收起
@@ -367,30 +383,19 @@ export default function Sidebar({
   )
   const filterActive =
     groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
-  const groupAxisMembers = useMemo(() => {
-    if (!groupAxis) {
-      return null
-    }
-    return groups.find((group) => group.id === groupAxis)?.memberIds ?? []
-  }, [groupAxis, groups])
-  const visible = useMemo(
-    () =>
-      filterSessionsByAxis(conversations, {
-        agentId: agentAxis,
-        // 空小组用一个不存在的 id 兜底：否则「空数组」会被当成不限制
-        agentIds:
-          groupAxisMembers === null
-            ? undefined
-            : groupAxisMembers.length > 0
-              ? groupAxisMembers
-              : ['__empty_group__'],
-        workspaceId: projectAxis,
-        keyword
-      }),
-    [conversations, agentAxis, groupAxisMembers, projectAxis, keyword]
+  const buckets = useMemo(
+    () => partitionConversations(conversations, assistants),
+    [conversations, assistants]
   )
+  // 自由对话只按标题过滤；Agent / 小组会话不再混进这一区。
+  const freeChats = useMemo(() => {
+    const needle = keyword.trim().toLowerCase()
+    if (needle === '') {
+      return buckets.freeChats
+    }
+    return buckets.freeChats.filter((item) => item.title.toLowerCase().includes(needle))
+  }, [buckets.freeChats, keyword])
 
-  // Ctrl/⌘ + F 聚焦搜索：界面上那个 ⌘F 标记得是真的。
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
@@ -420,7 +425,13 @@ export default function Sidebar({
       ...(workerRuns ? { workerRuns } : {})
     })
     const lanes = computeAgentWorkerLanes(assistant.id, workerRuns ?? [])
-    const active = agentAxis === assistant.id
+    const home = buckets.agentHomeById[assistant.id] ?? null
+    const topics = buckets.agentTopicsById[assistant.id] ?? []
+    const active =
+      home?.id === activeId || topics.some((item) => item.id === activeId)
+    const topicsOpen =
+      openTopics[assistant.id] ??
+      topics.some((item) => item.id === activeId)
     const disabled = assistant.enabled === false
 
     if (renamingId === assistant.id) {
@@ -461,10 +472,7 @@ export default function Sidebar({
         title={`${bench.lastTitle ?? assistant.name}${
           disabled ? '（已停用）' : ''
         } · 按住头像可拖进小组 · 右键打开菜单`}
-        onClick={() => {
-          setAgentAxis(active ? null : assistant.id)
-          setGroupAxis(null)
-        }}
+        onClick={() => onOpenAgentHome(assistant.id)}
         onContextMenu={(event) => {
           event.preventDefault()
           setConfirmRemoveId(null)
@@ -498,16 +506,26 @@ export default function Sidebar({
 
     return (
       <li key={`${groupId ?? 'roster'}-${assistant.id}`}>
-        {groupId === null ? (
-          row
-        ) : (
-          <div className="side__agent-row">
-            {row}
+        <div className="side__agent-row">
+          {row}
+          <button
+            className="side__row-add"
+            type="button"
+            title="为该 Agent 新建专题会话"
+            aria-label="新建专题会话"
+            onClick={(event) => {
+              event.stopPropagation()
+              onCreateAgentTopic(assistant.id)
+            }}
+          >
+            <Icon name="plus" size={11} />
+          </button>
+          {groupId !== null ? (
             <button
               className="side__row-remove"
               type="button"
-              title="移出本小组（不会删除 Agent）"
-              aria-label="移出本小组"
+              title="移出小组（不会删除 Agent）"
+              aria-label="移出小组"
               onClick={(event) => {
                 event.stopPropagation()
                 setGroups((current) =>
@@ -517,8 +535,47 @@ export default function Sidebar({
             >
               <Icon name="x" size={11} />
             </button>
+          ) : null}
+        </div>
+        {groupId === null && topics.length > 0 ? (
+          <div className="side__topics">
+            <button
+              className="side__topics-head"
+              type="button"
+              aria-expanded={topicsOpen}
+              onClick={() =>
+                setOpenTopics((current) => ({
+                  ...current,
+                  [assistant.id]: !topicsOpen
+                }))
+              }
+            >
+              <Icon
+                name="arrow-down"
+                className={`side__head-caret${
+                  topicsOpen ? ' is-open' : ''
+                }`}
+                size={11}
+              />
+              专题 {topics.length}
+            </button>
+            {topicsOpen ? (
+              <ul className="side__list side__topics-list">
+                {topics.map((conversation) => (
+                  <li key={conversation.id}>
+                    <SessionItem
+                      conversation={conversation}
+                      active={conversation.id === activeId}
+                      onSelect={() => onSelect(conversation.id)}
+                      onRemove={() => onRemove(conversation.id)}
+                      onRename={(title) => onRenameConversation(conversation.id, title)}
+                    />
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
-        )}
+        ) : null}
         {lanes.activeRuns.length > 0 ? (
           <ul className={`side__lanes${disabled ? ' side__lanes--disabled' : ''}`}>
             {lanes.activeRuns.map((run) => (
@@ -775,8 +832,8 @@ export default function Sidebar({
                   return (
                     <div
                       key={group.id}
-                      className={`side__group${dropGroupId === group.id ? ' side__group--drop' : ''}${
-                        groupAxis === group.id ? ' side__group--active' : ''
+                      className={`side__group${
+                        dropGroupId === group.id ? ' side__group--drop' : ''
                       }`}
                       onDragOver={(event) => dragOverGroup(group.id, event)}
                       onDragLeave={() =>
@@ -848,6 +905,24 @@ export default function Sidebar({
                       </div>
 
                       {group.collapsed ? null : (
+                        <>
+                          {(buckets.groupChatsById[group.id] ?? []).length > 0 ? (
+                            <ul className="side__list side__group-chats">
+                              {(buckets.groupChatsById[group.id] ?? []).map((conversation) => (
+                                <li key={conversation.id}>
+                                  <SessionItem
+                                    conversation={conversation}
+                                    active={conversation.id === activeId}
+                                    onSelect={() => onSelect(conversation.id)}
+                                    onRemove={() => onRemove(conversation.id)}
+                                    onRename={(title) =>
+                                      onRenameConversation(conversation.id, title)
+                                    }
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
                         <ul className="side__plain side__group-members">
                           {members.map((agent) => renderAgentRow(agent, group.id))}
                           {members.length === 0 ? (
@@ -858,6 +933,7 @@ export default function Sidebar({
                             </li>
                           ) : null}
                         </ul>
+                        </>
                       )}
                       {dropGroupId === group.id ? (
                         <div className="side__drop">+ 加入「{group.name}」</div>
@@ -1008,6 +1084,17 @@ export default function Sidebar({
           />
           <div className="ctx-menu" style={{ left: menu.x, top: menu.y }} role="menu">
             <span className="ctx-menu__head">{menuAgent.name}</span>
+            <button
+              className="ctx-menu__item"
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onNewAgentHome(menuAgent.id)
+                setMenu(null)
+              }}
+            >
+              开启新主聊天
+            </button>
             {buildAgentMenuItems({
               enabled: menuAgent.enabled !== false,
               canPaste: clipboard !== null
@@ -1037,72 +1124,62 @@ export default function Sidebar({
             className="side__head-btn"
             type="button"
             aria-expanded={projectsOpen}
-            title={projectsOpen ? '收起 Project 列表' : '展开 Project 列表'}
+            title={projectsOpen ? '收起普通聊天' : '展开普通聊天'}
             onClick={() => setProjectsOpen((value) => !value)}
           >
-            <Icon name="folder" className="side__head-icon" size={13} />
-            <span className="side__head-title">Project</span>
-            <span className="side__head-note">
-              {projectAxis === 'unmounted' ? '主聊天' : '未归类'}
-            </span>
+            <Icon name="compass" className="side__head-icon" size={13} />
+            <span className="side__head-title">普通聊天</span>
+            <span className="side__head-note">{freeChats.length}</span>
             <Icon
               name="arrow-down"
               className={`side__head-caret${projectsOpen ? ' is-open' : ''}`}
               size={13}
             />
           </button>
-          <Slot name="sidebar.projects.header" props={{ count: conversations.length }} />
+          <Slot name="sidebar.projects.header" props={{ count: freeChats.length }} />
           <button
             className="side__head-act"
             type="button"
-            title="管理工作区文件"
-            aria-label="管理工作区文件"
+            title="工作区（导入文件供检索）"
+            aria-label="打开工作区"
             onClick={onOpenWorkspace}
           >
             <Icon name="folder" size={13} />
           </button>
+          <button
+            className="side__head-act"
+            type="button"
+            title="新建自由对话"
+            aria-label="新建自由对话"
+            onClick={onCreate}
+          >
+            <Icon name="plus" size={13} />
+          </button>
         </div>
         {projectsOpen ? (
-          <>
-            <button
-              className={`side__row side__row--axis${
-                projectAxis === 'unmounted' ? ' side__row--active' : ''
-              }`}
-              type="button"
-              onClick={() => {
-                setProjectAxis(projectAxis === 'unmounted' ? null : 'unmounted')
-                setGroupAxis(null)
-                // 回到对话：主舞台停在功能页时，这一行也会被点到
-                onNavigate(CHAT_PAGE)
-              }}
-            >
-              <Icon name="folder" className="side__row-icon" />
-              <span>主聊天（未挂载项目）</span>
-            </button>
-            <ul className="side__list">
-              {visible.map((conversation) => (
-                <li key={conversation.id}>
-                  <Overridable
-                    name="sidebar.sessionItem"
-                    fallback={SessionItem}
-                    props={{
-                      conversation,
-                      active: conversation.id === activeId,
-                      onSelect: () => {
-                        setGroupAxis(null)
-                        onSelect(conversation.id)
-                      },
-                      onRemove: () => onRemove(conversation.id)
-                    }}
-                  />
-                </li>
-              ))}
-              {visible.length === 0 && conversations.length > 0 ? (
-                <li className="side__empty">没有匹配的会话</li>
-              ) : null}
-              {conversations.length === 0 ? <li className="side__empty">还没有会话</li> : null}
-            </ul>
-          </>
+          <ul className="side__list">
+            {freeChats.map((conversation) => (
+              <li key={conversation.id}>
+                <Overridable
+                  name="sidebar.sessionItem"
+                  fallback={SessionItem}
+                  props={{
+                    conversation,
+                    active: conversation.id === activeId,
+                    onSelect: () => onSelect(conversation.id),
+                    onRemove: () => onRemove(conversation.id),
+                    onRename: (title: string) => onRenameConversation(conversation.id, title)
+                  }}
+                />
+              </li>
+            ))}
+            {freeChats.length === 0 && conversations.length > 0 ? (
+              <li className="side__empty">没有匹配的自由对话</li>
+            ) : null}
+            {conversations.length === 0 ? (
+              <li className="side__empty">还没有对话</li>
+            ) : null}
+          </ul>
         ) : null}
       </section>
 
@@ -1223,9 +1300,6 @@ export default function Sidebar({
                       role="menuitem"
                       onClick={() => {
                         setGroups((current) => removeGroup(current, target.id))
-                        if (groupAxis === target.id) {
-                          setGroupAxis(null)
-                        }
                         setGroupMenu(null)
                       }}
                     >

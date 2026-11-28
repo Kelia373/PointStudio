@@ -69,7 +69,12 @@ export function isCreateConversationRequest(
     (value.title === undefined || typeof value.title === 'string') &&
     optionalId(value.assistantId) &&
     optionalId(value.workspaceId) &&
-    optionalId(value.groupId)
+    optionalId(value.groupId) &&
+    (value.isHome === undefined || typeof value.isHome === 'boolean') &&
+    (value.isHome !== true ||
+      (typeof value.assistantId === 'string' &&
+        value.assistantId !== '' &&
+        (value.groupId === undefined || value.groupId === null)))
   )
 }
 

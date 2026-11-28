@@ -25,6 +25,7 @@ function toConversationDto(conversation: Conversation): ConversationDto {
     ...(conversation.model ? { model: conversation.model } : {}),
     ...(conversation.providerId ? { providerId: conversation.providerId } : {}),
     ...(conversation.groupId ? { groupId: conversation.groupId } : {}),
+    ...(conversation.isHome ? { isHome: true } : {}),
     ...(conversation.params ? { params: conversation.params } : {}),
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt

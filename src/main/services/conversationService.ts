@@ -32,6 +32,7 @@ export interface CreateConversationInput {
   assistantId?: string | null
   workspaceId?: string | null
   groupId?: string | null
+  isHome?: boolean
 }
 
 export interface AppendMessageInput {
@@ -69,6 +70,10 @@ export class ConversationService {
   }
 
   async create(input: CreateConversationInput = {}): Promise<ServiceResult<Conversation>> {
+    // 主聊天必须挂在某个 Agent 上，且不能是小组会话。
+    if (input.isHome === true && (typeof input.assistantId !== 'string' || input.assistantId === '' || input.groupId != null)) {
+      return { ok: false, errors: ['E_BAD_INPUT'] }
+    }
     let title = DEFAULT_CONVERSATION_TITLE
     if (input.title !== undefined) {
       const checked = validateTitle(input.title)
@@ -85,11 +90,20 @@ export class ConversationService {
       assistantId: input.assistantId ?? null,
       workspaceId: input.workspaceId ?? null,
       groupId: input.groupId ?? null,
+      ...(input.isHome === true ? { isHome: true } : {}),
       createdAt: now,
       updatedAt: now
     }
 
     const items = await this.conversations.readAll()
+    if (input.isHome === true) {
+      // 同一 Agent 只保留一条主聊天：旧主聊天降级为专题会话，消息不动。
+      for (const item of items) {
+        if (item.assistantId === input.assistantId) {
+          delete item.isHome
+        }
+      }
+    }
     items.push(conversation)
     await this.conversations.writeAll(items)
     return { ok: true, value: conversation }
@@ -125,10 +139,15 @@ export class ConversationService {
       return { ok: false, errors: ['E_NOT_FOUND'] }
     }
 
+    const previous = items[index]
     const updated: Conversation = {
-      ...items[index],
+      ...previous,
       assistantId,
       updatedAt: this.deps.now()
+    }
+    // 换绑 / 解绑后不再属于原 Agent，主聊天标记必须清掉，避免悬挂。
+    if (previous.assistantId !== assistantId) {
+      delete updated.isHome
     }
     items[index] = updated
     await this.conversations.writeAll(items)
@@ -260,7 +279,9 @@ export class ConversationService {
 
     // 标题只在「还是默认标题」且收到用户第一句话时生成，之后不再动它。
     const shouldDeriveTitle =
-      conversations[index].title === DEFAULT_CONVERSATION_TITLE && input.role === 'user'
+      conversations[index].title === DEFAULT_CONVERSATION_TITLE &&
+      input.role === 'user' &&
+      conversations[index].isHome !== true
     conversations[index] = {
       ...conversations[index],
       title: shouldDeriveTitle ? deriveTitle(checked.value) : conversations[index].title,
