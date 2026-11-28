@@ -34,6 +34,17 @@ button {
   cursor: pointer;
 }
 
+/* 代码元素必须显式吃 --mono：Chromium 给 <code>/<pre> 的 UA 默认是裸
+   `monospace`，中文 Windows 上会退化成新宋体，父容器的 var(--mono) 也拦不住
+   子元素自己的声明。这里统一重置，选中字体的效果才落得到 <code> 上。 */
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--mono);
+  font-size: inherit;
+}
+
 /* 键盘可达性：只对键盘聚焦画环，鼠标点击不画 */
 :where(button, a, input, textarea, select):focus-visible {
   outline: 1.5px solid var(--line-strong);
