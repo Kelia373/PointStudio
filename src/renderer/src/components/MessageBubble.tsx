@@ -7,6 +7,7 @@ import DualTrack from './DualTrack'
 import HandoffPill from './HandoffPill'
 import MemorySpark from './MemorySpark'
 import RouteBadge from './RouteBadge'
+import BrandLogo from './BrandLogo'
 
 export type BubbleRole = 'user' | 'assistant'
 
@@ -79,7 +80,12 @@ export default function MessageBubble({
       style={{ ['--i' as string]: String(Math.min(index, 8)) }}
     >
       <div className="msg__head">
-        <span>{role === 'user' ? '你' : 'PointStudio'}</span>
+        <span className="msg__author">
+          {role === 'user' ? null : (
+            <BrandLogo variant="mark" size={13} className="msg__brand" />
+          )}
+          {role === 'user' ? '你' : 'PointStudio'}
+        </span>
         {at ? <span>{at}</span> : null}
         {failed ? <span>· 失败</span> : null}
         {route ? <RouteBadge decision={route} /> : null}

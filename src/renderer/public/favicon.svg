@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="ps-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a1a20" />
+      <stop offset="100%" stop-color="#09090b" />
+    </linearGradient>
+    <linearGradient id="ps-rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.28)" />
+      <stop offset="100%" stop-color="rgba(255,255,255,0.06)" />
+    </linearGradient>
+    <linearGradient id="ps-fg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#dcdce3" />
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="58" fill="url(#ps-bg)" />
+  <rect x="2" y="2" width="252" height="252" rx="56" fill="none" stroke="url(#ps-rim)" stroke-width="3" />
+  <circle cx="166" cy="174" r="32" fill="#ffffff" opacity="0.12" />
+  <path
+    d="M68 58 H134 C168 58 190 79 190 110 C190 141 168 162 134 162 H98 V198 H68 V58 Z M98 86 V134 H131 C148 134 159 124 159 110 C159 96 148 86 131 86 H98 Z"
+    fill="url(#ps-fg)"
+  />
+  <circle cx="166" cy="174" r="22" fill="url(#ps-fg)" />
+</svg>
