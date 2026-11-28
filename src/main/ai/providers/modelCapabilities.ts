@@ -153,4 +153,34 @@ export function capabilitiesForSelectable(
     : { ...capabilities, supportsTools: false, supportedEfforts: [] }
 }
 
+/**
+ * 最近一次 discovery 拉回的真实能力（按 providerId → modelId）。
+ * 发送侧优先读它：否则「上游声明支持、但规则表不认识的模型」会出现
+ * UI 亮档位却不发参数的情况。
+ */
+const discoveredCapabilities = new Map<string, Map<string, ModelCapabilitiesDto>>()
+
+export function rememberModelCapabilities(
+  providerId: string,
+  models: readonly { id: string; capabilities?: ModelCapabilitiesDto }[]
+): void {
+  const bucket = new Map<string, ModelCapabilitiesDto>()
+  for (const model of models) {
+    if (model.capabilities) {
+      bucket.set(model.id, model.capabilities)
+    }
+  }
+  discoveredCapabilities.set(providerId, bucket)
+}
+
+export function capabilitiesForSend(
+  providerId: string,
+  modelId: string
+): ModelCapabilitiesDto {
+  return (
+    discoveredCapabilities.get(providerId)?.get(modelId) ??
+    inferModelCapabilities(providerId, modelId)
+  )
+}
+
 export type { EffortWireModeDto }

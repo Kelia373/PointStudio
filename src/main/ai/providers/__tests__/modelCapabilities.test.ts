@@ -84,3 +84,25 @@ test('嵌入模型不带工具也不可调档；-free 降级为不可工具', ()
   assert.equal(free.supportsTools, false)
   assert.deepEqual(free.supportedEfforts, [])
 })
+
+test('发送侧优先用 discovery 缓存的能力（未知长尾模型不再丢参数）', async () => {
+  const { capabilitiesForSend, rememberModelCapabilities } = await import(
+    '../modelCapabilities.ts'
+  )
+  // 规则表不认识的模型：默认不可调档
+  assert.deepEqual(capabilitiesForSend('openrouter', 'vendor/secret-reasoner').supportedEfforts, [])
+  rememberModelCapabilities('openrouter', [
+    {
+      id: 'vendor/secret-reasoner',
+      capabilities: {
+        supportsTools: true,
+        supportedEfforts: ['low', 'mid', 'high'],
+        effortMode: 'reasoning_effort'
+      }
+    }
+  ])
+  const cached = capabilitiesForSend('openrouter', 'vendor/secret-reasoner')
+  assert.deepEqual(cached.supportedEfforts, ['low', 'mid', 'high'])
+  // 别的服务商不会串用
+  assert.deepEqual(capabilitiesForSend('deepseek', 'vendor/secret-reasoner').supportedEfforts, [])
+})

@@ -11,6 +11,7 @@ import {
   inferRendererCapabilities,
   mergeDiscoveredIntoServices,
   resolveComposerModelPolicy,
+  resolveConversationComposerPolicy,
   resolvePickerModelCapabilities,
   sortPickerProviders
 } from '../modelPicker.ts'
@@ -134,4 +135,58 @@ test('档位顺序与短标稳定（默认 · Low · Med · High · XHigh · Max
     xhigh: 'XHigh',
     max: 'Max'
   })
+})
+
+test('会话级 groupId 才锁小组；成员的一对一会话仍可编辑', () => {
+  assert.equal(
+    resolveConversationComposerPolicy({ assistantId: 'a1', groupId: 'g-1' }).mode,
+    'locked-group'
+  )
+  // 即使这个 Agent 属于某个小组，只要会话没有 groupId，它的一对一不被锁
+  assert.equal(
+    resolveConversationComposerPolicy({ assistantId: 'a1', groupId: null }).mode,
+    'locked-agent'
+  )
+  assert.equal(
+    resolveConversationComposerPolicy({ assistantId: null, groupId: null }).mode,
+    'editable'
+  )
+})
+
+test('杠杆 P2-1：不可直选模型仍出现在列表里，灰显带原因', () => {
+  const services = createDefaultModelServicesState()
+  const merged = mergeDiscoveredIntoServices(services, 'opencode-go', [
+    { id: 'kimi-k2.5', selectable: true },
+    { id: 'glm-4.5-free', selectable: false, note: '仅官方客户端' }
+  ])
+  const providers = sortPickerProviders(merged, [account('opencode-go')])
+  const opencode = providers.find((item) => item.providerId === 'opencode-go')
+  const free = opencode?.models.find((item) => item.id === 'glm-4.5-free')
+  assert.equal(free?.disabledReason, '仅官方客户端')
+  assert.equal(free?.capabilities.supportsTools, false)
+})
+
+test('跨端规则一致性：主进程与渲染层对同一批模型推断结果相同', async () => {
+  const { inferModelCapabilities } = await import('../../../../main/ai/providers/modelCapabilities.ts')
+  const { inferRendererCapabilities } = await import('../modelPicker.ts')
+  const samples = [
+    ['deepseek', 'deepseek-chat'],
+    ['deepseek', 'deepseek-reasoner'],
+    ['openai', 'o3'],
+    ['openai', 'gpt-5.2'],
+    ['opencode-go', 'claude-sonnet-4-5'],
+    ['gemini', 'gemini-2.5-pro'],
+    ['moonshot', 'kimi-thinking'],
+    ['qwen', 'qwq-32b'],
+    ['zhipu', 'glm-z1-air'],
+    ['mistral', 'mistral-large-latest'],
+    ['siliconflow', 'bge-m3-embed']
+  ] as const
+  for (const [providerId, modelId] of samples) {
+    assert.deepEqual(
+      inferRendererCapabilities(providerId, modelId),
+      inferModelCapabilities(providerId, modelId),
+      `${providerId}/${modelId} 两端推断不一致`
+    )
+  }
 })

@@ -49,8 +49,7 @@ import {
   providerDisplayName
 } from '../lib/modelServices'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
-import { AGENT_GROUPS_KEY, parseAgentGroups } from '../lib/agentGroups'
-import { EFFORT_SHORT_LABEL, resolveComposerModelPolicy } from '../lib/modelPicker'
+import { EFFORT_SHORT_LABEL, resolveConversationComposerPolicy } from '../lib/modelPicker'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
 import { deriveActiveWorkerRuns } from '../lib/workerRuns'
 import { buildMissionChains, filterMessagesByMission } from '../lib/missionTrace'
@@ -852,17 +851,11 @@ export default function ChatPanel() {
   const activeConversation = conversations.find((item) => item.id === activeId) ?? null
   const boundAssistant =
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
-  const agentGroups = useMemo(
-    () => parseAgentGroups(window.localStorage.getItem(AGENT_GROUPS_KEY)),
-    []
-  )
-  // 会话绑定的 Agent 属于某个小组时，输入栏锁成「各成员独立模型」。
-  const inGroup =
-    boundAssistant !== null &&
-    agentGroups.some((group) => group.memberIds.includes(boundAssistant.id))
-  const composerModelPolicy = resolveComposerModelPolicy({
+  // 只有真正的小组会话（会话级 groupId）才锁模型；Agent 属于某个小组不影响
+  // 它的一对一会话 —— agentGroups 只是侧栏分组，不是会话绑定。
+  const composerModelPolicy = resolveConversationComposerPolicy({
     assistantId: activeConversation?.assistantId ?? null,
-    inGroup
+    groupId: activeConversation?.groupId ?? null
   })
   const permissionMode = boundAssistant?.permissionMode ?? 'smart'
   const canConfirmPlan = permissionMode !== 'plan-only'

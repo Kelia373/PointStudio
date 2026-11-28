@@ -10,7 +10,11 @@ import type {
 } from '../../../shared/types/ipc.ts'
 import type { ProviderAccount } from '../domain/providerAccounts.ts'
 import { opencodeModelsUrl, opencodeUsageUrl } from './opencodeGo.ts'
-import { capabilitiesForSelectable, inferModelCapabilities } from './modelCapabilities.ts'
+import {
+  capabilitiesForSelectable,
+  inferModelCapabilities,
+  rememberModelCapabilities
+} from './modelCapabilities.ts'
 
 export type FetchFn = typeof fetch
 
@@ -114,6 +118,8 @@ export async function fetchProviderModels(
     )
     return { ...base, capabilities }
   })
+  // 记下来给发送侧用：UI 与真实参数只有一个能力来源。
+  rememberModelCapabilities(account.id, models)
   return { models, latencyMs: Math.max(0, deps.now() - started) }
 }
 

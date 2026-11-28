@@ -89,6 +89,7 @@ export default function Composer({
           }}
         />
         <div className="composer__bar">
+          {/* 老的下拉分支：ChatPanel 现已走 modelPolicy；保留给其它宿主/插件。 */}
           {modelPolicy === undefined ? (
             <>
               <label className="composer__pick" title="本次执行使用的模型（只影响这个会话）">

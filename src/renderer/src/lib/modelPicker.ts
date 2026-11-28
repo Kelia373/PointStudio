@@ -107,7 +107,9 @@ export function isProviderReady(account: ProviderAccountViewDto | undefined): bo
 
 function modelsOf(provider: ApiProviderProfile | LocalRuntimeProfile): PickerModel[] {
   const unselectable = provider.unselectableModels ?? {}
-  return provider.models.map((id) => ({
+  // 不可直选的模型不在 provider.models 里，但必须继续显示（灰显 + 原因）。
+  const ids = [...provider.models, ...Object.keys(unselectable)]
+  return ids.map((id) => ({
     id,
     capabilities:
       provider.modelCapabilities?.[id] ?? inferRendererCapabilities(provider.id, id),
@@ -197,7 +199,11 @@ export function mergeDiscoveredIntoServices(
     if (!item.selectable) {
       unselectable[item.id] = item.note ?? '不可直选'
     }
-    capabilities[item.id] = item.capabilities ?? inferRendererCapabilities(providerId, item.id)
+    const caps = item.capabilities ?? inferRendererCapabilities(providerId, item.id)
+    // 与主进程 capabilitiesForSelectable 对齐：不可直选的模型降级为无工具、不可调档。
+    capabilities[item.id] = item.selectable
+      ? caps
+      : { ...caps, supportsTools: false, supportedEfforts: [] }
   }
 
   const hasUnselectable = Object.keys(unselectable).length > 0
@@ -231,6 +237,17 @@ export type ComposerModelPolicy =
   | { mode: 'locked-group'; label: string }
   | { mode: 'locked-agent'; canOpenAgentSettings: true }
   | { mode: 'editable' }
+
+/** 从会话字段直接得到策略：只有会话级 groupId 才算小组聊天。 */
+export function resolveConversationComposerPolicy(input: {
+  assistantId: string | null
+  groupId?: string | null
+}): ComposerModelPolicy {
+  return resolveComposerModelPolicy({
+    assistantId: input.assistantId,
+    inGroup: input.groupId != null
+  })
+}
 
 /** 输入栏能不能换模型：小组锁死、绑定 Agent 锁死、自由对话才可编辑。 */
 export function resolveComposerModelPolicy(input: {

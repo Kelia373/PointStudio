@@ -260,7 +260,7 @@ export class OpencodeGoProvider implements ChatProvider {
       ...(request.params?.maxTokens !== undefined ? { max_tokens: request.params.maxTokens } : {}),
       ...(request.params?.topP !== undefined ? { top_p: request.params.topP } : {}),
       ...(request.params?.effort &&
-      request.effortMode === 'reasoning_effort' &&
+      request.supportedEfforts?.includes(request.params.effort) &&
       OPENAI_EFFORT[request.params.effort]
         ? { reasoning_effort: OPENAI_EFFORT[request.params.effort] }
         : {})
@@ -280,7 +280,8 @@ export class OpencodeGoProvider implements ChatProvider {
       dialogue.shift()
     }
     const budget =
-      request.params?.effort && request.effortMode === 'thinking_budget'
+      request.params?.effort &&
+      request.supportedEfforts?.includes(request.params.effort)
         ? THINKING_BUDGET[request.params.effort]
         : null
     const maxTokens = request.params?.maxTokens ?? 4096

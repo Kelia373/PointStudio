@@ -240,7 +240,7 @@ test('Anthropic 线：thinking budget 与首条 assistant 裁剪', async () => {
         apiKey: 'oc_sk_test',
         baseUrl,
         model: 'claude-sonnet-4-5',
-        effortMode: 'thinking_budget',
+        supportedEfforts: ['low', 'mid', 'high', 'xhigh', 'max'],
         messages: [
           { role: 'assistant', content: '上一轮的回复' },
           { role: 'user', content: '继续' }

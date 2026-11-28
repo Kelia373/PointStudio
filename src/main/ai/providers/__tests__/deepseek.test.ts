@@ -170,7 +170,7 @@ test('OpenAI 兼容线：reasoning_effort 只对支持调档的模型发出', as
       apiKey: 'test-key',
       baseUrl: `http://127.0.0.1:${port}`,
       model: 'o3',
-      effortMode: 'reasoning_effort',
+      supportedEfforts: ['low', 'mid', 'high'],
       messages: [{ role: 'user', content: 'hi' }],
       params: { effort: 'mid' }
     })) {
@@ -180,7 +180,7 @@ test('OpenAI 兼容线：reasoning_effort 只对支持调档的模型发出', as
       apiKey: 'test-key',
       baseUrl: `http://127.0.0.1:${port}`,
       model: 'deepseek-chat',
-      effortMode: 'none',
+      supportedEfforts: [],
       messages: [{ role: 'user', content: 'hi' }],
       params: { effort: 'high' }
     })) {

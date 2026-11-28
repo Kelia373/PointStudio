@@ -186,7 +186,7 @@ export class OpenAiCompatibleProvider implements ChatProvider {
       ...(request.params?.topP !== undefined ? { top_p: request.params.topP } : {}),
       // 只在模型真的支持 reasoning_effort 时才发，普通模型不要乱带参数。
       ...(request.params?.effort &&
-      request.effortMode === 'reasoning_effort' &&
+      request.supportedEfforts?.includes(request.params.effort) &&
       OPENAI_EFFORT[request.params.effort]
         ? { reasoning_effort: OPENAI_EFFORT[request.params.effort] }
         : {})
