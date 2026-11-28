@@ -8,7 +8,7 @@ import { join } from 'node:path'
 
 import { JsonFileStore } from '../../data/fileStore.ts'
 import { AssistantService } from '../assistantService.ts'
-import type { Assistant } from '../../ai/domain/assistant.ts'
+import { DEFAULT_ASSISTANT_ID, type Assistant } from '../../ai/domain/assistant.ts'
 
 async function withTempService(
   run: (ctx: { service: AssistantService; filePath: string; reopen: () => AssistantService }) => Promise<void>
@@ -244,5 +244,65 @@ test('非法权限模式返回 E_PERMISSION_MODE_INVALID 且不落盘', async ()
       assert.ok(result.errors.includes('E_PERMISSION_MODE_INVALID'))
     }
     assert.deepEqual(await service.list(), [])
+  })
+})
+
+test('内置通用助手：幂等创建，且不覆盖用户改过的配置', async () => {
+  await withTempService(async ({ service, reopen }) => {
+    const first = await service.ensureBuiltin()
+    assert.equal(first.id, DEFAULT_ASSISTANT_ID)
+    assert.equal(first.builtin, true)
+    assert.equal(first.systemPrompt, '')
+    assert.equal(first.enabled, true)
+    assert.equal(first.permissionMode, 'smart')
+
+    // 用户改名 + 换模型
+    const updated = await service.update(DEFAULT_ASSISTANT_ID, {
+      name: '我的通用助手',
+      modelId: 'deepseek-chat',
+      providerId: 'deepseek'
+    })
+    assert.equal(updated.ok, true)
+    if (!updated.ok) return
+    assert.equal(updated.value.builtin, true, '内置标记不能被一次整条替换洗掉')
+
+    // 再启动一次：不新建、不洗回默认值
+    const again = await reopen().ensureBuiltin()
+    assert.equal(again.name, '我的通用助手')
+    assert.equal(again.modelId, 'deepseek-chat')
+    assert.equal((await reopen().list()).filter((item) => item.builtin === true).length, 1)
+  })
+})
+
+test('内置通用助手：不可停用、不可删除', async () => {
+  await withTempService(async ({ service }) => {
+    await service.ensureBuiltin()
+
+    const disabled = await service.update(DEFAULT_ASSISTANT_ID, {
+      name: '通用助手',
+      enabled: false
+    })
+    assert.equal(disabled.ok, false)
+    if (!disabled.ok) {
+      assert.ok(disabled.errors.includes('E_BUILTIN_PROTECTED'))
+    }
+
+    const removed = await service.remove(DEFAULT_ASSISTANT_ID)
+    assert.equal(removed.ok, false)
+    if (!removed.ok) {
+      assert.ok(removed.errors.includes('E_BUILTIN_PROTECTED'))
+    }
+    assert.equal((await service.list()).length, 1, '内置助手必须还在')
+  })
+})
+
+test('内置通用助手恒排第一，其余保持存储顺序', async () => {
+  await withTempService(async ({ service }) => {
+    await service.create({ name: 'A' })
+    await service.ensureBuiltin()
+    await service.create({ name: 'B' })
+
+    const names = (await service.list()).map((item) => item.name)
+    assert.equal(names[0], '通用助手')
   })
 })

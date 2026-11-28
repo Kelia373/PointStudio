@@ -328,6 +328,15 @@ export const AGENT_PERMISSION_MODES: readonly AgentPermissionMode[] = [
   'full-access'
 ]
 
+/**
+ * 内置「通用助手」的固定 id。
+ *
+ * 为什么写死而不是随机生成：它是每条老自由对话的收编落点，也是启动迁移的
+ * 幂等锚点——每次启动都按这个 id 找，找到了就不再新建。取值是合法的 v4 格式，
+ * 所以全仓的 `isUuid()` 校验一行都不用放宽。
+ */
+export const DEFAULT_ASSISTANT_ID = '00000000-0000-4000-8000-000000000001'
+
 export interface AssistantDto {
   id: string
   name: string
@@ -341,12 +350,13 @@ export interface AssistantDto {
   permissionMode?: AgentPermissionMode
   /** 手选的 3D 头像 key；null / 缺省表示按名称自动匹配。 */
   avatar?: string | null
+  /** true 表示系统内置的常驻「通用助手」：不可删除、不可停用。 */
+  builtin?: boolean
   createdAt: string
   updatedAt: string
 }
 
-export interface AssistantDraftRequest {
-  name: string
+export interface AssistantDraftRequest {  name: string
   /** 省略表示「不动」：新建按启用处理，更新时保留原状态。 */
   enabled?: boolean
   systemPrompt?: string

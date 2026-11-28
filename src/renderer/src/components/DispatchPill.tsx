@@ -25,8 +25,13 @@ export interface DispatchPillProps {
   projectName: string | null
   agents: DispatchAgent[]
   activeAgentId: string | null
-  onPickAgent: (agentId: string | null) => void
+  onPickAgent: (agentId: string) => void
   onOpenProject: () => void
+  /**
+   * 能不能换人。主聊天与小组聊天的归属是结构性的（主聊天就是那个 Agent 的家，
+   * 小组由组长 + 成员共同决定），只有专题子会话才允许中途交接。
+   */
+  canSwitch?: boolean
 }
 
 export default function DispatchPill({
@@ -37,7 +42,8 @@ export default function DispatchPill({
   agents,
   activeAgentId,
   onPickAgent,
-  onOpenProject
+  onOpenProject,
+  canSwitch = true
 }: DispatchPillProps) {
   const [open, setOpen] = useState(false)
 
@@ -46,10 +52,16 @@ export default function DispatchPill({
       <button
         className="dispatch-pill__seg"
         type="button"
-        aria-expanded={open}
-        aria-label="切换当前会话的 Agent"
-        title="换一位 Agent 接手这个会话"
-        onClick={() => setOpen((value) => !value)}
+        aria-expanded={canSwitch ? open : undefined}
+        aria-label={canSwitch ? '切换当前会话的 Agent' : '当前会话的 Agent'}
+        title={canSwitch ? '换一位 Agent 接手这个会话' : '主聊天与小组聊天不支持中途换人'}
+        disabled={!canSwitch}
+        onClick={() => {
+          if (!canSwitch) {
+            return
+          }
+          setOpen((value) => !value)
+        }}
       >
         {agentName ? (
           <AgentAvatar
@@ -85,16 +97,6 @@ export default function DispatchPill({
         <>
           <span className="dispatch-pill__mask" role="presentation" onClick={() => setOpen(false)} />
           <div className="dispatch-pill__pop" role="listbox" aria-label="选择 Agent">
-            <button
-              className={`dispatch-pill__item${activeAgentId === null ? ' is-active' : ''}`}
-              type="button"
-              onClick={() => {
-                onPickAgent(null)
-                setOpen(false)
-              }}
-            >
-              不使用 Agent（默认对话）
-            </button>
             {agents.map((agent) => (
               <button
                 key={agent.id}

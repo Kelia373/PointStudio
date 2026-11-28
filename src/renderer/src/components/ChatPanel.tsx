@@ -6,6 +6,7 @@ import type {
   ProviderAccountViewDto,
   ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
+import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
 import { appendChunk, appendReasoning, markStatus, startTurn, type UiMessage } from '../lib/chatState'
@@ -446,18 +447,25 @@ export default function ChatPanel() {
     }
   }, [loadMessages, reloadConversations])
 
-  // 首次进入：有会话就用最近一个，没有就建一个。
+  // 首次进入：优先落在「通用助手 · 主聊天」，没有会话就为它建一条。
   useEffect(() => {
     void (async () => {
       await Promise.all([refreshAssistants(), refreshProvider(), refreshMcp()])
       const items = await reloadConversations()
       if (items.length > 0) {
-        setActiveId(items[0].id)
+        // 全员归属后不再有自由对话：冷启动默认进通用助手主聊天，主人开箱即聊。
+        const home = items.find(
+          (item) => item.assistantId === DEFAULT_ASSISTANT_ID && item.isHome === true
+        )
+        setActiveId((home ?? items[0]).id)
         return
       }
-      const created = await window.pointstudio.conversations.create({})
+      const created = await window.pointstudio.conversations.create({
+        assistantId: DEFAULT_ASSISTANT_ID,
+        isHome: true,
+        title: '通用助手 · 主聊天'
+      })
       if (created.ok) {
-        await applyPrimarySlot(created.value.id)
         await reloadConversations()
         setActiveId(created.value.id)
       } else {
@@ -847,30 +855,6 @@ export default function ChatPanel() {
     await submit(prompt, next)
   }
 
-  async function applyPrimarySlot(conversationId: string): Promise<void> {
-    const view = readModelServices()
-    const primary = view.slots.primaryModel
-    if (primary === '' || primary === AUTO_ROUTE_MODEL) {
-      return
-    }
-    // 槽位只存模型名：从已配通的服务商里反查归属，连同 providerId 一起写入会话，
-    // 否则跨家同名的模型会被发到默认服务商。
-    const ready = accounts
-      .filter((account) => account.hasKey || account.protocol === 'ollama')
-      .map((account) => account.providerId)
-    const matched = collectModelPositionOptions(view, ready).find(
-      (option) => option.value === primary
-    )
-    const applied = await window.pointstudio.conversations.setModel(conversationId, {
-      model: primary,
-      ...(matched?.providerId ? { providerId: matched.providerId } : {})
-    })
-    if (!applied.ok) {
-      // 不静默吞错：新会话会退回 provider 默认模型，得让用户知道
-      setError(`主对话模型未生效：${describeError(applied.code)}`)
-    }
-  }
-
   /** 打开（或首次创建）小组聊天：一个小组一条会话，首次绑定组长。 */
   async function openGroupChat(group: AgentGroupDto): Promise<void> {
     const existing = conversations.find((item) => item.groupId === group.id)
@@ -997,13 +981,16 @@ export default function ChatPanel() {
   }
 
   async function createConversation(): Promise<void> {
-    const created = await window.pointstudio.conversations.create({})
+    // 全员归属后，「新建会话」= 给当前 Agent（没有就通用助手）开一条专题。
+    const target =
+      activeConversation?.assistantId ??
+      assistants.find((assistant) => assistant.id === DEFAULT_ASSISTANT_ID)?.id ??
+      DEFAULT_ASSISTANT_ID
+    const created = await window.pointstudio.conversations.create({ assistantId: target })
     if (!created.ok) {
       setError(describeError(created.code))
       return
     }
-    // 默认模型槽位只影响新建会话：已有会话保留自己的覆盖
-    await applyPrimarySlot(created.value.id)
     await reloadConversations()
     setActiveId(created.value.id)
     // 新建即回聊天：否则新会话建在功能页背后，用户根本看不见
@@ -1072,7 +1059,9 @@ export default function ChatPanel() {
   }, [activeId])
   const composerModelPolicy = resolveConversationComposerPolicy({
     assistantId: activeConversation?.assistantId ?? null,
-    groupId: activeConversation?.groupId ?? null
+    groupId: activeConversation?.groupId ?? null,
+    // 全员归属：无主的旧会话也按通用助手锁模型，不再有第二套自由切模型的输入栏。
+    defaultAssistantId: DEFAULT_ASSISTANT_ID
   })
   const permissionMode = boundAssistant?.permissionMode ?? 'smart'
   const canConfirmPlan = permissionMode !== 'plan-only'
@@ -1261,6 +1250,11 @@ export default function ChatPanel() {
                 state: agentLights.get(assistant.id) ?? 'idle'
               }))}
             activeAgentId={activeConversation?.assistantId ?? null}
+            canSwitch={
+              activeConversation != null &&
+              activeConversation.isHome !== true &&
+              activeConversation.groupId == null
+            }
             onPickAgent={(agentId) => {
               if (!activeId) {
                 return
@@ -1268,9 +1262,9 @@ export default function ChatPanel() {
               void (async () => {
                 const previous = boundAssistant
                 const missionId = activeId
-                await bindAssistant(agentId ?? '')
+                await bindAssistant(agentId)
                 const picked = assistants.find((assistant) => assistant.id === agentId) ?? null
-                setInfo(picked ? `已交接给 ${picked.name} 继续处理` : '已退回默认对话')
+                setInfo(picked ? `已交接给 ${picked.name} 继续处理` : '已交接')
                 if (!picked || picked.id === previous?.id) {
                   return
                 }

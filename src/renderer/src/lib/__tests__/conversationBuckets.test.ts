@@ -106,3 +106,20 @@ test('空输入返回空桶，不抛错', () => {
   assert.deepEqual(buckets.agentTopicsById, {})
   assert.deepEqual(buckets.groupChatsById, {})
 })
+
+test('收编模式：无主 / 孤儿单聊进兜底 Agent 专题，小组仍进小组桶', () => {
+  const conversations = [
+    conversation('free-1', { assistantId: null }),
+    conversation('orphan', { assistantId: 'gone' }),
+    conversation('group-1', { assistantId: 'a1', groupId: 'g1' })
+  ]
+  const buckets = partitionConversations(conversations, agents, {
+    defaultAssistantId: 'builtin'
+  })
+  assert.deepEqual(buckets.freeChats, [], '不再有自由对话桶')
+  assert.deepEqual(
+    buckets.agentTopicsById.builtin.map((item) => item.id).sort(),
+    ['free-1', 'orphan']
+  )
+  assert.deepEqual(buckets.groupChatsById.g1.map((item) => item.id), ['group-1'])
+})

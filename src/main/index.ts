@@ -37,6 +37,7 @@ import { createBuiltinTools } from './ai/tools/builtin/index.ts'
 import { recordCrash } from './services/crashLogService.ts'
 import { WorkspaceImportService } from './services/workspaceImportService.ts'
 import { WorkspaceService } from './services/workspaceService.ts'
+import { adoptUnboundConversations } from './services/assistantCleanup.ts'
 import { searchWorkspaceFiles } from './services/retrievalService.ts'
 import type { WorkspaceFile } from './ai/domain/workspace.ts'
 import { AssistantService } from './services/assistantService.ts'
@@ -300,6 +301,17 @@ void app.whenReady().then(async () => {
       source: 'main'
     })
   )
+
+  // 启动收编：确保内置「通用助手」存在，把历史自由对话 / 孤儿会话挂过去。
+  // 必须赶在注册 IPC 与建窗口之前——渲染层第一次 list 就要看到归属后的数据。
+  try {
+    await adoptUnboundConversations(services.assistants, services.conversations)
+  } catch (error) {
+    // 收编失败不该挡住启动：最坏情况是这一轮仍有孤儿会话，下次启动再收。
+    recordCrashToDisk(error instanceof Error ? error : new Error(String(error)), {
+      source: 'adopt-unbound-conversations'
+    })
+  }
 
   // 凭据优先级：设置界面保存过的 > 环境变量 > 默认（无 Key 时走本地假流式）。
   const savedSettings = await services.settings.read()

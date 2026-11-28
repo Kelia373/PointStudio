@@ -157,7 +157,30 @@ export class ConversationService {
     return { ok: true, value: updated }
   }
 
-  /** 删会话必须连它的消息一起删，否则会留下永远读不到的孤儿数据。 */
+  /** 删会话必须连它的消息一起删，否则会留下永远读不到的孤儿数据。 */  /**
+   * 收编一条会话到指定 Agent。
+   *
+   * 与 `setAssistant` 的区别只有一个，但很关键：**不动 `updatedAt`**。
+   * 迁移是后台整理，不该把用户侧栏的时间排序整个重排；主聊天标记同样要清掉，
+   * 否则收编过来的旧主聊天会顶掉目标 Agent 自己的主聊天。
+   */
+  async adopt(id: string, assistantId: string): Promise<ServiceResult<Conversation>> {
+    const items = await this.conversations.readAll()
+    const index = items.findIndex((item) => item.id === id)
+    if (index < 0) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+    if (typeof assistantId !== 'string' || assistantId === '') {
+      return { ok: false, errors: ['E_BAD_INPUT'] }
+    }
+
+    const updated: Conversation = { ...items[index], assistantId }
+    delete updated.isHome
+    items[index] = updated
+    await this.conversations.writeAll(items)
+    return { ok: true, value: updated }
+  }
+
   /**
    * 设置会话级模型与采样参数。
    * 传 undefined 表示「这一项不动」，传 null 表示「清掉覆盖、跟随默认」。

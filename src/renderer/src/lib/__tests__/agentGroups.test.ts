@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import type { AgentGroupDto, AssistantDto, ConversationDto } from '../../../../shared/types/ipc.ts'
+import { DEFAULT_ASSISTANT_ID } from '../../../../shared/types/ipc.ts'
 import {
   addAgentToGroup,
   agentGroupIds,
@@ -11,6 +12,7 @@ import {
   filterAgents,
   normalizeGroups,
   parseAgentGroups,
+  pinBuiltinAgent,
   removeAgentFromGroup,
   removeGroup,
   renameGroup,
@@ -169,4 +171,20 @@ test('组状态聚合：任一在跑即 working，全员停用才 disabled', () 
   )
   assert.equal(disabled.state, 'disabled')
   assert.equal(disabled.disabledCount, 1)
+})
+
+test('内置通用助手恒置顶：最近更新排序也挤不下去', () => {
+  const assistants = [
+    agent('a1', { updatedAt: '2026-03-01T00:00:00.000Z' }),
+    agent(DEFAULT_ASSISTANT_ID, { builtin: true, updatedAt: '2026-01-01T00:00:00.000Z' }),
+    agent('a2', { updatedAt: '2026-02-01T00:00:00.000Z' })
+  ]
+  const sorted = pinBuiltinAgent(
+    [...assistants].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  )
+  assert.equal(sorted[0].id, DEFAULT_ASSISTANT_ID)
+  assert.deepEqual(
+    sorted.slice(1).map((item) => item.id),
+    ['a1', 'a2']
+  )
 })

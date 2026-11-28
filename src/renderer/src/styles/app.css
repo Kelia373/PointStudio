@@ -1300,6 +1300,24 @@ select:focus {
   white-space: nowrap;
 }
 
+/* 内置通用助手角标：可改配置，但不可停用、不可删除 */
+.assistants__builtin {
+  margin-left: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--rad-xs);
+  background: var(--raise);
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+  font-style: normal;
+}
+
+.assistants__protected {
+  padding: 0 var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
 .workspace__size,
 .plan__tool,
 .plan__status,
@@ -1621,6 +1639,14 @@ select:focus {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* Agent Bench 是侧栏唯一的主区：内容多就自己滚，别把底部入口顶出窗口 */
+.side__section--grow .side__groups,
+.side__section--grow .side__plain {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .side__head {

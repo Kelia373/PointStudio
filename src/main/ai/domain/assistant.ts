@@ -5,9 +5,19 @@
 
 import {
   AGENT_PERMISSION_MODES,
+  DEFAULT_ASSISTANT_ID,
   type AgentPermissionMode,
   type ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
+
+/**
+ * 内置通用助手的固定身份。
+ *
+ * 常量本体在 `shared/types/ipc.ts`（渲染层也要用，shared 是唯一不会反向依赖的地方），
+ * 这里 re-export 一份，主进程侧的领域代码只认这个入口。
+ */
+export { DEFAULT_ASSISTANT_ID }
+export const DEFAULT_ASSISTANT_NAME = '通用助手'
 
 export interface ModelParams {
   temperature: number
@@ -32,6 +42,8 @@ export interface Assistant {
   permissionMode?: AgentPermissionMode
   /** 手选头像 key；null 表示按名称自动匹配。 */
   avatar?: string | null
+  /** true = 系统内置常驻「通用助手」：不可删除、不可停用。 */
+  builtin?: boolean
   createdAt: string
   updatedAt: string
 }

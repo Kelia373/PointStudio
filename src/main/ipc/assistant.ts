@@ -5,6 +5,7 @@ import { ipcMain } from 'electron'
 
 import {
   ASSISTANT_CHANNELS,
+  DEFAULT_ASSISTANT_ID,
   type AssistantBridge,
   type AssistantDto,
   type IpcResult
@@ -28,6 +29,8 @@ function toDto(assistant: Assistant): AssistantDto {
     // 旧记录没有权限/头像：缺省 smart + 自动匹配
     permissionMode: assistant.permissionMode ?? 'smart',
     avatar: assistant.avatar ?? null,
+    // 内置标记只在为 true 时才下发，旧数据形状不变。
+    ...(assistant.builtin === true ? { builtin: true } : {}),
     createdAt: assistant.createdAt,
     updatedAt: assistant.updatedAt
   }
@@ -85,7 +88,9 @@ export function registerAssistantIpc(options: AssistantIpcOptions): void {
       if (typeof id !== 'string' || !isUuid(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      const result = await removeAssistantAndUnbind(service, options.conversations, id)
+      const result = await removeAssistantAndUnbind(service, options.conversations, id, {
+        adoptTo: DEFAULT_ASSISTANT_ID
+      })
       return result.ok ? { ok: true, value: true } : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
     }
   )

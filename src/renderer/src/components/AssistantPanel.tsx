@@ -244,6 +244,7 @@ export default function AssistantPanel({
                 <AgentAvatar agentId={assistant.id} name={assistant.name} avatar={assistant.avatar} size={16} />
                 <span className="assistants__name" title={assistant.systemPrompt}>
                   {assistant.name}
+                  {assistant.builtin === true ? <em className="assistants__builtin">默认</em> : null}
                 </span>
                 <button
                   className="assistants__edit"
@@ -252,13 +253,19 @@ export default function AssistantPanel({
                 >
                   编辑
                 </button>
-                <ConfirmButton
-                  className="assistants__remove"
-                  ariaLabel="删除助手"
-                  title="删除助手"
-                  confirmLabel="删?"
-                  onConfirm={() => void remove(assistant.id)}
-                />
+                {assistant.builtin === true ? (
+                  <span className="assistants__protected" title="系统内置通用助手不可删除">
+                    内置
+                  </span>
+                ) : (
+                  <ConfirmButton
+                    className="assistants__remove"
+                    ariaLabel="删除助手"
+                    title="删除助手"
+                    confirmLabel="删?"
+                    onConfirm={() => void remove(assistant.id)}
+                  />
+                )}
               </>
             )}
           </li>

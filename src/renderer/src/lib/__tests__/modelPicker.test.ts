@@ -279,3 +279,21 @@ test('P3-2：serialize 不写能力画像，但保留 unselectableModels', () =>
   assert.equal(raw.includes('modelCapabilities'), false, '能力画像不落 localStorage')
   assert.equal(raw.includes('unselectableModels'), true, '不可选标记仍保留')
 })
+
+test('全员归属模式：单聊一律锁模型，无主会话按兜底 Agent 锁', () => {
+  assert.equal(
+    resolveConversationComposerPolicy({ assistantId: null, groupId: null, defaultAssistantId: 'builtin' })
+      .mode,
+    'locked-agent'
+  )
+  assert.equal(
+    resolveConversationComposerPolicy({ assistantId: 'a1', groupId: null, defaultAssistantId: 'builtin' })
+      .mode,
+    'locked-agent'
+  )
+  assert.equal(
+    resolveConversationComposerPolicy({ assistantId: 'a1', groupId: 'g1', defaultAssistantId: 'builtin' })
+      .mode,
+    'locked-group'
+  )
+})
