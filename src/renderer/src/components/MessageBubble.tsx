@@ -37,7 +37,8 @@ export default function MessageBubble({
   reasoningMs,
   streamingReasoning = false,
   onEdit,
-  onBranch
+  onBranch,
+  actionsDisabled = false
 }: {
   role: BubbleRole
   content: string
@@ -78,6 +79,8 @@ export default function MessageBubble({
   onEdit?: (next: string) => void
   /** 通用：从此处分叉为新会话。 */
   onBranch?: () => void
+  /** 会话正在生成：编辑类操作置灰（用户消息本身永远是 complete）。 */
+  actionsDisabled?: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [draftEdit, setDraftEdit] = useState(content)
@@ -153,7 +156,7 @@ export default function MessageBubble({
               className="msg__act"
               type="button"
               onClick={commitEdit}
-              disabled={draftEdit.trim() === '' || streaming}
+              disabled={draftEdit.trim() === '' || streaming || actionsDisabled}
             >
               保存并重发
             </button>
@@ -193,7 +196,7 @@ export default function MessageBubble({
             className="msg__act"
             type="button"
             title="编辑后从这句重新发"
-            disabled={streaming}
+            disabled={streaming || actionsDisabled}
             onClick={() => {
               setDraftEdit(content)
               setEditing(true)

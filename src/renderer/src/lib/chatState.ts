@@ -49,7 +49,6 @@ export function startTurn(
   ]
 }
 
-/** 追加一块增量文本；未知 id 直接忽略。 */
 /** 追加模型思考增量（只动 reasoning，不影响 content）。 */
 export function appendReasoning(messages: UiMessage[], id: string, chunk: string): UiMessage[] {
   let touched = false
@@ -63,6 +62,7 @@ export function appendReasoning(messages: UiMessage[], id: string, chunk: string
   return touched ? next : messages
 }
 
+/** 追加一块增量文本；未知 id 直接忽略。 */
 export function appendChunk(messages: UiMessage[], id: string, chunk: string): UiMessage[] {
   let touched = false
   const next = messages.map((message) => {

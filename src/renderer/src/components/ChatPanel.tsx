@@ -1629,6 +1629,7 @@ export default function ChatPanel() {
                         }
                       : {}),
                     onBranch: () => void branchFrom(message.id),
+                    actionsDisabled: busy,
                     route: message.route ?? null,
                     ...(nextEscalation(message.route ?? null)
                       ? { onEscalate: () => void escalateFrom(index) }
