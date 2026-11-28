@@ -144,6 +144,8 @@ export interface ConversationDto {
   model?: string | null
   /** 会话级服务商覆盖；缺省表示跟随助手绑定 / 全局默认。 */
   providerId?: string | null
+  /** 小组聊天归属的小组 id；普通会话缺省。 */
+  groupId?: string | null
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParamsDto
   createdAt: string
@@ -239,6 +241,8 @@ export interface CreateConversationRequest {
   assistantId?: string | null
   /** 创建时就挂到某个项目；缺省为未挂载。 */
   workspaceId?: string | null
+  /** 小组聊天：绑定到侧栏的小组 id。 */
+  groupId?: string | null
 }
 
 export interface ConversationBridge {

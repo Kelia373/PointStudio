@@ -61,7 +61,8 @@ export function isCreateConversationRequest(
   return (
     (value.title === undefined || typeof value.title === 'string') &&
     optionalId(value.assistantId) &&
-    optionalId(value.workspaceId)
+    optionalId(value.workspaceId) &&
+    optionalId(value.groupId)
   )
 }
 

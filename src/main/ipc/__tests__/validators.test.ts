@@ -149,3 +149,9 @@ test('effort 参数：合法五档通过，非法值被拒', () => {
     false
   )
 })
+
+test('isCreateConversationRequest：groupId 可选，给了必须是字符串或 null', () => {
+  assert.equal(isCreateConversationRequest({ groupId: 'g-1' }), true)
+  assert.equal(isCreateConversationRequest({ groupId: null }), true)
+  assert.equal(isCreateConversationRequest({ groupId: 42 }), false)
+})

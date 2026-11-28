@@ -4809,3 +4809,87 @@ select:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── 小组右键菜单（两级） ─────────────────────────────────────── */
+
+.side__group-menu {
+  position: fixed;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: var(--sp-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-ctl);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+}
+
+.side__group-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 28px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-xs);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.side__group-menu-item:hover,
+.side__group-menu-item.is-open {
+  background: var(--raise);
+  color: var(--fg);
+}
+
+.side__group-menu-arrow {
+  margin-left: auto;
+  color: var(--fg-3);
+}
+
+.side__group-menu-item--danger {
+  color: var(--danger);
+}
+
+.side__group-menu-item--danger:hover {
+  background: var(--raise);
+  color: var(--danger);
+}
+
+.side__group-menu-check {
+  display: inline-flex;
+  justify-content: center;
+  width: 12px;
+  flex: none;
+  color: var(--fg);
+}
+
+.side__group-submenu {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin-left: var(--sp-1);
+  padding: var(--sp-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-ctl);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+}
+
+.side__group-submenu-title {
+  padding: var(--sp-1) var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+}
+
+.side__group-submenu-empty {
+  padding: var(--sp-2);
+  color: var(--fg-3);
+  font-size: var(--fs-sm);
+}

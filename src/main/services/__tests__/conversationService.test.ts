@@ -309,3 +309,19 @@ test('换服务商但没传新模型时，旧模型被清掉（防跨家漂移�
     }
   })
 })
+
+test('小组聊天：创建时带 groupId，读回后仍在', async () => {
+  await withService(async ({ service, reopen }) => {
+    const created = await service.create({
+      title: '小组 · UEAS-DEV1',
+      assistantId: 'a1',
+      groupId: 'g-1'
+    })
+    assert.equal(created.ok, true)
+    if (created.ok) {
+      assert.equal(created.value.groupId, 'g-1')
+    }
+    const list = await reopen().list()
+    assert.equal(list.find((item) => item.title === '小组 · UEAS-DEV1')?.groupId, 'g-1')
+  })
+})

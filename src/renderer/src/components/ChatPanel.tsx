@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type {
+  AgentGroupDto,
   ConversationDto,
   ProviderAccountViewDto,
   ReasoningEffortDto
@@ -778,6 +779,31 @@ export default function ChatPanel() {
     }
   }
 
+  /** 打开（或首次创建）小组聊天：一个小组一条会话，首次绑定组长。 */
+  async function openGroupChat(group: AgentGroupDto): Promise<void> {
+    const existing = conversations.find((item) => item.groupId === group.id)
+    if (existing) {
+      setActiveId(existing.id)
+      setActivePage(CHAT_PAGE)
+      return
+    }
+    const lead = group.leadAgentId ?? group.memberIds[0] ?? null
+    // 标题上限 30 字符，给「小组 · 」留位置。
+    const title = `小组 · ${Array.from(group.name).slice(0, 24).join('')}`
+    const created = await window.pointstudio.conversations.create({
+      title,
+      assistantId: lead,
+      groupId: group.id
+    })
+    if (!created.ok) {
+      setError(describeError(created.code))
+      return
+    }
+    await reloadConversations()
+    setActiveId(created.value.id)
+    setActivePage(CHAT_PAGE)
+  }
+
   async function createConversation(): Promise<void> {
     const created = await window.pointstudio.conversations.create({})
     if (!created.ok) {
@@ -1215,6 +1241,7 @@ export default function ChatPanel() {
             }}
             onCreateAgent={() => setAgentDialogOpen(true)}
             assistantsLoaded={assistantsLoaded}
+          onOpenGroupChat={(group) => void openGroupChat(group)}
           />
 
           <main

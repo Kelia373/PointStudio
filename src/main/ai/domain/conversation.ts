@@ -32,6 +32,8 @@ export interface Conversation {
   model?: string | null
   /** 会话级服务商覆盖；缺省跟随助手绑定 / 全局默认。 */
   providerId?: string | null
+  /** 小组聊天归属的小组 id；普通会话缺省。 */
+  groupId?: string | null
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParams
   createdAt: string
