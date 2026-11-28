@@ -386,3 +386,30 @@ test('isHome：主聊天标题不被首条消息改写，普通会话仍派生�
     assert.equal(afterTopic?.title, '专题第一句')
   })
 })
+
+test('adoptMany：一次收编多条，不动 updatedAt，并清掉 isHome', async () => {
+  await withService(async ({ service }) => {
+    const first = await service.create({ assistantId: null, title: '无主一' })
+    const second = await service.create({ assistantId: null, title: '无主二' })
+    const home = await service.create({ assistantId: 'a1', isHome: true, title: '主聊天' })
+    assert.equal(first.ok && second.ok && home.ok, true)
+    if (!first.ok || !second.ok || !home.ok) return
+
+    const before = (await service.get(second.value.id))?.updatedAt
+    const result = await service.adoptMany(
+      [first.value.id, second.value.id, home.value.id],
+      'builtin'
+    )
+    assert.equal(result.ok, true)
+    if (!result.ok) return
+    assert.equal(result.value, 3)
+
+    assert.equal((await service.get(first.value.id))?.assistantId, 'builtin')
+    assert.equal((await service.get(second.value.id))?.updatedAt, before, '迁移不改排序时间')
+    assert.equal((await service.get(home.value.id))?.isHome, undefined, '收编后不再占主聊天位')
+
+    const again = await service.adoptMany([first.value.id], 'builtin')
+    assert.equal(again.ok, true)
+    if (again.ok) assert.equal(again.value, 0, '幂等：已在目标名下不算改动')
+  })
+})

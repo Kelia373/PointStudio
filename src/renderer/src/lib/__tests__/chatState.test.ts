@@ -88,14 +88,46 @@ test('removeMessage 按 id 移除，重复调用幂等', () => {
   assert.deepEqual(removeMessage(once, 'u1').map((item) => item.id), ['a1'])
 })
 
-test('storedToUiMessages：落库消息的 images 必须带回界面（否则 onDone 后附图消失）', () => {
+test('storedToUiMessages：落库消息的 images 与归因三字段都必须带回界面', () => {
   const images = [
     { id: '11111111-1111-4111-8111-111111111111', mimeType: 'image/png' as const, name: 'a.png', sizeBytes: 12 }
   ]
   const mapped = storedToUiMessages([
-    { id: 'm1', role: 'user', content: '[Image #1] 看图', status: 'complete', images },
-    { id: 'm2', role: 'assistant', content: '好', status: 'complete' }
+    {
+      id: 'm1',
+      role: 'user',
+      content: '[Image #1] 看图',
+      status: 'complete',
+      images
+    },
+    {
+      id: 'm2',
+      role: 'assistant',
+      content: '好',
+      status: 'complete',
+      assistantId: 'a1',
+      providerId: 'deepseek',
+      modelId: 'deepseek-chat'
+    }
   ])
   assert.deepEqual(mapped[0].images, images)
   assert.equal(mapped[1].images, undefined, '无图消息不带字段')
+  assert.equal(mapped[1].assistantId, 'a1', '历史归因不能被映射抹掉')
+  assert.equal(mapped[1].providerId, 'deepseek')
+  assert.equal(mapped[1].modelId, 'deepseek-chat')
+})
+
+test('startTurn：乐观渲染的占位回复带归因，流式期间不退回品牌标', () => {
+  const next = startTurn([], {
+    requestId: 'req-1',
+    text: '你好',
+    attribution: { assistantId: 'a1', providerId: 'deepseek', modelId: 'deepseek-chat' }
+  })
+  const placeholder = next.find((message) => message.id === 'req-1')
+  assert.equal(placeholder?.assistantId, 'a1')
+  assert.equal(placeholder?.providerId, 'deepseek')
+  assert.equal(placeholder?.modelId, 'deepseek-chat')
+
+  const plain = startTurn([], { requestId: 'req-2', text: 'hi' })
+  assert.equal(plain[1].assistantId, undefined, '不传归因就不带字段')
 })

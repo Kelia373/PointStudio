@@ -61,6 +61,10 @@ export interface Message {
   reasoning?: string
   /** 思考阶段耗时（毫秒）；缺省则不显示秒数。 */
   reasoningMs?: number
+  /** 这条回复由哪个 Agent / 哪个模型产出（历史归因，写入时定死）。 */
+  assistantId?: string
+  providerId?: string
+  modelId?: string
   /** 附图（用户提问才有）：只存元数据，本体在 attachments/。 */
   images?: MessageImageDto[]
   createdAt: string

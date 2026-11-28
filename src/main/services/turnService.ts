@@ -144,6 +144,10 @@ export async function branchConversation(
       ...(message.references ? { references: message.references } : {}),
       ...(message.reasoning ? { reasoning: message.reasoning } : {}),
       ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+      // 归因跟着消息走：分叉出来的历史回复不该退化成「不知道谁说的」。
+      ...(message.assistantId ? { assistantId: message.assistantId } : {}),
+      ...(message.providerId ? { providerId: message.providerId } : {}),
+      ...(message.modelId ? { modelId: message.modelId } : {}),
       // 分叉要让历史附图跟着走，否则缩略图与胶囊全丢。
       ...(message.images && message.images.length > 0 ? { images: message.images } : {})
     })

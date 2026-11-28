@@ -25,6 +25,10 @@ export interface UiMessage {
   /** 模型思考内容 */
   reasoning?: string
   reasoningMs?: number
+  /** 历史归因：这条回复当时由谁 / 哪个模型产出。 */
+  assistantId?: string
+  providerId?: string
+  modelId?: string
   /** 附图元数据（用户提问才有）。 */
   images?: MessageImageDto[]
 }
@@ -42,9 +46,12 @@ export function startTurn(
     route?: RouteDecisionDto | null
     /** 本轮附图：乐观气泡立即显示缩略图，避免流式期间闪一下。 */
     images?: MessageImageDto[]
+    /** 这一轮真正的作者：填当前值不违反「不改写历史」——流式这一刻它就是作者。 */
+    attribution?: { assistantId?: string; providerId?: string; modelId?: string }
   }
 ): UiMessage[] {
   const images = input.images ?? []
+  const attribution = input.attribution ?? {}
   return [
     ...messages,
     {
@@ -59,7 +66,10 @@ export function startTurn(
       role: 'assistant',
       content: '',
       status: 'streaming',
-      route: input.route ?? null
+      route: input.route ?? null,
+      ...(attribution.assistantId ? { assistantId: attribution.assistantId } : {}),
+      ...(attribution.providerId ? { providerId: attribution.providerId } : {}),
+      ...(attribution.modelId ? { modelId: attribution.modelId } : {})
     }
   ]
 }
@@ -131,6 +141,9 @@ export function storedToUiMessages(
     references?: Array<{ chunkId: string; source: string }>
     reasoning?: string
     reasoningMs?: number
+    assistantId?: string
+    providerId?: string
+    modelId?: string
     route?: RouteDecisionDto | null
     images?: MessageImageDto[]
   }>
@@ -143,6 +156,10 @@ export function storedToUiMessages(
     references: message.references,
     ...(message.reasoning ? { reasoning: message.reasoning } : {}),
     ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+    // 归因必须原样带回：这是「历史归因」的唯一出口，缺了就退化成品牌标。
+    ...(message.assistantId ? { assistantId: message.assistantId } : {}),
+    ...(message.providerId ? { providerId: message.providerId } : {}),
+    ...(message.modelId ? { modelId: message.modelId } : {}),
     ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
     route: message.route ?? null
   }))

@@ -7,6 +7,7 @@ import type {
   ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
 import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
+import { withBuiltinAssistant } from '../lib/assistantDefaults'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
 import {
@@ -370,7 +371,9 @@ export default function ChatPanel() {
 
   const refreshAssistants = useCallback(async (): Promise<void> => {
     const list = await window.pointstudio.assistants.list()
-    setAssistants(list)
+    // 收编失败时主进程可能没有内置助手：渲染层兜底合成一条，
+    // 否则它名下的会话没有 Agent 行可挂，侧栏整块看不见。
+    setAssistants(withBuiltinAssistant(list, new Date().toISOString()))
     setAssistantsLoaded(true)
   }, [])
 
@@ -602,18 +605,32 @@ export default function ChatPanel() {
       studioStore.setState({ lastRouteDecision: route })
     }
 
+    // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
+    const validMentionIds = mentionedIds.filter((id) =>
+      mentionCandidates.some((candidate) => candidate.id === id)
+    )
+    // 群聊只 @ 一个成员时本轮由他接管；归因也要跟着他，而不是组长。
+    const replyOwnerId =
+      validMentionIds.length === 1 ? validMentionIds[0] : boundAssistant?.id
+
     const requestId = crypto.randomUUID()
     // 记快照：后端拦截（自动路由 / catalog 未命中）时用 onError 回滚。
     // 只有普通发送才记快照：历史重发的图片是列表里现成的（previewUrl 为空），
     // 若错误回填会把破图塞回输入框，而历史消息本来就在列表里。
     inflightSnapshot.current = textOverride === undefined ? snapshot : null
     // 乐观渲染：用户消息（含附图缩略图）与空气泡先上屏，chunk 到达即可追加。
+    // 空气泡带上「这一轮的真实作者」，否则流式全程身份栏都是中性品牌标。
     setMessages((prev) =>
       startTurn(prev, {
         requestId,
         text,
         route,
-        ...(outgoingImages.length > 0 ? { images: outgoingImages } : {})
+        ...(outgoingImages.length > 0 ? { images: outgoingImages } : {}),
+        attribution: {
+          ...(replyOwnerId ? { assistantId: replyOwnerId } : {}),
+          ...(activeProviderId ? { providerId: activeProviderId } : {}),
+          ...(activeModelLabel ? { modelId: activeModelLabel } : {})
+        }
       })
     )
     if (textOverride === undefined) {
@@ -631,9 +648,6 @@ export default function ChatPanel() {
     setError(null)
 
     // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
-    const validMentionIds = mentionedIds.filter((id) =>
-      mentionCandidates.some((candidate) => candidate.id === id)
-    )
     const result = await window.pointstudio.chat.send({
       id: requestId,
       conversationId,
@@ -1285,9 +1299,15 @@ export default function ChatPanel() {
   const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
   // parse 按原始字符串缓存：这里每帧只做一次 getItem + 字符串比较，不会重复 JSON.parse
   const modelServicesView = readModelServices()
-  const primarySlot = modelServicesView.slots.primaryModel
-  const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
-  const defaultModelValue = activeConversation?.model ?? (provider?.model || slotFallback)
+  // 这条链当前**不可达**：Composer 的 modelPolicy 恒为 locked-*，输入栏渲染的是 modelBadge
+  // （文字走 activeModelLabel），model / models 只服务于老 select 分支。
+  // 保留它只是清掉 slots.primaryModel 这个后门，并在将来 editable 复活时别踩「chip 报服务商默认」的坑。
+  // 三档全空时回退 Auto，别留空串。
+  const defaultModelValue =
+    activeConversation?.model ??
+    boundAssistant?.modelId ??
+    provider?.model ??
+    (AUTO_ROUTE_MODEL as string)
   // 只有主进程里真正配通（有 Key / 本地协议）的服务商模型才能选。
   const readyProviderIds = accounts
     .filter((account) => account.hasKey || account.protocol === 'ollama')
@@ -1760,16 +1780,25 @@ export default function ChatPanel() {
                       agentName: boundAssistant?.name ?? 'PointStudio',
                       onChanged: () => setMemoryTick((value) => value + 1)
                     },
-                    // 助手身份栏：头像 + Agent 名 + 厂商图标/模型名（仿 Cherry Studio）
-                    assistantMeta:                      message.role === 'assistant'
-                        ? {
-                            agentId: boundAssistant?.id ?? DEFAULT_ASSISTANT_ID,
-                            name: boundAssistant?.name ?? '通用助手',
-                            avatar: boundAssistant?.avatar ?? null,
-                            providerId: activeProviderId,
-                            modelLabel: activeModelLabel === '' ? null : activeModelLabel
-                          }
-                        : null,
+                    // 助手身份栏：用**这条消息写入时**的归因，别拿「当前」绑定去改写历史。
+                    // 没有归因的老消息退回中性品牌标（不声称是当前 Agent 说的）。
+                    assistantMeta: (() => {
+                      if (message.role !== 'assistant') {
+                        return null
+                      }
+                      const ownerId = message.assistantId
+                      if (typeof ownerId !== 'string') {
+                        return null
+                      }
+                      const agent = assistants.find((item) => item.id === ownerId)
+                      return {
+                        agentId: ownerId,
+                        name: agent?.name ?? 'Agent',
+                        avatar: agent?.avatar ?? null,
+                        providerId: message.providerId ?? null,
+                        modelLabel: message.modelId ?? null
+                      }
+                    })(),
                     images: message.images ?? []
                   }}
                 />

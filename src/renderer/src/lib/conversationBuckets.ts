@@ -50,8 +50,9 @@ export function partitionConversations(
     const ownerId =
       typeof owner === 'string' && owner !== '' && knownAgents.has(owner) ? owner : null
     if (ownerId === null) {
-      if (fallback === undefined) {
-        // 旧行为：孤儿 / 无主会话归入自由对话，绝不丢。
+      // 兜底 Agent 自己都不存在时（停止收编 / assistants.json 损坏），
+      // 宁可回自由对话桶让它可见，也不能塞进一个查不到的桶里凭空消失。
+      if (fallback === undefined || !knownAgents.has(fallback)) {
         freeChats.push(conversation)
         continue
       }
@@ -112,4 +113,35 @@ export function findAgentHomeConversation(
     }
   }
   return found
+}
+
+/** 侧栏搜索：只过滤「专题」与「小组会话」的标题，主聊天保留（否则 Agent 行会失去入口）。 */
+export function filterBuckets(
+  buckets: ConversationBuckets,
+  keyword: string
+): ConversationBuckets {
+  const needle = keyword.trim().toLowerCase()
+  if (needle === '') {
+    return buckets
+  }
+  const match = (item: ConversationDto): boolean =>
+    item.title.toLowerCase().includes(needle)
+
+  const agentTopicsById: Record<string, ConversationDto[]> = {}
+  for (const [agentId, topics] of Object.entries(buckets.agentTopicsById)) {
+    const kept = topics.filter(match)
+    if (kept.length > 0) {
+      agentTopicsById[agentId] = kept
+    }
+  }
+
+  const groupChatsById: Record<string, ConversationDto[]> = {}
+  for (const [groupId, chats] of Object.entries(buckets.groupChatsById)) {
+    const kept = chats.filter(match)
+    if (kept.length > 0) {
+      groupChatsById[groupId] = kept
+    }
+  }
+
+  return { ...buckets, agentTopicsById, groupChatsById }
 }

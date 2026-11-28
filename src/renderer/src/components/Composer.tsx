@@ -80,13 +80,19 @@ export default function Composer({
   onPlan: (goal?: string) => void
   /** 发送前的路由预判文案；null 表示不显示。 */
   routePreview?: string | null
+  /**
+   * 老下拉分支用的模型回调。
+   * 注意：本组 prop（onModelChange / model / models）只在 `modelPolicy === undefined` 时被读取，
+   * 而 ChatPanel 现在恒传 modelPolicy（且 resolveConversationComposerPolicy 带 defaultAssistantId，
+   * 恒返回 locked-*），所以现网这两条分支都不可达。已定：保留，勿删（不破 chat.composer 契约）。
+   */
   onModelChange: (model: string) => void
   onEffortChange: (effort: Effort) => void
   /** 会话类型决定模型入口：可编辑 / 锁定 Agent / 锁定小组。 */
   modelPolicy?: ComposerModelPolicy
   /** 锁定态显示的只读徽标。 */
   modelBadge?: ReactNode
-  /** 可编辑态渲染的模型选择浮层。 */
+  /** 可编辑态渲染的模型选择浮层（现网不可达，同上）。 */
   modelPicker?: ReactNode
   /** 群聊成员：输入 @ 时弹出。 */
   mentionCandidates?: MentionCandidate[]
@@ -609,7 +615,8 @@ export default function Composer({
               </button>
             </>
           ) : null}
-          {/* 老的下拉分支：ChatPanel 现已走 modelPolicy；保留给其它宿主/插件。 */}
+          {/* 老的下拉分支：ChatPanel 现已恒传 modelPolicy（locked-*），这段在现网不可达；
+              已定：保留，勿删（不破 chat.composer 契约）。 */}
           {modelPolicy === undefined ? (
             <>
               <label className="composer__pick" title="本次执行使用的模型（只影响这个会话）">
