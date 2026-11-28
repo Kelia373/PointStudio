@@ -82,3 +82,22 @@ test('助手不存在时返回 E_NOT_FOUND，且不改动任何会话', async ()
     assert.ok((await conversations.get(conversationId))?.assistantId, '原有绑定不能被误清')
   })
 })
+
+test('删除助手时连带清掉主聊天的 isHome，不留悬挂标记', async () => {
+  await withServices(async ({ assistants, conversations, assistantId }) => {
+    const home = await conversations.create({
+      assistantId,
+      isHome: true,
+      title: 'A · 主聊天'
+    })
+    assert.equal(home.ok, true)
+    if (!home.ok) return
+
+    const removed = await removeAssistantAndUnbind(assistants, conversations, assistantId)
+    assert.equal(removed.ok, true)
+
+    const saved = (await conversations.list()).find((item) => item.id === home.value.id)
+    assert.equal(saved?.assistantId, null)
+    assert.equal(saved?.isHome, undefined, '解绑后不得保留 isHome')
+  })
+})

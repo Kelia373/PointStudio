@@ -159,6 +159,8 @@ export default function ChatPanel() {
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
   // 小组增删改成员后自增，避免 @ 候选每帧去 localStorage 解析一次。
   const [groupsVersion, setGroupsVersion] = useState(0)
+  // 双击 / 连点的 in-flight 守卫：create 的 IPC 还没回来时，第二次点击不能再建一条。
+  const creatingRef = useRef<Set<string>>(new Set())
   const [busy, setBusy] = useField('busy')
   const [inflightId, setInflightId] = useField('inflightId')
   // 流式时正在输出的是哪条会话（inflightId 是 requestId，不能拿来比会话）
@@ -823,6 +825,19 @@ export default function ChatPanel() {
 
   /** 单击 Agent 行：进它的常驻主聊天；没有就建一条 isHome。 */
   async function openAgentHome(agentId: string): Promise<void> {
+    const key = `home:${agentId}`
+    if (creatingRef.current.has(key)) {
+      return
+    }
+    creatingRef.current.add(key)
+    try {
+      await openAgentHomeInner(agentId)
+    } finally {
+      creatingRef.current.delete(key)
+    }
+  }
+
+  async function openAgentHomeInner(agentId: string): Promise<void> {
     const existing = findAgentHomeConversation(agentId, conversations)
     if (existing) {
       setActiveId(existing.id)
@@ -846,6 +861,19 @@ export default function ChatPanel() {
 
   /** 给 Agent 新开专题子会话（不抢主聊天）。 */
   async function createAgentTopic(agentId: string): Promise<void> {
+    const key = `topic:${agentId}`
+    if (creatingRef.current.has(key)) {
+      return
+    }
+    creatingRef.current.add(key)
+    try {
+      await createAgentTopicInner(agentId)
+    } finally {
+      creatingRef.current.delete(key)
+    }
+  }
+
+  async function createAgentTopicInner(agentId: string): Promise<void> {
     const created = await window.pointstudio.conversations.create({ assistantId: agentId })
     if (!created.ok) {
       setError(describeError(created.code))
@@ -858,6 +886,19 @@ export default function ChatPanel() {
 
   /** 右键「开启新主聊天」：旧主聊天自动降级为专题，消息保留。 */
   async function newAgentHome(agentId: string): Promise<void> {
+    const key = `newhome:${agentId}`
+    if (creatingRef.current.has(key)) {
+      return
+    }
+    creatingRef.current.add(key)
+    try {
+      await newAgentHomeInner(agentId)
+    } finally {
+      creatingRef.current.delete(key)
+    }
+  }
+
+  async function newAgentHomeInner(agentId: string): Promise<void> {
     const agent = assistants.find((item) => item.id === agentId)
     const created = await window.pointstudio.conversations.create({
       assistantId: agentId,
@@ -944,11 +985,15 @@ export default function ChatPanel() {
       ) ?? null
     )
   }, [activeConversation?.groupId, groupsVersion])
-  const mentionCandidates = (activeGroup?.memberIds ?? [])
-    .map((id) => assistants.find((agent) => agent.id === id))
-    .filter((agent): agent is NonNullable<typeof agent> => agent !== undefined)
-    .filter((agent) => agent.enabled !== false)
-    .map((agent) => ({ id: agent.id, name: agent.name }))
+  const mentionCandidates = useMemo(
+    () =>
+      (activeGroup?.memberIds ?? [])
+        .map((id) => assistants.find((agent) => agent.id === id))
+        .filter((agent): agent is NonNullable<typeof agent> => agent !== undefined)
+        .filter((agent) => agent.enabled !== false)
+        .map((agent) => ({ id: agent.id, name: agent.name })),
+    [activeGroup, assistants]
+  )
   useEffect(() => {
     setMentionedIds([])
   }, [activeId])

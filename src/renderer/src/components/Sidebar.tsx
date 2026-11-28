@@ -140,7 +140,7 @@ export default function Sidebar({
   // 工位区：整段可折叠、行上右键出菜单、改名在行内完成
   const [agentsOpen, setAgentsOpen] = useState(true)
   // 项目区：与 Agent Bench 同样是可折叠的分区头
-  const [projectsOpen, setProjectsOpen] = useState(true)
+  const [freeChatsOpen, setProjectsOpen] = useState(true)
   const [menu, setMenu] = useState<{ agentId: string; x: number; y: number } | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -1123,8 +1123,8 @@ export default function Sidebar({
           <button
             className="side__head-btn"
             type="button"
-            aria-expanded={projectsOpen}
-            title={projectsOpen ? '收起普通聊天' : '展开普通聊天'}
+            aria-expanded={freeChatsOpen}
+            title={freeChatsOpen ? '收起普通聊天' : '展开普通聊天'}
             onClick={() => setProjectsOpen((value) => !value)}
           >
             <Icon name="compass" className="side__head-icon" size={13} />
@@ -1132,7 +1132,7 @@ export default function Sidebar({
             <span className="side__head-note">{freeChats.length}</span>
             <Icon
               name="arrow-down"
-              className={`side__head-caret${projectsOpen ? ' is-open' : ''}`}
+              className={`side__head-caret${freeChatsOpen ? ' is-open' : ''}`}
               size={13}
             />
           </button>
@@ -1156,7 +1156,7 @@ export default function Sidebar({
             <Icon name="plus" size={13} />
           </button>
         </div>
-        {projectsOpen ? (
+        {freeChatsOpen ? (
           <ul className="side__list">
             {freeChats.map((conversation) => (
               <li key={conversation.id}>
