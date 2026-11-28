@@ -6,7 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { tokenizeCode } from '../codeHighlight.ts'
+import { codeLanguageLabel, tokenizeCode } from '../codeHighlight.ts'
 
 const SAMPLES: Array<{ lang: string; code: string }> = [
   {
@@ -138,4 +138,28 @@ test('未闭合的字符串不吞掉整个文件，仍保持拼接恒等', () =>
   const code = 'const s = "unterminated'
   const tokens = tokenizeCode(code, 'ts')
   assert.equal(tokens.map((token) => token.value).join(''), code)
+})
+
+test('顶栏语言徽标：TS 与 JS 分开，未知语言显示原名', () => {
+  assert.equal(codeLanguageLabel('ts'), 'TS')
+  assert.equal(codeLanguageLabel('typescript'), 'TS')
+  assert.equal(codeLanguageLabel('js'), 'JS')
+  assert.equal(codeLanguageLabel('javascript'), 'JS')
+  assert.equal(codeLanguageLabel('yaml'), 'yaml')
+  assert.equal(codeLanguageLabel('java'), 'java')
+  assert.equal(codeLanguageLabel(''), 'text')
+  assert.equal(codeLanguageLabel('  '), 'text')
+})
+
+test('大小写敏感：大写的普通标识符不会被误染成关键字', () => {
+  const ts = tokenizeCode('const Class = Return + Async', 'ts')
+  assert.equal(
+    ts.some((token) => token.kind === 'kw' && /^(Class|Return|Async)$/.test(token.value)),
+    false
+  )
+
+  // Python 的 True / False / None 是大写常量，必须仍然着色
+  const py = tokenizeCode('x = True\ny = False\nz = None', 'python')
+  const constants = py.filter((token) => token.kind === 'num').map((token) => token.value)
+  assert.deepEqual(constants, ['True', 'False', 'None'])
 })

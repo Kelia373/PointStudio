@@ -97,7 +97,9 @@ const SQL_KEYWORDS = [
 function spec(partial: Partial<FamilySpec> & Pick<FamilySpec, 'keywords' | 'quotes'>): FamilySpec {
   return {
     types: new Set(),
-    constants: new Set(['true', 'false', 'null', 'undefined', 'none', 'nil']),
+    // 常量按**原样大小写**比对：Python 的 True/None 是大写，JS 的 true/null 是小写，
+    // 混成一套小写集合就会把 `Class` / `Return` 这类普通标识符也染成常量色。
+    constants: new Set(),
     line: [],
     ...partial
   }
@@ -107,6 +109,7 @@ const SPECS: Record<Family, FamilySpec> = {
   js: spec({
     keywords: new Set(JS_KEYWORDS),
     types: new Set(JS_TYPES),
+    constants: new Set(['true', 'false', 'null', 'undefined']),
     line: ['//'],
     block: ['/*', '*/'],
     quotes: ['`', '"', "'"]
@@ -114,12 +117,13 @@ const SPECS: Record<Family, FamilySpec> = {
   py: spec({
     keywords: new Set(PY_KEYWORDS),
     types: new Set(PY_TYPES),
-    constants: new Set(['true', 'false', 'none', 'self']),
+    constants: new Set(['True', 'False', 'None']),
     line: ['#'],
     quotes: ['"""', "'''", '"', "'"]
   }),
   json: spec({
     keywords: new Set(),
+    constants: new Set(['true', 'false', 'null']),
     quotes: ['"']
   }),
   sh: spec({
@@ -130,6 +134,7 @@ const SPECS: Record<Family, FamilySpec> = {
   go: spec({
     keywords: new Set(GO_KEYWORDS),
     types: new Set(GO_TYPES),
+    constants: new Set(['true', 'false', 'nil']),
     line: ['//'],
     block: ['/*', '*/'],
     quotes: ['`', '"', "'"]
@@ -137,6 +142,7 @@ const SPECS: Record<Family, FamilySpec> = {
   rust: spec({
     keywords: new Set(RUST_KEYWORDS),
     types: new Set(RUST_TYPES),
+    constants: new Set(['true', 'false']),
     line: ['//'],
     block: ['/*', '*/'],
     quotes: ['"', "'"]
@@ -177,22 +183,55 @@ const ALIASES: Record<string, Family> = {
   sql: 'sql', mysql: 'sql', postgres: 'sql', postgresql: 'sql', sqlite: 'sql'
 }
 
-const LABELS: Record<Family, string> = {
-  js: 'TS',
+const LABELS: Record<string, string> = {
+  ts: 'TS',
+  tsx: 'TS',
+  typescript: 'TS',
+  js: 'JS',
+  jsx: 'JS',
+  mjs: 'JS',
+  cjs: 'JS',
+  javascript: 'JS',
   py: 'PY',
+  python: 'PY',
+  python3: 'PY',
   json: 'JSON',
+  jsonc: 'JSON',
   sh: 'SH',
+  bash: 'SH',
+  zsh: 'SH',
+  shell: 'SH',
+  console: 'SH',
+  powershell: 'SH',
+  ps1: 'SH',
   go: 'GO',
+  golang: 'GO',
   rust: 'RS',
+  rs: 'RS',
   css: 'CSS',
+  scss: 'CSS',
+  less: 'CSS',
   html: 'HTML',
-  sql: 'SQL'
+  xml: 'HTML',
+  vue: 'HTML',
+  svg: 'HTML',
+  sql: 'SQL',
+  mysql: 'SQL',
+  postgres: 'SQL',
+  postgresql: 'SQL',
+  sqlite: 'SQL'
 }
 
-/** 代码块顶栏的小徽标：已知语言给简称，未知回落到 raw。 */
+/**
+ * 代码块顶栏的小徽标：TS 与 JS 必须分开显示；未知语言原样显示用户写的名字
+ * （显示成 `text` 会让人以为高亮失败），只有空语言才回退 `text`。
+ */
 export function codeLanguageLabel(lang: string): string {
-  const family = ALIASES[lang.trim().toLowerCase()]
-  return family === undefined ? 'text' : LABELS[family]
+  const key = lang.trim().toLowerCase()
+  if (key === '') {
+    return 'text'
+  }
+  return LABELS[key] ?? lang.trim()
 }
 
 /** 这个语言是否走着色（未知语言直接原样返回，也不显示彩色）。 */
@@ -290,14 +329,12 @@ export function tokenizeCode(code: string, lang: string): CodeToken[] {
 
     const ident = IDENT.exec(rest)?.[0]
     if (ident !== undefined) {
-      const lower = ident.toLowerCase()
-      const canon = rules.compareCaseInsensitive === true ? lower : ident
-      const canonLower = lower
-      if (rules.keywords.has(canon) || rules.keywords.has(canonLower)) {
+      const canon = rules.compareCaseInsensitive === true ? ident.toLowerCase() : ident
+      if (rules.keywords.has(canon)) {
         push('kw', ident)
-      } else if (rules.constants.has(canonLower)) {
+      } else if (rules.constants.has(canon)) {
         push('num', ident)
-      } else if (rules.types.has(ident) || rules.types.has(canonLower)) {
+      } else if (rules.types.has(canon)) {
         push('type', ident)
       } else {
         let k = i + ident.length
