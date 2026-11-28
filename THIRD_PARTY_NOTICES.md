@@ -143,18 +143,58 @@ SOFTWARE.
 
 ---
 
-## Geist Mono
+## 内置字体（17 款，SIL Open Font License 1.1）
 
-- 用途：`src/renderer/src/assets/fonts/GeistMono-Variable.woff2`（`--mono` 首选字体，未修改字体文件）
-- 上游：https://github.com/vercel/geist-font
-- 许可：SIL Open Font License 1.1
+- 用途：`src/renderer/src/assets/fonts/*.woff2`，由 `styles/fonts.css` 的 `@font-face` 映射为
+  「设置 → 字体与字号」里的全局字体（`--font-ui`）与代码字体（`--mono-code`）。
+  文件为上游的 latin / latin-ext 子集裁剪（`unicode-range` 由 Google Fonts 子集切分给定），
+  **字形本身未改动**，因此未产生 Modified Version，未涉及保留字体名称争议。
+- 上游：Google Fonts（https://fonts.google.com），逐款源码仓库见下表。
+- 许可：SIL Open Font License 1.1，17 款共用文末同一份全文；各款版权声明逐条列在下表。
+- 新增字体时必须同时更新本表与 `lib/typography.ts` 注册表（`typographyCss.test.ts` 会校验）。
+
+| 字体 | 分类 | 版权声明 | 上游仓库 |
+| --- | --- | --- | --- |
+| Geist | 正文 | Copyright 2024 The Geist Project Authors | https://github.com/vercel/geist-font |
+| Geist Mono | 代码 | Copyright 2026 The Geist Project Authors | https://github.com/vercel/geist-font |
+| Inter | 正文 | Copyright 2020 The Inter Project Authors | https://github.com/rsms/inter |
+| Manrope | 正文 | Copyright 2018 The Manrope Project Authors | https://github.com/googlefonts/manrope |
+| Plus Jakarta Sans | 正文 | Copyright 2020 The Plus Jakarta Sans Project Authors | https://github.com/tokotype/PlusJakartaSans |
+| IBM Plex Sans | 正文 | Copyright © 2017 IBM Corp. with Reserved Font Name "Plex" | https://github.com/IBM/plex |
+| IBM Plex Mono | 代码 | Copyright © 2017 IBM Corp. with Reserved Font Name "Plex" | https://github.com/IBM/plex |
+| Space Grotesk | 正文 | Copyright 2020 The Space Grotesk Project Authors | https://github.com/floriankarsten/space-grotesk |
+| DM Sans | 正文 | Copyright 2014 The DM Sans Project Authors | https://github.com/googlefonts/dm-fonts |
+| Figtree | 正文 | Copyright 2022 The Figtree Project Authors | https://github.com/erikdkennedy/figtree |
+| JetBrains Mono | 代码 | Copyright 2020 The JetBrains Mono Project Authors | https://github.com/JetBrains/JetBrainsMono |
+| Fira Code | 代码 | Copyright 2014-2020 The Fira Code Project Authors | https://github.com/tonsky/FiraCode |
+| Source Code Pro | 代码 | Copyright 2010, 2012 Adobe Systems Incorporated, with Reserved Font Name 'Source'. All Rights Reserved. | https://github.com/adobe-fonts/source-code-pro |
+| Red Hat Mono | 代码 | Copyright 2024 The Red Hat Project Authors | https://github.com/RedHatOfficial/RedHatFont |
+| Martian Mono | 代码 | Copyright 2021 The Martian Mono Project Authors | https://github.com/evilmartians/mono |
+| Inconsolata | 代码 | Copyright 2006 The Inconsolata Project Authors | https://github.com/googlefonts/Inconsolata |
+| Azeret Mono | 代码 | Copyright 2021 The Azeret Project Authors | https://github.com/displaay/azeret |
 
 ```text
+Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font.git)
 Copyright 2026 The Geist Project Authors (https://github.com/vercel/geist-font)
+Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter)
+Copyright 2018 The Manrope Project Authors (https://github.com/googlefonts/manrope)
+Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotype/PlusJakartaSans)
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+Copyright 2020 The Space Grotesk Project Authors (https://github.com/floriankarsten/space-grotesk)
+Copyright 2014 The DM Sans Project Authors (https://github.com/googlefonts/dm-fonts)
+Copyright 2022 The Figtree Project Authors (https://github.com/erikdkennedy/figtree)
+Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+Copyright 2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)
+Copyright 2010, 2012 Adobe Systems Incorporated (http://www.adobe.com/), with Reserved Font Name 'Source'. All Rights Reserved. Source is a trademark of Adobe Systems Incorporated in the United States and/or other countries.
+Copyright 2024 The Red Hat Project Authors (https://github.com/RedHatOfficial/RedHatFont)
+Copyright 2021 The Martian Mono Project Authors (https://github.com/evilmartians/mono)
+Copyright 2006 The Inconsolata Project Authors
+Copyright 2021 The Azeret Project Authors (https://github.com/displaay/azeret)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
+```
 
 
 -----------------------------------------------------------

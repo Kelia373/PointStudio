@@ -51,3 +51,15 @@ test('@font-face 只认随包文件，不许出现远程地址', () => {
   assert.equal(/https?:\/\//.test(css), false, 'fonts.css 不能引用远程字体（离线可用是硬要求）')
   assert.match(css, /font-display:\s*swap/, '缺少 font-display: swap，首屏会空白等字体')
 })
+
+test('每款内置字体都要在 THIRD_PARTY_NOTICES.md 里署名', () => {
+  const notices = fileURLToPath(new URL('../../../../../THIRD_PARTY_NOTICES.md', import.meta.url))
+  assert.ok(existsSync(notices), '缺少 THIRD_PARTY_NOTICES.md')
+  const text = read(notices)
+  assert.ok(text.includes('SIL Open Font License 1.1'), '通知文件缺少 OFL 许可说明')
+  for (const item of [...UI_FONTS, ...CODE_FONTS].filter((entry) => entry.bundled)) {
+    const family = /^'([^']+)'/.exec(item.css)?.[1]
+    assert.ok(family, `${item.id} 的首项应是引号族名`)
+    assert.ok(text.includes(family), `THIRD_PARTY_NOTICES.md 没有 ${family} 的署名`)
+  }
+})
