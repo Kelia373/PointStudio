@@ -16,6 +16,8 @@ export interface WorkspaceImportPorts {
   readSource: (absolutePath: string) => Promise<string>
   /** 把内容写到工作区存储（相对路径）。 */
   writeStored: (relativePath: string, content: string) => Promise<void>
+  /** 删掉工作区存储里的副本；文件本就不在时按成功处理。 */
+  removeStored: (relativePath: string) => Promise<void>
 }
 
 /** 只保留文件名：工作区是一层平面命名空间，保留原目录结构只会制造歧义。 */
@@ -72,5 +74,32 @@ export class WorkspaceImportService {
       return { ok: false, errors: registered.errors }
     }
     return { ok: true, value: registered.value }
+  }
+
+  /**
+   * 从工作区移除：**先撤登记，再删磁盘副本**。
+   *
+   * 顺序不能反——先删内容再撤登记的话，中途失败会让列表里留一条
+   * 「点开读不到」的死记录；反过来最多留一份没人引用的副本（下次
+   * 同名导入会被 E_FILE_EXISTS 挡住，但那也比半套状态好收拾）。
+   * 删副本失败不再对用户报错：登记已经撤掉，用户看到的就是「已移除」。
+   */
+  async remove(id: string): Promise<ServiceResult<true>> {
+    const file = await this.workspace.get(id)
+    if (file === null) {
+      return { ok: false, errors: ['E_NOT_FOUND'] }
+    }
+
+    const removed = await this.workspace.remove(id)
+    if (!removed.ok) {
+      return removed
+    }
+
+    try {
+      await this.ports.removeStored(file.path)
+    } catch {
+      // 副本没删掉只浪费磁盘，不能因此把「移除」判成失败。
+    }
+    return { ok: true, value: true }
   }
 }
