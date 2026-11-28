@@ -557,3 +557,102 @@ test('会话级模型与服务商覆盖优先于助手绑定', async () => {
     { model: 'claude-sonnet-4-5', baseUrl: 'https://opencode.ai/inference/go/openai/v1' }
   ])
 })
+
+test('群聊 @ 成员：assistantOverride 让本轮由被 @ 的 Agent 接管并记账', async () => {
+  const seen: string[] = []
+  const usage: Array<string | null> = []
+  const lookup: AssistantLookup = {
+    get: async (id) => ({
+      id,
+      name: id,
+      systemPrompt: '',
+      providerId: 'deepseek',
+      modelId: id === 'agent-b' ? 'deepseek-reasoner' : 'deepseek-chat',
+      params: { temperature: 0.7, maxTokens: 1024, topP: 1 },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    })
+  }
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      seen.push(request.model)
+      request.onUsage?.({
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        cacheHitTokens: 0
+      })
+      yield 'ok'
+    }
+  }
+  await withFlow(
+    async ({ conversations, conversationId }) => {
+      for await (const _chunk of streamAssistantReply(conversationId, 'hi', {
+        conversations,
+        assistants: lookup,
+        engine: { provider, apiKey: 'k', baseUrl: 'x', model: 'deepseek-chat' },
+        assistantOverride: 'agent-b',
+        onUsageRecorded: (record) => {
+          usage.push(record.assistantId)
+        }
+      })) {
+        // 消费
+      }
+    },
+    lookup,
+    'agent-a'
+  )
+  assert.deepEqual(seen, ['deepseek-reasoner'])
+  assert.deepEqual(usage, ['agent-b'])
+})
+
+test('@ 停用的成员时回落会话绑定的组长', async () => {
+  const seen: string[] = []
+  const usage: Array<string | null> = []
+  const lookup: AssistantLookup = {
+    get: async (id) => ({
+      id,
+      name: id,
+      systemPrompt: '',
+      providerId: 'deepseek',
+      modelId: id === 'agent-b' ? 'deepseek-reasoner' : 'deepseek-chat',
+      enabled: id !== 'agent-b',
+      params: { temperature: 0.7, maxTokens: 1024, topP: 1 },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    })
+  }
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      seen.push(request.model)
+      request.onUsage?.({
+        promptTokens: 1,
+        completionTokens: 1,
+        totalTokens: 2,
+        cacheHitTokens: 0
+      })
+      yield 'ok'
+    }
+  }
+  await withFlow(
+    async ({ conversations, conversationId }) => {
+      for await (const _chunk of streamAssistantReply(conversationId, 'hi', {
+        conversations,
+        assistants: lookup,
+        engine: { provider, apiKey: 'k', baseUrl: 'x', model: 'deepseek-chat' },
+        assistantOverride: 'agent-b',
+        onUsageRecorded: (record) => {
+          usage.push(record.assistantId)
+        }
+      })) {
+        // 消费
+      }
+    },
+    lookup,
+    'agent-a'
+  )
+  assert.deepEqual(seen, ['deepseek-chat'])
+  assert.deepEqual(usage, ['agent-a'])
+})

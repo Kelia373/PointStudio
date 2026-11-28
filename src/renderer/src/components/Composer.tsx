@@ -1,11 +1,37 @@
 // 输入区：三态（发送 / 流式中 / 停止）+ 高度自适应 + Enter 发送。
-// 模型入口按会话类型分三种：自由对话可编辑、绑定 Agent 只读、小组只读。
-import { useEffect, useRef, type ReactNode } from 'react'
+// 群聊支持 @ 成员（被选中的人以高亮 chip 展示，发送时由该成员接管本轮）；
+// 同时支持 / 指令：/plan 生成计划、/stop 停止生成、/clear 清空输入。
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { EFFORT_LABEL, MODEL_LABEL, type Effort } from '../lib/modelOptions'
+import { parseSlashCommand } from '../lib/composerCommands'
 import type { ComposerModelPolicy } from '../lib/modelPicker'
 import { Slot } from '../runtime/SlotRenderer'
 import Icon from './Icon'
+
+interface MentionCandidate {
+  id: string
+  name: string
+}
+
+interface SlashCommand {
+  command: string
+  label: string
+}
+
+const COMMANDS: SlashCommand[] = [
+  { command: '/plan', label: '生成执行计划' },
+  { command: '/stop', label: '停止生成' },
+  { command: '/clear', label: '清空输入' }
+]
+
+interface MenuState {
+  kind: 'mention' | 'command'
+  /** 触发位置：@ 或 / 在文本里的下标。 */
+  start: number
+  query: string
+  active: number
+}
 
 export default function Composer({
   draft,
@@ -23,7 +49,10 @@ export default function Composer({
   onEffortChange,
   modelPolicy,
   modelBadge,
-  modelPicker
+  modelPicker,
+  mentionCandidates,
+  mentionedIds,
+  onMentionedChange
 }: {
   draft: string
   busy: boolean
@@ -37,7 +66,7 @@ export default function Composer({
   onDraftChange: (value: string) => void
   onSend: () => void
   onStop: () => void
-  onPlan: () => void
+  onPlan: (goal?: string) => void
   /** 发送前的路由预判文案；null 表示不显示。 */
   routePreview?: string | null
   onModelChange: (model: string) => void
@@ -48,8 +77,18 @@ export default function Composer({
   modelBadge?: ReactNode
   /** 可编辑态渲染的模型选择浮层。 */
   modelPicker?: ReactNode
+  /** 群聊成员：输入 @ 时弹出。 */
+  mentionCandidates?: MentionCandidate[]
+  /** 已被 @ 的成员 id（由上层持有，发送时用来路由）。 */
+  mentionedIds?: string[]
+  onMentionedChange?: (ids: string[]) => void
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [menu, setMenu] = useState<MenuState | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
+
+  const candidates = mentionCandidates ?? []
+  const mentioned = mentionedIds ?? []
 
   // 高度自适应：内容长高就长高，但不超过 CSS 的 max-height。
   useEffect(() => {
@@ -61,32 +100,255 @@ export default function Composer({
     node.style.height = `${node.scrollHeight}px`
   }, [draft])
 
+  function findMention(value: string, caret: number): MenuState | null {
+    if (candidates.length === 0) {
+      return null
+    }
+    const before = value.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at < 0) {
+      return null
+    }
+    const query = before.slice(at + 1)
+    // @ 后面不能出现空白，否则视为普通文本。
+    if (/\s/.test(query)) {
+      return null
+    }
+    return { kind: 'mention', start: at, query, active: 0 }
+  }
+
+  function findCommand(value: string): MenuState | null {
+    if (!value.startsWith('/') || /\s/.test(value) || value.length > 20) {
+      return null
+    }
+    return { kind: 'command', start: 0, query: value, active: 0 }
+  }
+
+  function refreshMenu(value: string, caret: number): void {
+    setMenu(findCommand(value) ?? findMention(value, caret))
+  }
+
+  const mentionMatches =
+    menu?.kind === 'mention'
+      ? candidates.filter((item) =>
+          item.name.toLowerCase().includes(menu.query.toLowerCase())
+        )
+      : []
+  const commandMatches =
+    menu?.kind === 'command'
+      ? COMMANDS.filter((item) => item.command.startsWith(menu.query.toLowerCase()))
+      : []
+  const menuItems = menu?.kind === 'mention' ? mentionMatches.length : commandMatches.length
+  const activeIndex = menu ? Math.min(menu.active, Math.max(0, menuItems - 1)) : 0
+
+  function applyMention(candidate: MentionCandidate): void {
+    const node = inputRef.current
+    const caret = node?.selectionStart ?? draft.length
+    const start = menu?.start ?? draft.lastIndexOf('@')
+    const next = `${draft.slice(0, start)}@${candidate.name} ${draft.slice(caret)}`
+    onDraftChange(next)
+    if (!mentioned.includes(candidate.id)) {
+      onMentionedChange?.([...mentioned, candidate.id])
+    }
+    setMenu(null)
+    requestAnimationFrame(() => {
+      node?.focus()
+      const position = start + candidate.name.length + 2
+      node?.setSelectionRange(position, position)
+    })
+  }
+
+  function applyCommand(command: string): void {
+    setMenu(null)
+    if (command === '/plan') {
+      // 裸 /plan 不带目标时绝不发起规划，否则会把 "/plan" 当目标白烧一次调用。
+      setHint('在 /plan 后面写目标，例如：/plan 修复登录')
+      return
+    }
+    if (command === '/stop') {
+      onStop()
+      onDraftChange('')
+      return
+    }
+    onDraftChange('')
+  }
+
+  /** 提交时识别 /plan <目标>、/stop、/clear；返回 true 表示已当指令处理。 */
+  function runCommandFromDraft(value: string): boolean {
+    const command = parseSlashCommand(value)
+    if (command === null) {
+      return false
+    }
+    if (command.kind === 'plan-needs-goal') {
+      setHint('在 /plan 后面写目标，例如：/plan 修复登录')
+      return true
+    }
+    if (command.kind === 'plan') {
+      onPlan(command.goal)
+      onDraftChange('')
+      return true
+    }
+    if (command.kind === 'stop') {
+      onStop()
+      onDraftChange('')
+      return true
+    }
+    onDraftChange('')
+    return true
+  }
+
+  function removeMention(candidate: MentionCandidate): void {
+    onMentionedChange?.(mentioned.filter((id) => id !== candidate.id))
+    const token = `@${candidate.name}`
+    const index = draft.indexOf(token)
+    if (index < 0) {
+      return
+    }
+    const end = index + token.length
+    // 只吃掉 @名字 后面那一个分隔空格，不动用户自己的排版。
+    onDraftChange(draft.slice(0, index) + draft.slice(draft[end] === ' ' ? end + 1 : end))
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+    if (menu && menuItems > 0) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault()
+        const delta = event.key === 'ArrowDown' ? 1 : -1
+        setMenu({ ...menu, active: (activeIndex + delta + menuItems) % menuItems })
+        return
+      }
+      if (event.key === 'Enter' || event.key === 'Tab') {
+        event.preventDefault()
+        if (menu.kind === 'mention') {
+          applyMention(mentionMatches[activeIndex])
+        } else {
+          applyCommand(commandMatches[activeIndex].command)
+        }
+        return
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMenu(null)
+        return
+      }
+    }
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      if (busy) {
+        return
+      }
+      if (runCommandFromDraft(draft)) {
+        return
+      }
+      onSend()
+    }
+  }
+
   return (
     <form
       className="composer"
       onSubmit={(event) => {
         event.preventDefault()
-        if (!busy) {
-          onSend()
+        if (busy) {
+          return
         }
+        if (runCommandFromDraft(draft)) {
+          return
+        }
+        onSend()
       }}
     >
       <div className="composer__box">
+        {mentioned.length > 0 ? (
+          <div className="composer__mentions" aria-label="已 @ 的成员">
+            {mentioned.map((id) => {
+              const candidate = candidates.find((item) => item.id === id)
+              if (!candidate) {
+                return null
+              }
+              return (
+                <span key={id} className="composer__mention">
+                  @{candidate.name}
+                  <button
+                    type="button"
+                    className="composer__mention-x"
+                    aria-label={`取消 @${candidate.name}`}
+                    onClick={() => removeMention(candidate)}
+                  >
+                    ×
+                  </button>
+                </span>
+              )
+            })}
+          </div>
+        ) : null}
+
+        {hint ? <p className="composer__hint">{hint}</p> : null}
+
+        {mentioned.length > 1 ? (
+          <p className="composer__hint">
+            已 @ 多个成员：本轮仍由组长回答（多 Agent 同室排后续）
+          </p>
+        ) : null}
+
+        {menu && menuItems > 0 ? (
+          <div className="composer__menu" role="listbox" aria-label="指令或成员">
+            {menu.kind === 'mention'
+              ? mentionMatches.map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={`composer__menu-item${index === activeIndex ? ' is-on' : ''}`}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      applyMention(item)
+                    }}
+                  >
+                    <span>@{item.name}</span>
+                  </button>
+                ))
+              : commandMatches.map((item, index) => (
+                  <button
+                    key={item.command}
+                    type="button"
+                    role="option"
+                    aria-selected={index === activeIndex}
+                    className={`composer__menu-item${index === activeIndex ? ' is-on' : ''}`}
+                    onMouseDown={(event) => {
+                      event.preventDefault()
+                      applyCommand(item.command)
+                    }}
+                  >
+                    <code>{item.command}</code>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+          </div>
+        ) : null}
+
         <textarea
           ref={inputRef}
           className="composer__input"
           value={draft}
           rows={1}
-          placeholder="输入消息，Enter 发送，Shift+Enter 换行"
-          onChange={(event) => onDraftChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && !event.shiftKey) {
-              event.preventDefault()
-              if (!busy) {
-                onSend()
-              }
+          placeholder="输入消息，Enter 发送，Shift+Enter 换行；@ 成员，/ 指令"
+          onChange={(event) => {
+            const value = event.target.value
+            setHint(null)
+            onDraftChange(value)
+            refreshMenu(value, event.target.selectionStart)
+            // 手动删掉 @名字 时，把对应 chip 一并撤掉，避免发送时路由到没提到的人。
+            const stillMentioned = mentioned.filter((id) => {
+              const candidate = candidates.find((item) => item.id === id)
+              return candidate ? value.includes(`@${candidate.name}`) : false
+            })
+            if (stillMentioned.length !== mentioned.length) {
+              onMentionedChange?.(stillMentioned)
             }
           }}
+          onKeyDown={handleKeyDown}
         />
         <div className="composer__bar">
           {/* 老的下拉分支：ChatPanel 现已走 modelPolicy；保留给其它宿主/插件。 */}
@@ -134,7 +396,7 @@ export default function Composer({
               title={
                 modelPolicy.mode === 'locked-agent'
                   ? '模型由该 Agent 的绑定决定，点击去右侧检查器修改'
-                  : '小组里各成员按各自绑定走模型'
+                  : '群聊：输入 @ 指定成员接管本轮'
               }
             >
               {modelBadge}
@@ -148,7 +410,7 @@ export default function Composer({
           <button
             className="msg__act"
             type="button"
-            onClick={onPlan}
+            onClick={() => onPlan()}
             disabled={busy || draft.trim() === ''}
             title="把这句话交给 Agent 生成执行计划"
           >

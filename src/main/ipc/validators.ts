@@ -39,6 +39,13 @@ export function isChatSendRequest(value: unknown): value is ChatSendRequest {
   if (!isObject(value)) {
     return false
   }
+  if (
+    value.assistantId !== undefined &&
+    value.assistantId !== null &&
+    (typeof value.assistantId !== 'string' || value.assistantId.length > 120)
+  ) {
+    return false
+  }
   return (
     isUuid(value.id) &&
     isUuid(value.conversationId) &&

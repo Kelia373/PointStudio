@@ -51,6 +51,7 @@ import {
 } from '../lib/modelServices'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
 import { EFFORT_SHORT_LABEL, resolveConversationComposerPolicy } from '../lib/modelPicker'
+import { AGENT_GROUPS_KEY, parseAgentGroups } from '../lib/agentGroups'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
 import { deriveActiveWorkerRuns } from '../lib/workerRuns'
 import { buildMissionChains, filterMessagesByMission } from '../lib/missionTrace'
@@ -153,6 +154,8 @@ export default function ChatPanel() {
   const [conversations, setConversations] = useField('conversations')
   const [activeId, setActiveId] = useField('activeId')
   const [draft, setDraft] = useState('')
+  // 群聊里被 @ 的成员：发送时只有恰好一个时由该成员接管本轮。
+  const [mentionedIds, setMentionedIds] = useState<string[]>([])
   const [busy, setBusy] = useField('busy')
   const [inflightId, setInflightId] = useField('inflightId')
   // 流式时正在输出的是哪条会话（inflightId 是 requestId，不能拿来比会话）
@@ -506,9 +509,20 @@ export default function ChatPanel() {
     runStartedAt.current = Date.now()
     setError(null)
 
-    const result = await window.pointstudio.chat.send({ id: requestId, conversationId, text })
+    // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
+    const validMentionIds = mentionedIds.filter((id) =>
+      mentionCandidates.some((candidate) => candidate.id === id)
+    )
+    const result = await window.pointstudio.chat.send({
+      id: requestId,
+      conversationId,
+      text,
+      // 群聊只 @ 了一个成员时，由该成员接管本轮；多 @/未 @ 仍由会话绑定的组长回答。
+      ...(validMentionIds.length === 1 ? { assistantId: validMentionIds[0] } : {})
+    })
     if (result.ok) {
       setMode(result.mode)
+      setMentionedIds([])
       return
     }
     setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
@@ -854,6 +868,26 @@ export default function ChatPanel() {
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
   // 只有真正的小组会话（会话级 groupId）才锁模型；Agent 属于某个小组不影响
   // 它的一对一会话 —— agentGroups 只是侧栏分组，不是会话绑定。
+  // 每次都从 localStorage 解析：侧栏刚改完成员，已打开的群聊也能立刻刷新候选。
+  const activeGroup = (() => {
+    const groupId = activeConversation?.groupId
+    if (!groupId) {
+      return null
+    }
+    return (
+      parseAgentGroups(window.localStorage.getItem(AGENT_GROUPS_KEY)).find(
+        (group) => group.id === groupId
+      ) ?? null
+    )
+  })()
+  const mentionCandidates = (activeGroup?.memberIds ?? [])
+    .map((id) => assistants.find((agent) => agent.id === id))
+    .filter((agent): agent is NonNullable<typeof agent> => agent !== undefined)
+    .filter((agent) => agent.enabled !== false)
+    .map((agent) => ({ id: agent.id, name: agent.name }))
+  useEffect(() => {
+    setMentionedIds([])
+  }, [activeId])
   const composerModelPolicy = resolveConversationComposerPolicy({
     assistantId: activeConversation?.assistantId ?? null,
     groupId: activeConversation?.groupId ?? null
@@ -1534,9 +1568,12 @@ export default function ChatPanel() {
               onOpenSettings={() => setSettingsOpen(true)}
             />
           ),
+          mentionCandidates: composerModelPolicy.mode === 'locked-group' ? mentionCandidates : [],
+          mentionedIds,
+          onMentionedChange: setMentionedIds,
           modelBadge:
             composerModelPolicy.mode === 'locked-group' ? (
-              <span>各成员独立模型</span>
+              <span>群聊 · @ 成员接管</span>
             ) : (
               <button
                 className="composer__model-badge-btn"
@@ -1569,7 +1606,7 @@ export default function ChatPanel() {
               void window.pointstudio.chat.cancel(inflightId)
             }
           },
-          onPlan: () => void runPlan(),
+          onPlan: (goal?: string) => void runPlan(goal),
           routePreview: draft.trim() === '' ? null : `预计 L${estimateDifficulty(draft).level} · ${estimateDifficulty(draft).category}`
           }}
         />
