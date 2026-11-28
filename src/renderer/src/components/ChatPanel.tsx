@@ -1654,7 +1654,18 @@ export default function ChatPanel() {
                       sessionId: activeId,
                       agentName: boundAssistant?.name ?? 'PointStudio',
                       onChanged: () => setMemoryTick((value) => value + 1)
-                    }
+                    },
+                    // 助手身份栏：头像 + Agent 名 + 厂商图标/模型名（仿 Cherry Studio）
+                    assistantMeta:
+                      message.role === 'assistant'
+                        ? {
+                            agentId: boundAssistant?.id ?? DEFAULT_ASSISTANT_ID,
+                            name: boundAssistant?.name ?? '通用助手',
+                            avatar: boundAssistant?.avatar ?? null,
+                            providerId: activeProviderId,
+                            modelLabel: activeModelLabel === '' ? null : activeModelLabel
+                          }
+                        : null
                   }}
                 />
               ))}
@@ -1663,6 +1674,8 @@ export default function ChatPanel() {
               <button
                 className="jump-latest"
                 type="button"
+                aria-label="回到底部"
+                title="回到底部"
                 onClick={() => {
                   const el = listRef.current
                   if (el) {
@@ -1671,8 +1684,7 @@ export default function ChatPanel() {
                   setPinnedToBottom(true)
                 }}
               >
-                <Icon name="arrow-down" size={13} />
-                回到最新
+                <Icon name="arrow-down" size={14} />
               </button>
             ) : null}
           </div>

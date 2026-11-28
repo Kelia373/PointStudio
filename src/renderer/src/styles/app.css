@@ -592,7 +592,8 @@ select:focus {
   min-width: 0;
   min-height: 100%;
   margin: 0 auto;
-  padding: 0 var(--sp-5);
+  /* 右侧多留一点：代码块右沿不要贴死拖拽手柄 */
+  padding: 0 var(--sp-6) 0 var(--sp-5);
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
@@ -628,6 +629,33 @@ select:focus {
   color: var(--fg-3);
 }
 
+/* 助手身份栏：头像 24 + 名字 + 厂商/模型 */
+.msg__head--assistant {
+  gap: var(--sp-2);
+  min-height: 24px;
+}
+
+.msg__name {
+  color: var(--fg);
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.msg__model {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  min-width: 0;
+  color: var(--fg-3);
+  font-size: var(--fs-sm);
+}
+
+.msg__time,
+.msg__failed {
+  color: var(--fg-3);
+  font-size: var(--fs-xs);
+}
+
 .msg__body {
   max-width: 88%;
   min-width: 0;
@@ -642,16 +670,25 @@ select:focus {
   background: var(--bubble-user-bg);
   color: var(--bubble-user-fg);
   border: 1px solid var(--bubble-user-line);
-  border-bottom-right-radius: var(--rad-xs);
+  /* 干净圆角气泡：不要再留右下尖角，对齐 Cherry 的整块卡片感 */
+  border-radius: var(--rad-card);
 }
 
 .msg--assistant .msg__body {
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  border-bottom-left-radius: var(--rad-ctl);
-  /* 助手正文是 Markdown：占满列宽，别缩到 88% 再被窄卡片挤成一坨。 */
+  /* 助手回复是阅读流，不是卡片：去掉底色、描边、圆角与卡片内边距，直接平铺 */
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   max-width: 100%;
   white-space: normal;
+}
+
+/* 失败态不套整圈红框：左侧一道红边就够，避免把正文框成一坨 */
+.msg--assistant.msg--failed .msg__body {
+  border: none;
+  border-left: 2px solid var(--danger);
+  padding-left: var(--sp-3);
 }
 
 .msg--failed .msg__body {
@@ -1368,18 +1405,16 @@ select:focus {
      用户在往上翻的时候根本看不到这个按钮。 */
   position: sticky;
   bottom: var(--sp-3);
-  width: fit-content;
+  width: 32px;
+  height: 32px;
   margin: 0 auto var(--sp-2);
   display: inline-flex;
   align-items: center;
-  gap: var(--sp-1);
-  height: 28px;
-  padding: 0 var(--sp-3);
+  justify-content: center;
   border: 1px solid var(--line-strong);
   border-radius: var(--rad-pill);
   background: var(--panel-2);
   color: var(--fg-2);
-  font-size: var(--fs-sm);
   box-shadow: var(--shadow-pop);
   animation: rise var(--dur-3) var(--ease-out);
   z-index: 3;
@@ -5140,14 +5175,50 @@ select:focus {
   font-weight: 600;
 }
 
+/* 标题阶梯：h1 带下划线与留白，h2/h3 逐级收小，h4-6 与正文同号只加粗 */
+.md__heading--1 {
+  font-size: var(--fs-h1);
+  font-weight: 700;
+  line-height: 1.35;
+  margin-top: var(--sp-2);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.md__heading--2 {
+  font-size: var(--fs-h2);
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: var(--sp-3);
+}
+
+.md__heading--3 {
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  line-height: 1.45;
+  margin-top: var(--sp-2);
+}
+
+.md__heading--4,
+.md__heading--5,
+.md__heading--6 {
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+
 .md__paragraph {
   margin: 0;
-  line-height: 1.65;
+  line-height: 1.72;
 }
 
 .md__list {
   margin: 0;
   padding-left: var(--sp-5);
+  line-height: 1.72;
+}
+
+.md__list li + li {
+  margin-top: var(--sp-1);
 }
 
 .md__quote {
@@ -5186,6 +5257,7 @@ select:focus {
 
 .md__hr {
   width: 100%;
+  margin: var(--sp-3) 0;
   border: none;
   border-top: 1px solid var(--line);
 }
@@ -5208,11 +5280,37 @@ select:focus {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--rad-ctl);
-  background: var(--panel-2);
+  background: var(--code-bg);
 }
 
 .md__code.is-streaming {
   border-style: dashed;
+}
+
+/* 轻量语法着色：颜色只从 tokens 取，换主题不用改组件 */
+.syn-kw {
+  color: var(--syn-kw);
+}
+
+.syn-type {
+  color: var(--syn-type);
+}
+
+.syn-str {
+  color: var(--syn-str);
+}
+
+.syn-num {
+  color: var(--syn-num);
+}
+
+.syn-fn {
+  color: var(--syn-fn);
+}
+
+.syn-comment {
+  color: var(--syn-comment);
+  font-style: italic;
 }
 
 .md__code-head {
@@ -5247,6 +5345,7 @@ select:focus {
   padding: var(--sp-2) var(--sp-3);
   overflow-x: auto;
   overflow-wrap: normal;
+  background: var(--code-bg);
   color: var(--fg-2);
   font-family: var(--mono);
   font-size: var(--fs-sm);
@@ -5254,11 +5353,9 @@ select:focus {
 }
 
 /* ── 深度思考折叠卡 ───────────────────────────────────────── */
+/* 思考折叠：无框触发行 + 左侧细引导线（不再是卡片） */
 .thinking {
   margin-bottom: var(--sp-2);
-  border: 1px solid var(--line);
-  border-radius: var(--rad-ctl);
-  background: var(--panel-2);
 }
 
 .thinking__head {
@@ -5267,18 +5364,24 @@ select:focus {
   gap: var(--sp-2);
   width: 100%;
   height: 28px;
-  padding: 0 var(--sp-2);
+  padding: 0;
   color: var(--fg-3);
   font-size: var(--fs-xs);
   text-align: left;
+  transition: color var(--dur-1);
+}
+
+.thinking__head:hover {
+  color: var(--fg-2);
 }
 
 .thinking__caret {
-  transition: transform var(--dur-1) var(--ease-out);
+  transition: transform var(--dur-2) var(--ease-out);
+  transform: rotate(-90deg);
 }
 
 .thinking__caret.is-open {
-  transform: rotate(180deg);
+  transform: rotate(0deg);
 }
 
 .thinking__dot {
@@ -5315,8 +5418,9 @@ select:focus {
 .thinking__body {
   max-height: 260px;
   overflow-y: auto;
-  padding: var(--sp-2) var(--sp-3) var(--sp-3);
-  border-top: 1px solid var(--line);
+  margin: var(--sp-1) 0 var(--sp-2) var(--sp-1);
+  padding: 2px 0 2px var(--sp-3);
+  border-left: 2px solid var(--line-strong);
   color: var(--fg-3);
   font-size: var(--fs-sm);
   line-height: 1.6;

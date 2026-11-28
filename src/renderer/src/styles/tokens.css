@@ -34,6 +34,10 @@
   --fs-md: 13px;
   --fs-body: 14px;
   --fs-hero: 24px;
+  /* Markdown 标题阶梯：正文是 14px，标题只比正文重，不靠倍率砸人 */
+  --fs-h1: 22px;
+  --fs-h2: 18px;
+  --fs-h3: 15px;
 
   /* ---- 动效 token：Corporate 人格（200–400ms、无回弹）
      分级只用 4 档，全站不再出现散落的魔法数字 ---- */
@@ -81,6 +85,14 @@ html[data-theme='dark'] {
   --mask-bg: rgba(0, 0, 0, 0.48);
   --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.42);
   --shadow-composer: 0 4px 20px rgba(0, 0, 0, 0.24);
+  /* 代码块底板与轻量语法色：克制、偏灰，不用荧光色抢正文的注意力 */
+  --code-bg: #131316;
+  --syn-kw: #c084fc;
+  --syn-type: #fbbf24;
+  --syn-str: #86efac;
+  --syn-num: #f87171;
+  --syn-fn: #60a5fa;
+  --syn-comment: rgba(255, 255, 255, 0.38);
 }
 
 html[data-theme='light'] {
@@ -107,6 +119,13 @@ html[data-theme='light'] {
   --mask-bg: rgba(16, 16, 18, 0.28);
   --shadow-pop: 0 12px 28px rgba(16, 16, 18, 0.12);
   --shadow-composer: 0 2px 12px rgba(16, 16, 18, 0.06);
+  --code-bg: #f3f3f0;
+  --syn-kw: #7c3aed;
+  --syn-type: #b45309;
+  --syn-str: #15803d;
+  --syn-num: #dc2626;
+  --syn-fn: #2563eb;
+  --syn-comment: rgba(0, 0, 0, 0.44);
 }
 
 /* 尊重系统「减少动效」偏好：不删功能，只把时长压到近 0 */

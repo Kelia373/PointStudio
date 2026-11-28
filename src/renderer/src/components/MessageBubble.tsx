@@ -9,10 +9,21 @@ import DualTrack from './DualTrack'
 import HandoffPill from './HandoffPill'
 import MemorySpark from './MemorySpark'
 import RouteBadge from './RouteBadge'
+import AgentAvatar from './AgentAvatar'
 import BrandLogo from './BrandLogo'
+import ProviderLogo from './ProviderLogo'
 import ThinkingBlock from './ThinkingBlock'
 
 export type BubbleRole = 'user' | 'assistant'
+
+/** 助手气泡的身份栏：头像 + Agent 名 + 厂商图标/模型名（仿 Cherry Studio）。 */
+export interface AssistantBubbleMeta {
+  agentId: string
+  name: string
+  avatar?: string | null
+  providerId?: string | null
+  modelLabel?: string | null
+}
 
 export default function MessageBubble({
   role,
@@ -38,7 +49,8 @@ export default function MessageBubble({
   streamingReasoning = false,
   onEdit,
   onBranch,
-  actionsDisabled = false
+  actionsDisabled = false,
+  assistantMeta = null
 }: {
   role: BubbleRole
   content: string
@@ -81,6 +93,8 @@ export default function MessageBubble({
   onBranch?: () => void
   /** 会话正在生成：编辑类操作置灰（用户消息本身永远是 complete）。 */
   actionsDisabled?: boolean
+  /** 助手消息的身份栏信息；不传则回退旧的「品牌标 + PointStudio」，兼容老调用方。 */
+  assistantMeta?: AssistantBubbleMeta | null
 }) {
   const [editing, setEditing] = useState(false)
   const [draftEdit, setDraftEdit] = useState(content)
@@ -104,22 +118,48 @@ export default function MessageBubble({
     )
   }
 
+  // 用户提问保持干净：正常态没有头像、没有「你」顶栏，时间只放在悬停提示里。
+  const showHead = role === 'assistant' || failed || route != null
+
   return (
     <article
       className={`msg msg--${role}${failed ? ' msg--failed' : ''}`}
       style={{ ['--i' as string]: String(Math.min(index, 8)) }}
+      {...(role === 'user' && at ? { title: at } : {})}
     >
-      <div className="msg__head">
-        <span className="msg__author">
-          {role === 'user' ? null : (
-            <BrandLogo variant="mark" size={13} className="msg__brand" />
-          )}
-          {role === 'user' ? '你' : 'PointStudio'}
-        </span>
-        {at ? <span>{at}</span> : null}
-        {failed ? <span>· 失败</span> : null}
-        {route ? <RouteBadge decision={route} /> : null}
-      </div>
+      {showHead ? (
+        <div className={`msg__head${role === 'assistant' ? ' msg__head--assistant' : ''}`}>
+          {role === 'assistant' ? (
+            assistantMeta ? (
+              <>
+                <AgentAvatar
+                  agentId={assistantMeta.agentId}
+                  name={assistantMeta.name}
+                  avatar={assistantMeta.avatar ?? null}
+                  size={24}
+                />
+                <span className="msg__name">{assistantMeta.name}</span>
+                {assistantMeta.providerId || assistantMeta.modelLabel ? (
+                  <span className="msg__model">
+                    {assistantMeta.providerId ? (
+                      <ProviderLogo providerId={assistantMeta.providerId} size={13} />
+                    ) : null}
+                    {assistantMeta.modelLabel ?? ''}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="msg__author">
+                <BrandLogo variant="mark" size={13} className="msg__brand" />
+                PointStudio
+              </span>
+            )
+          ) : null}
+          {failed ? <span className="msg__failed">· 失败</span> : null}
+          {route ? <RouteBadge decision={route} /> : null}
+          {at && role === 'assistant' ? <span className="msg__time">{at}</span> : null}
+        </div>
+      ) : null}
 
       {role === 'assistant' ? (
         <>
