@@ -996,7 +996,9 @@ export default function Sidebar({
               {visibleAgents.map((assistant) => renderAgentRow(assistant))}
               {visibleAgents.length === 0 ? (
                 <li className="side__empty">
-                  {agentKeyword !== '' ? '没有匹配的 Agent' : '还没有 Agent'}
+                  {agentKeyword !== '' || keyword.trim() !== ''
+                    ? '没有匹配的 Agent'
+                    : '还没有 Agent'}
                 </li>
               ) : null}
             </ul>
