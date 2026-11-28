@@ -48,6 +48,9 @@ function toMessageDto(message: Message): MessageDto {
     ...(message.references ? { references: message.references } : {}),
     ...(message.reasoning ? { reasoning: message.reasoning } : {}),
     ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+    ...(typeof message.assistantId === 'string' ? { assistantId: message.assistantId } : {}),
+    ...(typeof message.providerId === 'string' ? { providerId: message.providerId } : {}),
+    ...(typeof message.modelId === 'string' ? { modelId: message.modelId } : {}),
     createdAt: message.createdAt
   }
 }

@@ -197,6 +197,10 @@ export interface MessageDto {
   reasoning?: string
   /** 思考阶段耗时（毫秒）；缺省则不显示秒数。 */
   reasoningMs?: number
+  /** 这条回复由哪个 Agent / 模型产出：写入时定死，供历史归因，别用「当前」值回填。 */
+  assistantId?: string
+  providerId?: string
+  modelId?: string
 }
 
 /**
@@ -356,7 +360,8 @@ export interface AssistantDto {
   updatedAt: string
 }
 
-export interface AssistantDraftRequest {  name: string
+export interface AssistantDraftRequest {
+  name: string
   /** 省略表示「不动」：新建按启用处理，更新时保留原状态。 */
   enabled?: boolean
   systemPrompt?: string

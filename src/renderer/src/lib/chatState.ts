@@ -25,6 +25,10 @@ export interface UiMessage {
   /** 模型思考内容 */
   reasoning?: string
   reasoningMs?: number
+  /** 历史归因：这条回复当时由谁 / 哪个模型产出。 */
+  assistantId?: string
+  providerId?: string
+  modelId?: string
 }
 
 /**
@@ -34,8 +38,15 @@ export interface UiMessage {
  */
 export function startTurn(
   messages: UiMessage[],
-  input: { requestId: string; text: string; route?: RouteDecisionDto | null }
+  input: {
+    requestId: string
+    text: string
+    route?: RouteDecisionDto | null
+    /** 这一轮真正的作者：填当前值不违反「不改写历史」——流式这一刻它就是作者。 */
+    attribution?: { assistantId?: string; providerId?: string; modelId?: string }
+  }
 ): UiMessage[] {
+  const attribution = input.attribution ?? {}
   return [
     ...messages,
     { id: `local-${input.requestId}`, role: 'user', content: input.text, status: 'complete' },
@@ -44,7 +55,10 @@ export function startTurn(
       role: 'assistant',
       content: '',
       status: 'streaming',
-      route: input.route ?? null
+      route: input.route ?? null,
+      ...(attribution.assistantId ? { assistantId: attribution.assistantId } : {}),
+      ...(attribution.providerId ? { providerId: attribution.providerId } : {}),
+      ...(attribution.modelId ? { modelId: attribution.modelId } : {})
     }
   ]
 }

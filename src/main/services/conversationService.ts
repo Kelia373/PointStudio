@@ -44,6 +44,10 @@ export interface AppendMessageInput {
   /** 模型深度思考内容；只在非空时落盘。 */
   reasoning?: string
   reasoningMs?: number
+  /** 回复归因：写入哪条消息就定死哪条。 */
+  assistantId?: string
+  providerId?: string
+  modelId?: string
 }
 
 export class ConversationService {
@@ -157,7 +161,34 @@ export class ConversationService {
     return { ok: true, value: updated }
   }
 
-  /** 删会话必须连它的消息一起删，否则会留下永远读不到的孤儿数据。 */  /**
+  /** 批量收编：一次读盘、一次写盘，避免启动迁移退化成 O(n²)。 */
+  async adoptMany(ids: readonly string[], assistantId: string): Promise<ServiceResult<number>> {
+    if (typeof assistantId !== 'string' || assistantId === '') {
+      return { ok: false, errors: ['E_BAD_INPUT'] }
+    }
+    const target = new Set(ids)
+    if (target.size === 0) {
+      return { ok: true, value: 0 }
+    }
+    const items = await this.conversations.readAll()
+    let changed = 0
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index]
+      if (!target.has(item.id) || item.assistantId === assistantId) {
+        continue
+      }
+      const updated: Conversation = { ...item, assistantId }
+      delete updated.isHome
+      items[index] = updated
+      changed += 1
+    }
+    if (changed > 0) {
+      await this.conversations.writeAll(items)
+    }
+    return { ok: true, value: changed }
+  }
+
+  /**
    * 收编一条会话到指定 Agent。
    *
    * 与 `setAssistant` 的区别只有一个，但很关键：**不动 `updatedAt`**。
@@ -246,6 +277,7 @@ export class ConversationService {
     return { ok: true, value: next }
   }
 
+  /** 删会话必须连它的消息一起删，否则会留下永远读不到的孤儿数据。 */
   async remove(id: string): Promise<ServiceResult<true>> {
     const items = await this.conversations.readAll()
     const index = items.findIndex((item) => item.id === id)
@@ -299,6 +331,9 @@ export class ConversationService {
       ...(typeof input.reasoningMs === 'number' && input.reasoningMs >= 0
         ? { reasoningMs: input.reasoningMs }
         : {}),
+      ...(typeof input.assistantId === 'string' ? { assistantId: input.assistantId } : {}),
+      ...(typeof input.providerId === 'string' ? { providerId: input.providerId } : {}),
+      ...(typeof input.modelId === 'string' ? { modelId: input.modelId } : {}),
       createdAt: now,
       updatedAt: now
     }

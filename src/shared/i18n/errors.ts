@@ -11,6 +11,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   E_INTERNAL: '程序内部出错了，可以重试一次',
   E_NOT_FOUND: '找不到对应的内容，可能已被删除',
   E_CANCELLED: '已取消',
+  E_BUILTIN_PROTECTED: '这是系统内置的通用助手，不能停用或删除；可以改名、换头像和模型。',
 
   // 模型平台
   E_UPSTREAM: '模型平台出错了，稍后重试或换个平台',

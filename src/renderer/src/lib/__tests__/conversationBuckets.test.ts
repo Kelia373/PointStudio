@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 
 import type { ConversationDto } from '../../../../shared/types/ipc.ts'
 import {
+  filterBuckets,
   findAgentHomeConversation,
   partitionConversations
 } from '../conversationBuckets.ts'
@@ -113,7 +114,7 @@ test('收编模式：无主 / 孤儿单聊进兜底 Agent 专题，小组仍进�
     conversation('orphan', { assistantId: 'gone' }),
     conversation('group-1', { assistantId: 'a1', groupId: 'g1' })
   ]
-  const buckets = partitionConversations(conversations, agents, {
+  const buckets = partitionConversations(conversations, [...agents, { id: 'builtin' }], {
     defaultAssistantId: 'builtin'
   })
   assert.deepEqual(buckets.freeChats, [], '不再有自由对话桶')
@@ -122,4 +123,31 @@ test('收编模式：无主 / 孤儿单聊进兜底 Agent 专题，小组仍进�
     ['free-1', 'orphan']
   )
   assert.deepEqual(buckets.groupChatsById.g1.map((item) => item.id), ['group-1'])
+})
+
+test('兜底 Agent 不存在时：无主会话回自由桶，不凭空消失', () => {
+  const buckets = partitionConversations(
+    [conversation('orphan', { assistantId: null })],
+    agents,
+    { defaultAssistantId: 'missing-builtin' }
+  )
+  assert.deepEqual(buckets.agentTopicsById, {}, '不能塞进查不到的桶')
+  assert.deepEqual(buckets.freeChats.map((item) => item.id), ['orphan'])
+})
+
+test('侧栏搜索：只过滤专题与小组标题，主聊天保留', () => {
+  const buckets = partitionConversations(
+    [
+      conversation('home-a1', { assistantId: 'a1', isHome: true, title: '主聊天' }),
+      conversation('topic-keep', { assistantId: 'a1', title: 'TS 函数进阶' }),
+      conversation('topic-drop', { assistantId: 'a1', title: '别的题目' }),
+      conversation('group-keep', { assistantId: 'a1', groupId: 'g1', title: '组内 TS 讨论' })
+    ],
+    agents
+  )
+  const view = filterBuckets(buckets, 'ts')
+  assert.equal(view.agentHomeById.a1?.id, 'home-a1', '主聊天不过滤')
+  assert.deepEqual(view.agentTopicsById.a1.map((item) => item.id), ['topic-keep'])
+  assert.deepEqual(view.groupChatsById.g1.map((item) => item.id), ['group-keep'])
+  assert.deepEqual(filterBuckets(buckets, '  ').agentTopicsById.a1.length, 2, '空串原样返回')
 })

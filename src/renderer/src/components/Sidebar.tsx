@@ -36,7 +36,7 @@ import { buildAgentMenuItems, type AgentMenuAction } from '../lib/agentMenu'
 import { computeAgentBenchStatus, computeAgentWorkerLanes, LIGHT_LABEL } from '../lib/dispatchFilter'
 import type { PlanRunStatus } from '../lib/planRunState'
 import { nextActivePage } from '../lib/pageNav'
-import { partitionConversations } from '../lib/conversationBuckets'
+import { filterBuckets, partitionConversations } from '../lib/conversationBuckets'
 import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
@@ -389,9 +389,32 @@ export default function Sidebar({
     groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
   const buckets = useMemo(
     // 全员归属：无主 / 孤儿单聊兜底进通用助手专题，侧栏不再有「自由对话」这一桶。
-    () => partitionConversations(conversations, assistants, { defaultAssistantId: DEFAULT_ASSISTANT_ID }),
-    [conversations, assistants]
+    () =>
+      filterBuckets(
+        partitionConversations(conversations, assistants, {
+          defaultAssistantId: DEFAULT_ASSISTANT_ID
+        }),
+        keyword
+      ),
+    [conversations, assistants, keyword]
   )
+
+  /**
+   * 搜索态下别留空壳 Agent 行：专题被滤光、主聊天也没命中时，那一行只剩名字。
+   * 判定口径 = 主聊天标题命中 或 还有可见专题，与 filterBuckets 的过滤保持一致。
+   */
+  const visibleAgents = useMemo(() => {
+    const needle = keyword.trim().toLowerCase()
+    if (needle === '') {
+      return filteredAgents
+    }
+    return filteredAgents.filter((assistant) => {
+      const home = buckets.agentHomeById[assistant.id] ?? null
+      const homeHit = home !== null && home.title.toLowerCase().includes(needle)
+      const topicHit = (buckets.agentTopicsById[assistant.id]?.length ?? 0) > 0
+      return homeHit || topicHit
+    })
+  }, [filteredAgents, buckets, keyword])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -649,7 +672,7 @@ export default function Sidebar({
               <span className="side__feat-label">工作区</span>
             </button>
           </li>
-          <Slot name="sidebar.projects.header" />
+          <Slot name="sidebar.projects.header" props={{ count: 0 }} />
           {features.map((entry) => {
             const page = entry.def
             const isPinned = pinned[page.id] ?? page.defaultPinned ?? false
@@ -967,11 +990,11 @@ export default function Sidebar({
 
             <div className="side__roster-head">
               <span>全部智能体</span>
-              <span className="side__head-note">{filteredAgents.length}</span>
+              <span className="side__head-note">{visibleAgents.length}</span>
             </div>
             <ul className="side__plain">
-              {filteredAgents.map((assistant) => renderAgentRow(assistant))}
-              {filteredAgents.length === 0 ? (
+              {visibleAgents.map((assistant) => renderAgentRow(assistant))}
+              {visibleAgents.length === 0 ? (
                 <li className="side__empty">
                   {agentKeyword !== '' ? '没有匹配的 Agent' : '还没有 Agent'}
                 </li>
