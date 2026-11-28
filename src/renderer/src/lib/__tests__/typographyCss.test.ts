@@ -57,9 +57,30 @@ test('每款内置字体都要在 THIRD_PARTY_NOTICES.md 里署名', () => {
   assert.ok(existsSync(notices), '缺少 THIRD_PARTY_NOTICES.md')
   const text = read(notices)
   assert.ok(text.includes('SIL Open Font License 1.1'), '通知文件缺少 OFL 许可说明')
+  // 合规关键：woff2 是 Google Fonts 官方子集原文件，不是我们二次裁剪的派生版本，
+  // 否则 IBM Plex / Source Code Pro 的保留名条款会被触发。
+  assert.match(text, /fonts\.gstatic\.com/, '通知文件要写明 woff2 取自 Google Fonts 子集端点')
+  assert.match(
+    text,
+    /不构成 OFL 1\.1 定义的 Modified Version/,
+    '通知文件要写明字体文件未被二次修改（保留名字体必须交代）'
+  )
   for (const item of [...UI_FONTS, ...CODE_FONTS].filter((entry) => entry.bundled)) {
     const family = /^'([^']+)'/.exec(item.css)?.[1]
     assert.ok(family, `${item.id} 的首项应是引号族名`)
     assert.ok(text.includes(family), `THIRD_PARTY_NOTICES.md 没有 ${family} 的署名`)
   }
+})
+
+test('字体选择器只承诺它能兑现的键盘语义', () => {
+  const component = read(
+    fileURLToPath(new URL('../../components/TypographySettings.tsx', import.meta.url))
+  )
+  // 没实现方向键 / aria-activedescendant 就别挂 listbox 语义，普通按钮已可 Tab + Enter。
+  assert.equal(
+    /role="listbox"/.test(component),
+    false,
+    '未实现方向键导航时不要挂 role="listbox"（承诺了却没兑现，读屏体验比普通按钮更差）'
+  )
+  assert.match(component, /aria-pressed=\{active\}/, '选项必须暴露选中态')
 })

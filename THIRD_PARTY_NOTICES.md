@@ -147,8 +147,10 @@ SOFTWARE.
 
 - 用途：`src/renderer/src/assets/fonts/*.woff2`，由 `styles/fonts.css` 的 `@font-face` 映射为
   「设置 → 字体与字号」里的全局字体（`--font-ui`）与代码字体（`--mono-code`）。
-  文件为上游的 latin / latin-ext 子集裁剪（`unicode-range` 由 Google Fonts 子集切分给定），
-  **字形本身未改动**，因此未产生 Modified Version，未涉及保留字体名称争议。
+- 来源：直接取 Google Fonts CSS API（`fonts.gstatic.com`）下发的 latin / latin-ext 子集
+  woff2 原文件，**未用 fonttools 二次裁剪、未改名**；子集划分与 `unicode-range` 均来自上游。
+  因此不构成 OFL 1.1 定义的 Modified Version，IBM Plex（保留名 "Plex"）与
+  Source Code Pro（保留名 "Source"）的保留名条款不适用。
 - 上游：Google Fonts（https://fonts.google.com），逐款源码仓库见下表。
 - 许可：SIL Open Font License 1.1，17 款共用文末同一份全文；各款版权声明逐条列在下表。
 - 新增字体时必须同时更新本表与 `lib/typography.ts` 注册表（`typographyCss.test.ts` 会校验）。

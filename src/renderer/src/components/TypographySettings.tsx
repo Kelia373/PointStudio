@@ -69,15 +69,16 @@ function FontPanel({
       </button>
 
       {open ? (
-        <div className="font-panel__list" id={`font-panel-${category}`} role="listbox">
+        // 普通按钮列表：每个选项本身就是 <button>，Tab + Enter 已经能操作，
+        // 所以不再挂 listbox 那套 role —— 它承诺方向键与 aria-activedescendant，没兑现就别挂。
+        <div className="font-panel__list" id={`font-panel-${category}`}>
           {options.map((option) => {
             const active = option.id === selected.id
             return (
               <button
                 key={option.id}
                 type="button"
-                role="option"
-                aria-selected={active}
+                aria-pressed={active}
                 className="font-option"
                 data-active={active ? 'true' : 'false'}
                 onClick={() => onChange(option.id)}
