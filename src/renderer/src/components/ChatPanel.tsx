@@ -7,6 +7,7 @@ import type {
   ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
 import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
+import { withBuiltinAssistant } from '../lib/assistantDefaults'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
 import { appendChunk, appendReasoning, markStatus, startTurn, type UiMessage } from '../lib/chatState'
@@ -348,7 +349,9 @@ export default function ChatPanel() {
 
   const refreshAssistants = useCallback(async (): Promise<void> => {
     const list = await window.pointstudio.assistants.list()
-    setAssistants(list)
+    // 收编失败时主进程可能没有内置助手：渲染层兜底合成一条，
+    // 否则它名下的会话没有 Agent 行可挂，侧栏整块看不见。
+    setAssistants(withBuiltinAssistant(list, new Date().toISOString()))
     setAssistantsLoaded(true)
   }, [])
 

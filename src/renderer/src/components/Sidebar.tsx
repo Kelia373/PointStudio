@@ -378,43 +378,12 @@ export default function Sidebar({
     }
   }, [groupMenu])
 
-  /**
-   * 内置通用助手在渲染层恒存在。
-   *
-   * 主进程启动收编失败（assistants.json 损坏 / 写盘失败）时，`assistants` 里没有它，
-   * 于是「它的专题」与会话都没有渲染点——用户看到的是整块消失。这里合成一行兜底，
-   * 保证会话至少可见、可点。
-   */
-  const effectiveAssistants = useMemo(() => {
-    if (assistants.some((item) => item.id === DEFAULT_ASSISTANT_ID)) {
-      return assistants
-    }
-    const synthetic: AssistantDto = {
-      id: DEFAULT_ASSISTANT_ID,
-      name: '通用助手',
-      systemPrompt: '',
-      providerId: null,
-      modelId: null,
-      params: { temperature: 0.7, maxTokens: 2048, topP: 1 },
-      enabled: true,
-      permissionMode: 'smart',
-      avatar: null,
-      builtin: true,
-      createdAt: '1970-01-01T00:00:00.000Z',
-      updatedAt: '1970-01-01T00:00:00.000Z'
-    }
-    return [synthetic, ...assistants]
-  }, [assistants])
-
   const filteredAgents = useMemo(
     () =>
       pinBuiltinAgent(
-        sortAgents(
-          filterAgents(effectiveAssistants, { keyword: agentKeyword, hideDisabled }),
-          sortMode
-        )
+        sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode)
       ),
-    [effectiveAssistants, agentKeyword, hideDisabled, sortMode]
+    [assistants, agentKeyword, hideDisabled, sortMode]
   )
   const filterActive =
     groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
@@ -422,13 +391,30 @@ export default function Sidebar({
     // 全员归属：无主 / 孤儿单聊兜底进通用助手专题，侧栏不再有「自由对话」这一桶。
     () =>
       filterBuckets(
-        partitionConversations(conversations, effectiveAssistants, {
+        partitionConversations(conversations, assistants, {
           defaultAssistantId: DEFAULT_ASSISTANT_ID
         }),
         keyword
       ),
-    [conversations, effectiveAssistants, keyword]
+    [conversations, assistants, keyword]
   )
+
+  /**
+   * 搜索态下别留空壳 Agent 行：专题被滤光、主聊天也没命中时，那一行只剩名字。
+   * 判定口径 = 主聊天标题命中 或 还有可见专题，与 filterBuckets 的过滤保持一致。
+   */
+  const visibleAgents = useMemo(() => {
+    const needle = keyword.trim().toLowerCase()
+    if (needle === '') {
+      return filteredAgents
+    }
+    return filteredAgents.filter((assistant) => {
+      const home = buckets.agentHomeById[assistant.id] ?? null
+      const homeHit = home !== null && home.title.toLowerCase().includes(needle)
+      const topicHit = (buckets.agentTopicsById[assistant.id]?.length ?? 0) > 0
+      return homeHit || topicHit
+    })
+  }, [filteredAgents, buckets, keyword])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -1004,11 +990,11 @@ export default function Sidebar({
 
             <div className="side__roster-head">
               <span>全部智能体</span>
-              <span className="side__head-note">{filteredAgents.length}</span>
+              <span className="side__head-note">{visibleAgents.length}</span>
             </div>
             <ul className="side__plain">
-              {filteredAgents.map((assistant) => renderAgentRow(assistant))}
-              {filteredAgents.length === 0 ? (
+              {visibleAgents.map((assistant) => renderAgentRow(assistant))}
+              {visibleAgents.length === 0 ? (
                 <li className="side__empty">
                   {agentKeyword !== '' ? '没有匹配的 Agent' : '还没有 Agent'}
                 </li>
