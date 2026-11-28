@@ -22,6 +22,9 @@ export const OPENCODE_USER_AGENT = 'PointStudio/0.1'
 /** 没有会话 id 时的稳定兜底，避免每次请求都被判成新会话。 */
 export const OPENCODE_FALLBACK_SESSION = 'pointstudio-local'
 
+const OPENAI_EFFORT: Record<string, string> = { low: 'low', mid: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }
+const THINKING_BUDGET: Record<string, number> = { low: 1024, mid: 2048, high: 4096, xhigh: 8192, max: 16384 }
+
 export type OpencodeWire = 'openai' | 'anthropic'
 
 export interface OpencodeEndpoints {
@@ -255,7 +258,12 @@ export class OpencodeGoProvider implements ChatProvider {
         ? { temperature: request.params.temperature }
         : {}),
       ...(request.params?.maxTokens !== undefined ? { max_tokens: request.params.maxTokens } : {}),
-      ...(request.params?.topP !== undefined ? { top_p: request.params.topP } : {})
+      ...(request.params?.topP !== undefined ? { top_p: request.params.topP } : {}),
+      ...(request.params?.effort &&
+      request.effortMode === 'reasoning_effort' &&
+      OPENAI_EFFORT[request.params.effort]
+        ? { reasoning_effort: OPENAI_EFFORT[request.params.effort] }
+        : {})
     })
   }
 
@@ -264,13 +272,26 @@ export class OpencodeGoProvider implements ChatProvider {
       .filter((message) => message.role === 'system')
       .map((message) => message.content)
       .join('\n\n')
+    // Anthropic Messages 要求首条是 user：裁剪后的历史可能以 assistant 开头。
+    const dialogue = request.messages
+      .filter((message) => message.role !== 'system')
+      .map((message) => ({ role: message.role, content: message.content }))
+    while (dialogue.length > 0 && dialogue[0].role !== 'user') {
+      dialogue.shift()
+    }
+    const budget =
+      request.params?.effort && request.effortMode === 'thinking_budget'
+        ? THINKING_BUDGET[request.params.effort]
+        : null
+    const maxTokens = request.params?.maxTokens ?? 4096
     return JSON.stringify({
       model: request.model || OPENCODE_GO_DEFAULT_MODEL,
-      max_tokens: request.params?.maxTokens ?? 4096,
+      max_tokens: budget === null ? maxTokens : Math.max(maxTokens, budget + 1024),
       stream: true,
-      messages: request.messages
-        .filter((message) => message.role !== 'system')
-        .map((message) => ({ role: message.role, content: message.content })),
+      messages: dialogue,
+      ...(budget === null
+        ? {}
+        : { thinking: { type: 'enabled', budget_tokens: budget } }),
       ...(system === '' ? {} : { system }),
       ...(request.params?.temperature !== undefined
         ? { temperature: request.params.temperature }

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ConversationDto, ProviderAccountViewDto } from '../../../shared/types/ipc.ts'
+import type {
+  ConversationDto,
+  ProviderAccountViewDto,
+  ReasoningEffortDto
+} from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
@@ -30,6 +34,8 @@ import DispatchPill from './DispatchPill'
 import MemoryWakeBar from './MemoryWakeBar'
 import PlanLens from './PlanLens'
 import RouteBadge from './RouteBadge'
+import ModelPickerPopover from './ModelPickerPopover'
+import ProviderLogo from './ProviderLogo'
 import { estimateDifficulty, nextEscalation, planRoute } from '../lib/pandaRouter'
 import { loadMemories, matchActiveMemories } from '../lib/memorySpark'
 import { appbarLeft, appbarRight } from '../lib/appbarStatus'
@@ -42,6 +48,8 @@ import {
   providerDisplayName
 } from '../lib/modelServices'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
+import { AGENT_GROUPS_KEY, parseAgentGroups } from '../lib/agentGroups'
+import { EFFORT_SHORT_LABEL, resolveComposerModelPolicy } from '../lib/modelPicker'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
 import { deriveActiveWorkerRuns } from '../lib/workerRuns'
 import { buildMissionChains, filterMessagesByMission } from '../lib/missionTrace'
@@ -574,9 +582,28 @@ export default function ChatPanel() {
   }
 
   /** 会话级模型 / 参数：只改当前会话，新会话仍继承全局默认。 */
+  async function applyComposerSelection(selection: {
+    providerId: string | null
+    modelId: string | null
+    effort: ReasoningEffortDto | null
+  }): Promise<void> {
+    if (selection.modelId === AUTO_ROUTE_MODEL) {
+      setAutoRoute(true)
+      return
+    }
+    setAutoRoute(false)
+    // params 是整组替换：先把会话已有参数带上，再改 effort
+    await applyModel({
+      model: selection.modelId,
+      providerId: selection.providerId,
+      params: { ...(activeConversation?.params ?? {}), effort: selection.effort }
+    })
+  }
+
   async function applyModel(patch: {
     model?: string | null
-    params?: { maxTokens?: number }
+    providerId?: string | null
+    params?: { maxTokens?: number; effort?: ReasoningEffortDto | null }
   }): Promise<void> {
     if (!activeId) {
       return
@@ -799,6 +826,18 @@ export default function ChatPanel() {
   const activeConversation = conversations.find((item) => item.id === activeId) ?? null
   const boundAssistant =
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
+  const agentGroups = useMemo(
+    () => parseAgentGroups(window.localStorage.getItem(AGENT_GROUPS_KEY)),
+    []
+  )
+  // 会话绑定的 Agent 属于某个小组时，输入栏锁成「各成员独立模型」。
+  const inGroup =
+    boundAssistant !== null &&
+    agentGroups.some((group) => group.memberIds.includes(boundAssistant.id))
+  const composerModelPolicy = resolveComposerModelPolicy({
+    assistantId: activeConversation?.assistantId ?? null,
+    inGroup
+  })
   const permissionMode = boundAssistant?.permissionMode ?? 'smart'
   const canConfirmPlan = permissionMode !== 'plan-only'
 
@@ -1451,6 +1490,60 @@ export default function ChatPanel() {
           },
           onEffortChange: (level: Effort) =>
             void applyModel({ params: { maxTokens: EFFORT_MAX_TOKENS[level] } }),
+          modelPolicy: composerModelPolicy,
+          modelPicker: (
+            <ModelPickerPopover
+              services={modelServicesView}
+              accounts={accounts}
+              providerId={
+                autoRoute
+                  ? null
+                  : (activeConversation?.providerId ??
+                    boundAssistant?.providerId ??
+                    provider?.providerId ??
+                    null)
+              }
+              modelId={autoRoute ? AUTO_ROUTE_MODEL : defaultModelValue || null}
+              effort={
+                activeConversation?.params?.effort ??
+                boundAssistant?.params?.effort ??
+                null
+              }
+              topOption={{ value: AUTO_ROUTE_MODEL, label: '🐼 Auto · 协同路由' }}
+              compact
+              onChange={(selection) => void applyComposerSelection(selection)}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+          ),
+          modelBadge:
+            composerModelPolicy.mode === 'locked-group' ? (
+              <span>各成员独立模型</span>
+            ) : (
+              <button
+                className="composer__model-badge-btn"
+                type="button"
+                title="模型由该 Agent 的绑定决定，点此去检查器修改"
+                onClick={() => {
+                  setAgentFocus(boundAssistant?.id ?? null)
+                  setAgentTabOpen(true)
+                  setInspCollapsed(false)
+                  setInspTab('agent')
+                }}
+              >
+                {activeProviderId ? (
+                  <ProviderLogo providerId={activeProviderId} size={14} />
+                ) : null}
+                <span>
+                  {activeProviderId
+                    ? providerDisplayName(activeProviderId, modelServicesView)
+                    : '默认服务商'}
+                  {activeModelLabel === '' ? '' : ` · ${activeModelLabel}`}
+                  {activeConversation?.params?.effort
+                    ? ` · ${EFFORT_SHORT_LABEL[activeConversation.params.effort]}`
+                    : ''}
+                </span>
+              </button>
+            ),
           onSend: () => void submit(),
           onStop: () => {
             if (inflightId) {

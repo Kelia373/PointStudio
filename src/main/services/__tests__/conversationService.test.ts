@@ -280,3 +280,32 @@ test('不带 workspaceId 时保持缺省，旧数据依然可读', async () => {
     assert.equal(created.value.workspaceId ?? null, null)
   })
 })
+
+test('换服务商但没传新模型时，旧模型被清掉（防跨家漂移）', async () => {
+  await withService(async ({ service }) => {
+    const created = await service.create({})
+    assert.equal(created.ok, true)
+    const conversationId = created.value.id
+    const first = await service.setModel(conversationId, {
+      model: 'deepseek-chat',
+      providerId: 'deepseek'
+    })
+    assert.equal(first.ok, true)
+
+    const switched = await service.setModel(conversationId, { providerId: 'opencode-go' })
+    assert.equal(switched.ok, true)
+    if (switched.ok) {
+      assert.equal(switched.value.providerId, 'opencode-go')
+      assert.equal(switched.value.model, undefined)
+    }
+
+    const paired = await service.setModel(conversationId, {
+      providerId: 'deepseek',
+      model: 'deepseek-reasoner'
+    })
+    assert.equal(paired.ok, true)
+    if (paired.ok) {
+      assert.equal(paired.value.model, 'deepseek-reasoner')
+    }
+  })
+})

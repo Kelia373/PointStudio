@@ -169,3 +169,56 @@ test('平台返回非 2xx 时抛错，由 ipc 归一成 E_UPSTREAM', async () =>
     /E_HTTP_500/
   )
 })
+
+test('拉取时同步产出能力画像：reasoner 固定、Claude 五档、普通模型不可调', async () => {
+  const deepseek = await fetchProviderModels(
+    account({}),
+    jsonFetch({ data: [{ id: 'deepseek-chat' }, { id: 'deepseek-reasoner' }] })
+  )
+  assert.deepEqual(deepseek.models[0].capabilities?.supportedEfforts, [])
+  assert.equal(deepseek.models[0].capabilities?.effortMode, 'none')
+  assert.equal(deepseek.models[1].capabilities?.effortMode, 'fixed')
+
+  const opencode = await fetchProviderModels(
+    account({
+      id: 'opencode-go',
+      protocol: 'opencode-go',
+      baseUrl: 'https://opencode.ai/inference/go/openai/v1'
+    }),
+    jsonFetch({
+      data: [
+        { id: 'opencode-go/claude-sonnet-4-5' },
+        { id: 'opencode-go/glm-4.5-free' }
+      ]
+    })
+  )
+  assert.deepEqual(opencode.models[0].capabilities?.supportedEfforts, [
+    'low',
+    'mid',
+    'high',
+    'xhigh',
+    'max'
+  ])
+  assert.equal(opencode.models[0].capabilities?.effortMode, 'thinking_budget')
+  assert.deepEqual(opencode.models[1].capabilities?.supportedEfforts, [])
+  assert.equal(opencode.models[1].capabilities?.supportsTools, false, '-free 不可直选')
+})
+
+test('上游元数据优先：supported_parameters 有 reasoning_effort 就采信', async () => {
+  const result = await fetchProviderModels(
+    account({ id: 'openai', protocol: 'openai-compatible', baseUrl: 'https://api.openai.com/v1' }),
+    jsonFetch({
+      data: [
+        {
+          id: 'custom-reasoner',
+          supported_parameters: ['reasoning_effort', 'tools']
+        },
+        { id: 'plain', reasoning: false }
+      ]
+    })
+  )
+  assert.deepEqual(result.models[0].capabilities?.supportedEfforts, ['low', 'mid', 'high'])
+  assert.equal(result.models[0].capabilities?.effortMode, 'reasoning_effort')
+  assert.deepEqual(result.models[1].capabilities?.supportedEfforts, [])
+  assert.equal(result.models[1].capabilities?.effortMode, 'none')
+})

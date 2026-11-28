@@ -6,6 +6,7 @@ import type { ChatProvider, ChatStreamParams, TokenUsageSample } from '../ai/pro
 import type { ProviderParams } from '../ai/domain/providerSettings.ts'
 import type { ContextMessage } from '../ai/domain/context.ts'
 import type { ChatMode } from '../../shared/types/ipc.ts'
+import { inferModelCapabilities } from '../ai/providers/modelCapabilities.ts'
 import { buildReplyChunks } from './chatReply.ts'
 
 /** 按 providerId 解析出的运行时账户（含明文 Key，只在主进程里流转）。 */
@@ -120,11 +121,14 @@ export async function* streamReplyText(
     { role: 'user' as const, content: userContent }
   ]
   const model = options.model?.trim() ? options.model : active.model
+  // 真实能力决定强度怎么落到协议：固定/不支持时 provider 不会乱发参数。
+  const effortMode = inferModelCapabilities(active.providerId, model).effortMode
 
   yield* active.provider.streamChat({
     apiKey: active.apiKey ?? '',
     baseUrl: active.baseUrl,
     model,
+    effortMode,
     messages,
     // 单次覆盖优先，其次平台默认。params 里的 undefined 不影响对方默认值。
     params: options.params ?? active.params,

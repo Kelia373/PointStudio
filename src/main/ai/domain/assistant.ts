@@ -5,13 +5,16 @@
 
 import {
   AGENT_PERMISSION_MODES,
-  type AgentPermissionMode
+  type AgentPermissionMode,
+  type ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
 
 export interface ModelParams {
   temperature: number
   maxTokens: number
   topP: number
+  /** 思考强度；缺省 / null 表示跟随模型默认。 */
+  effort?: ReasoningEffortDto | null
 }
 
 export interface Assistant {
@@ -74,8 +77,15 @@ function normalizeParams(raw: Partial<ModelParams> | undefined): ModelParams {
   return {
     temperature: raw?.temperature ?? DEFAULT_PARAMS.temperature,
     maxTokens: raw?.maxTokens ?? DEFAULT_PARAMS.maxTokens,
-    topP: raw?.topP ?? DEFAULT_PARAMS.topP
+    topP: raw?.topP ?? DEFAULT_PARAMS.topP,
+    ...(raw?.effort === undefined ? {} : { effort: raw.effort })
   }
+}
+
+const EFFORTS: readonly string[] = ['low', 'mid', 'high', 'xhigh', 'max']
+
+function effortValid(value: ReasoningEffortDto | null | undefined): boolean {
+  return value === undefined || value === null || EFFORTS.includes(value)
 }
 
 function paramsInRange(params: ModelParams): boolean {
@@ -108,7 +118,7 @@ export function validateAssistantDraft(draft: AssistantDraft): ValidationResult 
   }
 
   const params = normalizeParams(draft.params)
-  if (!paramsInRange(params)) {
+  if (!paramsInRange(params) || !effortValid(params.effort)) {
     errors.push('E_PARAM_RANGE')
   }
 

@@ -85,6 +85,17 @@ export function isAssistantDraft(value: unknown): value is AssistantDraft {
   if (value.params !== undefined && !isObject(value.params)) {
     return false
   }
+  if (value.params !== undefined) {
+    const effort = (value.params as Record<string, unknown>)['effort']
+    if (
+      effort !== undefined &&
+      effort !== null &&
+      (typeof effort !== 'string' ||
+        !['low', 'mid', 'high', 'xhigh', 'max'].includes(effort))
+    ) {
+      return false
+    }
+  }
   if (value.enabled !== undefined && typeof value.enabled !== 'boolean') {
     return false
   }
@@ -195,6 +206,15 @@ export function isConversationModelPatch(value: unknown): value is {
       if (raw !== undefined && (typeof raw !== 'number' || !Number.isFinite(raw))) {
         return false
       }
+    }
+    const effort = (params as Record<string, unknown>)['effort']
+    if (
+      effort !== undefined &&
+      effort !== null &&
+      (typeof effort !== 'string' ||
+        !['low', 'mid', 'high', 'xhigh', 'max'].includes(effort))
+    ) {
+      return false
     }
   }
 

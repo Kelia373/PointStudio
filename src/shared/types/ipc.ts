@@ -98,6 +98,8 @@ export interface ConversationParamsDto {
   temperature?: number
   maxTokens?: number
   topP?: number
+  /** 思考强度；缺省 / null 表示跟随模型默认。 */
+  effort?: ReasoningEffortDto | null
 }
 
 /** 升档梯队中的一棒：候选模型与其预估成功率 / 成本。 */
@@ -288,7 +290,7 @@ export interface AssistantDto {
   systemPrompt: string
   providerId: string | null
   modelId: string | null
-  params: { temperature: number; maxTokens: number; topP: number }
+  params: { temperature: number; maxTokens: number; topP: number; effort?: ReasoningEffortDto | null }
   /** 停用后不再出现在派发候选里。老数据没有这个字段时视为启用。 */
   enabled?: boolean
   /** 五档权限模式；老数据缺省按 smart。 */
@@ -306,7 +308,12 @@ export interface AssistantDraftRequest {
   systemPrompt?: string
   modelId?: string | null
   providerId?: string | null
-  params?: { temperature?: number; maxTokens?: number; topP?: number }
+  params?: {
+    temperature?: number
+    maxTokens?: number
+    topP?: number
+    effort?: ReasoningEffortDto | null
+  }
   permissionMode?: AgentPermissionMode
   avatar?: string | null
 }
@@ -568,6 +575,21 @@ export interface SaveProviderAccountRequest {
   params?: ProviderParamsDto
 }
 
+/** 思考强度：界面顺序是 默认 · Low · Med · High · XHigh · Max。 */
+export type ReasoningEffortDto = 'low' | 'mid' | 'high' | 'xhigh' | 'max'
+
+/** 强度如何落到上游协议：没有 / reasoning_effort / thinking budget / 固定开启。 */
+export type EffortWireModeDto = 'none' | 'reasoning_effort' | 'thinking_budget' | 'fixed'
+
+export interface ModelCapabilitiesDto {
+  /** 是否支持 Function Calling / MCP 工具。 */
+  supportsTools: boolean
+  /** 真实支持的档位子集；空数组表示不可调档。 */
+  supportedEfforts: ReasoningEffortDto[]
+  /** fixed 表示固定开启思考但不可调档（如 deepseek-reasoner）。 */
+  effortMode: EffortWireModeDto
+}
+
 export interface DiscoveredModelDto {
   id: string
   /** OpenCode Go 等平台可能分线路由。 */
@@ -575,6 +597,8 @@ export interface DiscoveredModelDto {
   /** `-free` 模型仅官方客户端可用，标记为不可直选。 */
   selectable: boolean
   note?: string
+  /** 真实能力画像；拉取时推断，界面据此只亮可用档位。 */
+  capabilities?: ModelCapabilitiesDto
 }
 
 export interface FetchModelsResultDto {

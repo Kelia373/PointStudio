@@ -4,6 +4,8 @@
 // 会话（Conversation）是「一组消息的容器」；消息（Message）一旦写入就不再变，
 // 编辑是产生新内容并刷新时间，不是原地改写历史语义。
 
+import type { ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'complete' | 'error'
 
@@ -12,6 +14,8 @@ export interface ConversationParams {
   temperature?: number
   maxTokens?: number
   topP?: number
+  /** 思考强度；缺省 / null 表示跟随模型默认。 */
+  effort?: ReasoningEffortDto | null
 }
 
 export interface Conversation {
@@ -155,7 +159,18 @@ export function validateConversationParams(
   const input = value as Record<string, unknown>
   const result: ConversationParams = {}
 
-  const ranges: Array<[keyof ConversationParams, number, number]> = [
+  const effort = input['effort']
+  if (effort !== undefined && effort !== null) {
+    if (
+      typeof effort !== 'string' ||
+      !['low', 'mid', 'high', 'xhigh', 'max'].includes(effort)
+    ) {
+      return { ok: false, error: 'E_BAD_PARAMS' }
+    }
+    result.effort = effort as ReasoningEffortDto
+  }
+
+  const ranges: Array<['temperature' | 'topP' | 'maxTokens', number, number]> = [
     ['temperature', 0, 2],
     ['topP', 0, 1],
     ['maxTokens', 1, 32_000]

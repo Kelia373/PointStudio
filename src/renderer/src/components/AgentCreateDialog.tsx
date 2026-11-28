@@ -8,14 +8,13 @@ import { describeError } from '../../../shared/i18n/errors.ts'
 import type {
   AgentPermissionMode,
   AssistantDto,
-  ProviderAccountViewDto
+  ProviderAccountViewDto,
+  ReasoningEffortDto
 } from '../../../shared/types/ipc.ts'
 import { AVATAR_KEYS, pickAgentAvatar, type AvatarKey } from '../lib/agentAvatar'
 import {
   MODEL_SERVICES_KEY,
-  collectModelPositionOptions,
-  parseModelServicesState,
-  providerDisplayName
+  parseModelServicesState
 } from '../lib/modelServices'
 import {
   PERMISSION_MODE_META,
@@ -24,6 +23,7 @@ import {
 } from '../lib/permissionModes'
 import { AVATAR_SOURCES } from './AgentAvatar'
 import Icon from './Icon'
+import ModelPickerPopover from './ModelPickerPopover'
 
 const SOUL_MAX = 200
 const NAME_MAX = 60
@@ -44,8 +44,11 @@ export default function AgentCreateDialog({
   const [soul, setSoul] = useState('')
   const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>('smart')
   const [avatar, setAvatar] = useState<string | null>(null)
-  // 选择值编码成 `${providerId}::${modelId}`：同名模型可能出现在多家。
-  const [modelSelection, setModelSelection] = useState('')
+  const [picked, setPicked] = useState<{
+    providerId: string | null
+    modelId: string | null
+    effort: ReasoningEffortDto | null
+  }>({ providerId: null, modelId: null, effort: null })
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [menu, setMenu] = useState<{
     kind: 'mode' | 'model'
@@ -61,18 +64,6 @@ export default function AgentCreateDialog({
     () => parseModelServicesState(window.localStorage.getItem(MODEL_SERVICES_KEY)),
     []
   )
-  const modelOptions = useMemo(() => {
-    const ready = accounts
-      .filter((account) => account.hasKey || account.protocol === 'ollama')
-      .map((account) => account.providerId)
-    return collectModelPositionOptions(services, ready).map((option) => ({
-      value: `${option.providerId ?? ''}::${option.modelId ?? option.value}`,
-      label: `${providerDisplayName(option.providerId ?? '', services)} · ${option.modelId ?? option.value}`,
-      providerId: option.providerId ?? null,
-      modelId: option.modelId ?? option.value
-    }))
-  }, [accounts, services])
-  const pickedModel = modelOptions.find((item) => item.value === modelSelection) ?? null
   const previewKey = pickAgentAvatar('', name, avatar)
   const modeMeta = permissionModeMeta(permissionMode)
 
@@ -96,7 +87,7 @@ export default function AgentCreateDialog({
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, soul, permissionMode, avatar, modelSelection, pickedModel, busy, menu])
+  }, [name, soul, permissionMode, avatar, picked, busy, menu])
 
   function openMenu(
     kind: 'mode' | 'model',
@@ -141,8 +132,9 @@ export default function AgentCreateDialog({
       systemPrompt: soul,
       permissionMode,
       avatar,
-      providerId: pickedModel?.providerId ?? null,
-      modelId: pickedModel?.modelId ?? null
+      providerId: picked.providerId,
+      modelId: picked.modelId,
+      ...(picked.effort ? { params: { effort: picked.effort } } : {})
     })
     if (!result.ok) {
       setBusy(false)
@@ -277,17 +269,15 @@ export default function AgentCreateDialog({
 
             <div className="agent-dialog__field">
               <span className="agent-dialog__label">模型</span>
-              <button
-                className={`agent-dialog__select-btn${menu?.kind === 'model' ? ' is-open' : ''}`}
-                type="button"
-                aria-haspopup="listbox"
-                aria-expanded={menu?.kind === 'model'}
-                aria-label="模型"
-                onClick={(event) => openMenu('model', event)}
-              >
-                <span>{pickedModel ? pickedModel.label : '跟随全局默认'}</span>
-                <Icon name="arrow-down" size={12} />
-              </button>
+              <ModelPickerPopover
+                services={services}
+                accounts={accounts}
+                providerId={picked.providerId}
+                modelId={picked.modelId}
+                effort={picked.effort}
+                allowDefault
+                onChange={setPicked}
+              />
             </div>
           </div>
 
@@ -319,15 +309,14 @@ export default function AgentCreateDialog({
             <div
               className="agent-dialog__menu"
               role="listbox"
-              aria-label={menu.kind === 'mode' ? '权限模式' : '模型'}
+              aria-label="权限模式"
               style={{
                 left: menu.left,
                 width: menu.width,
                 ...(menu.top !== undefined ? { top: menu.top } : { bottom: menu.bottom })
               }}
             >
-              {menu.kind === 'mode'
-                ? PERMISSION_MODE_ORDER.map((mode) => {
+              {PERMISSION_MODE_ORDER.map((mode) => {
                     const meta = PERMISSION_MODE_META[mode]
                     return (
                       <button
@@ -353,27 +342,7 @@ export default function AgentCreateDialog({
                         ) : null}
                       </button>
                     )
-                  })
-                : [
-                    { value: '', label: '跟随全局默认' },
-                    ...modelOptions.map((item) => ({ value: item.value, label: item.label }))
-                  ].map((item) => (
-                    <button
-                      key={item.value === '' ? '__default__' : item.value}
-                      className={`agent-dialog__menu-item${
-                        modelSelection === item.value ? ' is-on' : ''
-                      }`}
-                      type="button"
-                      role="option"
-                      aria-selected={modelSelection === item.value}
-                      onClick={() => {
-                        setModelSelection(item.value)
-                        setMenu(null)
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
+                  })}
             </div>
           </>
         ) : null}
