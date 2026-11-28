@@ -4,6 +4,7 @@
 // 多服务商 / CLI 引擎 / 四槽位 / 浏览器配置属于渲染层扩展，存 localStorage。
 import { useEffect, useMemo, useState } from 'react'
 
+import TypographySettings from './TypographySettings'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import type {
   McpConnectionDto,
@@ -1245,6 +1246,9 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         )
+
+      case 'typography':
+        return <TypographySettings />
 
       case 'data-backup':
         return (
