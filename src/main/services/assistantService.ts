@@ -5,6 +5,8 @@
 import {
   buildAssistant,
   validateAssistantDraft,
+  DEFAULT_ASSISTANT_ID,
+  DEFAULT_ASSISTANT_NAME,
   type Assistant,
   type AssistantDraft
 } from '../ai/domain/assistant.ts'
@@ -26,13 +28,61 @@ export class AssistantService {
     this.deps = deps
   }
 
+  /** 内置通用助手恒排第一；其余保持存储顺序，不按时间重排。 */
   async list(): Promise<Assistant[]> {
-    return this.store.readAll()
+    const items = await this.store.readAll()
+    const builtin = items.filter((item) => item.builtin === true || item.id === DEFAULT_ASSISTANT_ID)
+    if (builtin.length === 0) {
+      return items
+    }
+    return [...builtin, ...items.filter((item) => !builtin.includes(item))]
   }
 
   async get(id: string): Promise<Assistant | null> {
     const items = await this.store.readAll()
     return items.find((item) => item.id === id) ?? null
+  }
+
+  /**
+   * 幂等确保内置「通用助手」存在。
+   *
+   * 已存在时绝不覆盖用户改过的名字 / 模型 / 提示词，只补 `builtin: true` 标记——
+   * 否则每启动一次就会把用户配置洗回默认值。
+   */
+  async ensureBuiltin(): Promise<Assistant> {
+    const items = await this.store.readAll()
+    const index = items.findIndex((item) => item.id === DEFAULT_ASSISTANT_ID)
+
+    if (index >= 0) {
+      const current = items[index]
+      if (current.builtin === true) {
+        return current
+      }
+      const marked: Assistant = { ...current, builtin: true }
+      items[index] = marked
+      await this.store.writeAll(items)
+      return marked
+    }
+
+    const now = this.deps.now()
+    const created: Assistant = {
+      id: DEFAULT_ASSISTANT_ID,
+      name: DEFAULT_ASSISTANT_NAME,
+      // 空提示词 = 不注入人设，等价于和原生模型直聊。
+      systemPrompt: '',
+      providerId: null,
+      modelId: null,
+      params: { temperature: 0.7, maxTokens: 2048, topP: 1 },
+      enabled: true,
+      permissionMode: 'smart',
+      avatar: null,
+      builtin: true,
+      createdAt: now,
+      updatedAt: now
+    }
+    items.push(created)
+    await this.store.writeAll(items)
+    return created
   }
 
   async create(draft: AssistantDraft): Promise<ServiceResult<Assistant>> {
@@ -60,6 +110,12 @@ export class AssistantService {
       return { ok: false, errors: ['E_NOT_FOUND'] }
     }
 
+    // 内置通用助手：可以改名、换模型、加提示词，但不能被停用——
+    // 它一旦停用，所有收编过来的历史会话就没有归属了。
+    if (id === DEFAULT_ASSISTANT_ID && checked.value.enabled === false) {
+      return { ok: false, errors: ['E_BUILTIN_PROTECTED'] }
+    }
+
     // 更新是「整条替换」，所以没传的 enabled 必须先填回原值——
     // 否则在那张只有名字和提示词的编辑表单里保存一次，停用状态就被悄悄清掉了。
     const merged: AssistantDraft = {
@@ -75,7 +131,11 @@ export class AssistantService {
     const updated: Assistant = {
       ...rebuilt,
       createdAt: items[index].createdAt,
-      updatedAt: this.deps.now()
+      updatedAt: this.deps.now(),
+      // 内置标记不能被一次整条替换洗掉。
+      ...(id === DEFAULT_ASSISTANT_ID || items[index].builtin === true
+        ? { builtin: true }
+        : {})
     }
     items[index] = updated
     await this.store.writeAll(items)
@@ -83,6 +143,10 @@ export class AssistantService {
   }
 
   async remove(id: string): Promise<ServiceResult<true>> {
+    if (id === DEFAULT_ASSISTANT_ID) {
+      return { ok: false, errors: ['E_BUILTIN_PROTECTED'] }
+    }
+
     const items = await this.store.readAll()
     const index = items.findIndex((item) => item.id === id)
     if (index < 0) {

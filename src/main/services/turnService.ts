@@ -96,13 +96,13 @@ function branchTitle(sourceTitle: string): string {
 
 /**
  * 从某条消息分叉：复制截至它的上下文到新会话。
- * - 自由对话 → 新自由对话（继承模型/参数，方便换模型对比）
  * - 单 Agent 会话 → 同 Agent 的专题（绝不设 isHome）
- * - 小组会话 → 自由对话
+ * - 小组 / 无主会话 → 落到 `adoptTo` 指定的 Agent 专题（旧行为是不给就留空）
  */
 export async function branchConversation(
   conversations: ConversationService,
-  input: BranchConversationInput
+  input: BranchConversationInput,
+  options: { adoptTo?: string } = {}
 ): Promise<ServiceResult<Conversation>> {
   const source = await conversations.get(input.conversationId)
   if (!source) {
@@ -115,9 +115,10 @@ export async function branchConversation(
   }
 
   const isGroup = source.groupId != null
+  const inheritsOwner = !isGroup && source.assistantId != null && source.assistantId !== ''
   const created = await conversations.create({
     title: input.title?.trim() || branchTitle(source.title),
-    assistantId: isGroup ? null : (source.assistantId ?? null),
+    assistantId: inheritsOwner ? source.assistantId : (options.adoptTo ?? null),
     workspaceId: source.workspaceId ?? null
   })
   if (!created.ok) {

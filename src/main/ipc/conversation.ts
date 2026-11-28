@@ -6,6 +6,7 @@ import { ipcMain } from 'electron'
 
 import {
   CONVERSATION_CHANNELS,
+  DEFAULT_ASSISTANT_ID,
   type ConversationDto,
   type IpcResult,
   type MessageDto
@@ -206,7 +207,7 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
       if (!isBranchConversationRequest(request)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      const result = await branchConversation(service, request)
+      const result = await branchConversation(service, request, { adoptTo: DEFAULT_ASSISTANT_ID })
       return result.ok
         ? { ok: true, value: toConversationDto(result.value) }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }

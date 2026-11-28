@@ -32,3 +32,14 @@ test('剪贴板为空时「粘贴智能体」置灰，而不是消失', () => {
   // 置灰不是删除：位置与文案都要还在，用户才知道有这个能力
   assert.equal(items.length, 6)
 })
+
+test('内置通用助手：停用与删除置灰但保留位置', () => {
+  const items = buildAgentMenuItems({ enabled: true, canPaste: true, builtin: true })
+  const byAction = new Map(items.map((item) => [item.action, item]))
+  assert.equal(byAction.get('toggle-enabled')?.disabled, true)
+  assert.equal(byAction.get('remove')?.disabled, true)
+  assert.match(byAction.get('toggle-enabled')?.label ?? '', /内置/)
+  // 改名 / 设置 / 复制仍然可用
+  assert.equal(byAction.get('rename')?.disabled, undefined)
+  assert.equal(byAction.get('settings')?.disabled, undefined)
+})

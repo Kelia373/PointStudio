@@ -8,6 +8,7 @@ import { join } from 'node:path'
 import { JsonFileStore } from '../../data/fileStore.ts'
 import { ConversationService } from '../conversationService.ts'
 import { branchConversation, copyMessageText, deleteTurn, truncateFrom } from '../turnService.ts'
+import { DEFAULT_ASSISTANT_ID } from '../../ai/domain/assistant.ts'
 import type { Conversation, Message } from '../../ai/domain/conversation.ts'
 
 async function withTurns(
@@ -204,6 +205,45 @@ test('branchConversation：自由对话继承模型参数，小组分叉落自�
     assert.equal(fromGroup.ok, true)
     if (fromGroup.ok) {
       assert.equal(fromGroup.value.assistantId, null)
+      assert.equal(fromGroup.value.groupId, null)
+    }
+  })
+})
+
+test('分叉带 adoptTo：小组 / 无主会话落到通用助手专题', async () => {
+  await withTurns(async ({ service }) => {
+    const free = await service.create({ title: '无主会话' })
+    assert.equal(free.ok, true)
+    if (!free.ok) return
+    const msg = await service.appendMessage(free.value.id, { role: 'user', content: 'hi' })
+    assert.equal(msg.ok, true)
+    if (!msg.ok) return
+
+    const branched = await branchConversation(
+      service,
+      { conversationId: free.value.id, upToMessageId: msg.value.id },
+      { adoptTo: DEFAULT_ASSISTANT_ID }
+    )
+    assert.equal(branched.ok, true)
+    if (!branched.ok) return
+    assert.equal(branched.value.assistantId, DEFAULT_ASSISTANT_ID)
+    assert.equal(branched.value.groupId, null)
+    assert.equal(branched.value.isHome, undefined)
+
+    const group = await service.create({ title: '小组', assistantId: 'a1', groupId: 'g1' })
+    assert.equal(group.ok, true)
+    if (!group.ok) return
+    const groupMsg = await service.appendMessage(group.value.id, { role: 'user', content: 'hi' })
+    assert.equal(groupMsg.ok, true)
+    if (!groupMsg.ok) return
+    const fromGroup = await branchConversation(
+      service,
+      { conversationId: group.value.id, upToMessageId: groupMsg.value.id },
+      { adoptTo: DEFAULT_ASSISTANT_ID }
+    )
+    assert.equal(fromGroup.ok, true)
+    if (fromGroup.ok) {
+      assert.equal(fromGroup.value.assistantId, DEFAULT_ASSISTANT_ID)
       assert.equal(fromGroup.value.groupId, null)
     }
   })

@@ -279,6 +279,20 @@ export function sortAgents(assistants: AssistantDto[], mode: AgentSortMode): Ass
   return [...assistants].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
+/**
+ * 内置通用助手恒置顶。
+ *
+ * 必须在筛选与排序**之后**再套一遍：按「最近更新」排序时，用户随便改一下
+ * 别的 Agent 就能把它挤到下面去，而它是要常驻第一行的入口。
+ */
+export function pinBuiltinAgent(assistants: AssistantDto[]): AssistantDto[] {
+  const pinned = assistants.filter((assistant) => assistant.builtin === true)
+  if (pinned.length === 0) {
+    return assistants
+  }
+  return [...pinned, ...assistants.filter((assistant) => assistant.builtin !== true)]
+}
+
 export interface AgentGroupBench {
   state: AgentLightState
   /** 组内仍存在的 Agent 数。 */

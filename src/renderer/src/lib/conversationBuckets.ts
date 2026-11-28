@@ -5,7 +5,7 @@
 import type { AssistantDto, ConversationDto } from '../../../shared/types/ipc.ts'
 
 export interface ConversationBuckets {
-  /** 未绑定 Agent 且非小组的自由对话（含孤儿兜底），updatedAt 倒序。 */
+  /** 旧自由对话桶：仅在未传 `defaultAssistantId` 时使用（兼容老调用方与老测试）。 */
   freeChats: ConversationDto[]
   /** 每个 Agent 当前唯一的主聊天（isHome === true && 非小组）。 */
   agentHomeById: Record<string, ConversationDto | null>
@@ -15,15 +15,25 @@ export interface ConversationBuckets {
   groupChatsById: Record<string, ConversationDto[]>
 }
 
+export interface BucketOptions {
+  /**
+   * 「全员归属 Agent」模式：无主 / 孤儿单聊兜底进这个 Agent 的专题桶，
+   * `freeChats` 恒为空。不传则保持旧的自由对话分桶。
+   */
+  defaultAssistantId?: string
+}
+
 function byUpdatedDesc(a: ConversationDto, b: ConversationDto): number {
   return b.updatedAt.localeCompare(a.updatedAt) || b.id.localeCompare(a.id)
 }
 
 export function partitionConversations(
   conversations: readonly ConversationDto[],
-  assistants: readonly Pick<AssistantDto, 'id'>[]
+  assistants: readonly Pick<AssistantDto, 'id'>[],
+  options: BucketOptions = {}
 ): ConversationBuckets {
   const knownAgents = new Set(assistants.map((assistant) => assistant.id))
+  const fallback = options.defaultAssistantId
   const freeChats: ConversationDto[] = []
   const agentHomeById: Record<string, ConversationDto | null> = {}
   const agentTopicsById: Record<string, ConversationDto[]> = {}
@@ -36,34 +46,40 @@ export function partitionConversations(
       groupChatsById[conversation.groupId] = list
       continue
     }
-    if (conversation.assistantId === null || conversation.assistantId === undefined) {
-      freeChats.push(conversation)
-      continue
-    }
-    if (!knownAgents.has(conversation.assistantId)) {
-      // Agent 已被删除：会话按自由对话兜底，不悬挂。
-      freeChats.push(conversation)
+    const owner = conversation.assistantId
+    const ownerId =
+      typeof owner === 'string' && owner !== '' && knownAgents.has(owner) ? owner : null
+    if (ownerId === null) {
+      if (fallback === undefined) {
+        // 旧行为：孤儿 / 无主会话归入自由对话，绝不丢。
+        freeChats.push(conversation)
+        continue
+      }
+      // 收编模式：没有归属就落到兜底 Agent 的专题，不再制造无主会话。
+      const orphanTopics = agentTopicsById[fallback] ?? []
+      orphanTopics.push(conversation)
+      agentTopicsById[fallback] = orphanTopics
       continue
     }
     if (conversation.isHome === true) {
-      const existing = agentHomeById[conversation.assistantId] ?? null
+      const existing = agentHomeById[ownerId] ?? null
       if (existing === null || conversation.updatedAt > existing.updatedAt) {
         if (existing !== null) {
-          const topics = agentTopicsById[conversation.assistantId] ?? []
+          const topics = agentTopicsById[ownerId] ?? []
           topics.push(existing)
-          agentTopicsById[conversation.assistantId] = topics
+          agentTopicsById[ownerId] = topics
         }
-        agentHomeById[conversation.assistantId] = conversation
+        agentHomeById[ownerId] = conversation
       } else {
-        const topics = agentTopicsById[conversation.assistantId] ?? []
+        const topics = agentTopicsById[ownerId] ?? []
         topics.push(conversation)
-        agentTopicsById[conversation.assistantId] = topics
+        agentTopicsById[ownerId] = topics
       }
       continue
     }
-    const topics = agentTopicsById[conversation.assistantId] ?? []
+    const topics = agentTopicsById[ownerId] ?? []
     topics.push(conversation)
-    agentTopicsById[conversation.assistantId] = topics
+    agentTopicsById[ownerId] = topics
   }
 
   for (const list of Object.values(agentTopicsById)) {

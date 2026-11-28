@@ -23,6 +23,8 @@ export interface AgentMenuInput {
   enabled: boolean
   /** 应用内剪贴板里有没有可粘贴的 Agent。 */
   canPaste: boolean
+  /** 内置通用助手：可改名换模型，但不能停用、不能删。 */
+  builtin?: boolean
 }
 
 export function buildAgentMenuItems(input: AgentMenuInput): AgentMenuItem[] {
@@ -31,7 +33,16 @@ export function buildAgentMenuItems(input: AgentMenuInput): AgentMenuItem[] {
     { action: 'settings', label: '智能体设置' },
     { action: 'copy', label: '复制智能体' },
     { action: 'paste', label: '粘贴智能体', disabled: !input.canPaste },
-    { action: 'toggle-enabled', label: input.enabled ? '标记为停用' : '标记为启用' },
-    { action: 'remove', label: '删除智能体' }
+    {
+      action: 'toggle-enabled',
+      label: input.builtin === true ? '系统内置，不可停用' : input.enabled ? '标记为停用' : '标记为启用',
+      // 置灰而不是隐藏：让用户看得见这是被系统保护的能力。
+      ...(input.builtin === true ? { disabled: true } : {})
+    },
+    {
+      action: 'remove',
+      label: input.builtin === true ? '系统内置，不可删除' : '删除智能体',
+      ...(input.builtin === true ? { disabled: true } : {})
+    }
   ]
 }

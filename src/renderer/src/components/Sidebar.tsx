@@ -17,6 +17,7 @@ import {
   filterAgents,
   normalizeGroups,
   parseAgentGroups,
+  pinBuiltinAgent,
   removeAgentFromGroup,
   removeGroup,
   renameGroup,
@@ -36,8 +37,9 @@ import { computeAgentBenchStatus, computeAgentWorkerLanes, LIGHT_LABEL } from '.
 import type { PlanRunStatus } from '../lib/planRunState'
 import { nextActivePage } from '../lib/pageNav'
 import { partitionConversations } from '../lib/conversationBuckets'
+import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { registry } from '../runtime/registry'
-import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
+import { Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
 import SessionItem from './SessionItem'
 import AgentAvatar from './AgentAvatar'
@@ -140,8 +142,6 @@ export default function Sidebar({
   // 双轴：点 Agent 行 = 只看它跨项目的记录；点项目 = 看该项目下所有 Agent。
   // 工位区：整段可折叠、行上右键出菜单、改名在行内完成
   const [agentsOpen, setAgentsOpen] = useState(true)
-  // 项目区：与 Agent Bench 同样是可折叠的分区头
-  const [freeChatsOpen, setFreeChatsOpen] = useState(true)
   const [menu, setMenu] = useState<{ agentId: string; x: number; y: number } | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -379,23 +379,19 @@ export default function Sidebar({
   }, [groupMenu])
 
   const filteredAgents = useMemo(
-    () => sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode),
+    () =>
+      pinBuiltinAgent(
+        sortAgents(filterAgents(assistants, { keyword: agentKeyword, hideDisabled }), sortMode)
+      ),
     [assistants, agentKeyword, hideDisabled, sortMode]
   )
   const filterActive =
     groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
   const buckets = useMemo(
-    () => partitionConversations(conversations, assistants),
+    // 全员归属：无主 / 孤儿单聊兜底进通用助手专题，侧栏不再有「自由对话」这一桶。
+    () => partitionConversations(conversations, assistants, { defaultAssistantId: DEFAULT_ASSISTANT_ID }),
     [conversations, assistants]
   )
-  // 自由对话只按标题过滤；Agent / 小组会话不再混进这一区。
-  const freeChats = useMemo(() => {
-    const needle = keyword.trim().toLowerCase()
-    if (needle === '') {
-      return buckets.freeChats
-    }
-    return buckets.freeChats.filter((item) => item.title.toLowerCase().includes(needle))
-  }, [buckets.freeChats, keyword])
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent): void {
@@ -628,8 +624,8 @@ export default function Sidebar({
           className="side__search-add"
           type="button"
           onClick={onCreate}
-          title="新建会话"
-          aria-label="新建会话"
+          title="新建专题会话"
+          aria-label="新建专题会话"
         >
           <Icon name="plus" />
         </button>
@@ -637,6 +633,18 @@ export default function Sidebar({
 
       <section className="side__section">
         <ul className="side__plain">
+          <li>
+            <button
+              className="side__feat"
+              type="button"
+              title="工作区（导入文件供检索）"
+              onClick={onOpenWorkspace}
+            >
+              <Icon name="folder" className="side__feat-icon" size={13} />
+              <span className="side__feat-label">工作区</span>
+            </button>
+          </li>
+          <Slot name="sidebar.projects.header" />
           {features.map((entry) => {
             const page = entry.def
             const isPinned = pinned[page.id] ?? page.defaultPinned ?? false
@@ -680,7 +688,7 @@ export default function Sidebar({
         </ul>
       </section>
 
-      <section className="side__section">
+      <section className="side__section side__section--grow">
         <div className="side__head side__head--lg">
           <button
             className="side__head-btn"
@@ -1096,7 +1104,8 @@ export default function Sidebar({
             </button>
             {buildAgentMenuItems({
               enabled: menuAgent.enabled !== false,
-              canPaste: clipboard !== null
+              canPaste: clipboard !== null,
+              builtin: menuAgent.builtin === true
             }).map((item) => (
               <button
                 key={item.action}
@@ -1116,71 +1125,6 @@ export default function Sidebar({
           </FloatingMenu>
         </>
       ) : null}
-
-      <section className="side__section side__section--grow">
-        <div className="side__head side__head--lg">
-          <button
-            className="side__head-btn"
-            type="button"
-            aria-expanded={freeChatsOpen}
-            title={freeChatsOpen ? '收起普通聊天' : '展开普通聊天'}
-            onClick={() => setFreeChatsOpen((value) => !value)}
-          >
-            <Icon name="compass" className="side__head-icon" size={13} />
-            <span className="side__head-title">普通聊天</span>
-            <span className="side__head-note">{freeChats.length}</span>
-            <Icon
-              name="arrow-down"
-              className={`side__head-caret${freeChatsOpen ? ' is-open' : ''}`}
-              size={13}
-            />
-          </button>
-          <Slot name="sidebar.projects.header" props={{ count: freeChats.length }} />
-          <button
-            className="side__head-act"
-            type="button"
-            title="工作区（导入文件供检索）"
-            aria-label="打开工作区"
-            onClick={onOpenWorkspace}
-          >
-            <Icon name="folder" size={13} />
-          </button>
-          <button
-            className="side__head-act"
-            type="button"
-            title="新建自由对话"
-            aria-label="新建自由对话"
-            onClick={onCreate}
-          >
-            <Icon name="plus" size={13} />
-          </button>
-        </div>
-        {freeChatsOpen ? (
-          <ul className="side__list">
-            {freeChats.map((conversation) => (
-              <li key={conversation.id}>
-                <Overridable
-                  name="sidebar.sessionItem"
-                  fallback={SessionItem}
-                  props={{
-                    conversation,
-                    active: conversation.id === activeId,
-                    onSelect: () => onSelect(conversation.id),
-                    onRemove: () => onRemove(conversation.id),
-                    onRename: (title: string) => onRenameConversation(conversation.id, title)
-                  }}
-                />
-              </li>
-            ))}
-            {freeChats.length === 0 && conversations.length > 0 ? (
-              <li className="side__empty">没有匹配的自由对话</li>
-            ) : null}
-            {conversations.length === 0 ? (
-              <li className="side__empty">还没有对话</li>
-            ) : null}
-          </ul>
-        ) : null}
-      </section>
 
       {groupMenu
         ? (() => {

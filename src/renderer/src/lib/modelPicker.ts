@@ -265,11 +265,20 @@ export type ComposerModelPolicy =
 export function resolveConversationComposerPolicy(input: {
   assistantId: string | null
   groupId?: string | null
+  /**
+   * 全员归属模式：给出兜底 Agent 后，单聊一律锁模型（含无主的旧会话）。
+   * 不传则保留旧行为——没有归属的单聊仍可自由切模型。
+   */
+  defaultAssistantId?: string
 }): ComposerModelPolicy {
-  return resolveComposerModelPolicy({
-    assistantId: input.assistantId,
-    inGroup: input.groupId != null
-  })
+  if (input.groupId != null) {
+    return { mode: 'locked-group', label: '各成员独立模型' }
+  }
+  const owner = input.assistantId ?? input.defaultAssistantId ?? null
+  if (owner !== null) {
+    return { mode: 'locked-agent', canOpenAgentSettings: true }
+  }
+  return { mode: 'editable' }
 }
 
 /** 输入栏能不能换模型：小组锁死、绑定 Agent 锁死、自由对话才可编辑。 */
