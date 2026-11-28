@@ -554,6 +554,14 @@ export default function ChatPanel() {
       studioStore.setState({ lastRouteDecision: route })
     }
 
+    // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
+    const validMentionIds = mentionedIds.filter((id) =>
+      mentionCandidates.some((candidate) => candidate.id === id)
+    )
+    // 群聊只 @ 一个成员时本轮由他接管；归因也要跟着他，而不是组长。
+    const replyOwnerId =
+      validMentionIds.length === 1 ? validMentionIds[0] : boundAssistant?.id
+
     const requestId = crypto.randomUUID()
     // 乐观渲染：用户消息与空气泡先上屏，chunk 到达即可追加。
     // 空气泡带上「这一轮的真实作者」，否则流式全程身份栏都是中性品牌标。
@@ -563,7 +571,7 @@ export default function ChatPanel() {
         text,
         route,
         attribution: {
-          ...(boundAssistant?.id ? { assistantId: boundAssistant.id } : {}),
+          ...(replyOwnerId ? { assistantId: replyOwnerId } : {}),
           ...(activeProviderId ? { providerId: activeProviderId } : {}),
           ...(activeModelLabel ? { modelId: activeModelLabel } : {})
         }
@@ -583,9 +591,6 @@ export default function ChatPanel() {
     setError(null)
 
     // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
-    const validMentionIds = mentionedIds.filter((id) =>
-      mentionCandidates.some((candidate) => candidate.id === id)
-    )
     const result = await window.pointstudio.chat.send({
       id: requestId,
       conversationId,
