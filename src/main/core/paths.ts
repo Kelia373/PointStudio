@@ -14,6 +14,10 @@ export interface DataPaths {
   messages: string
   assistants: string
   providerSettings: string
+  /** 多服务商凭据库：一家一条，互不覆盖。 */
+  providerAccounts: string
+  /** 本地 Token 账本。 */
+  usageLedger: string
   workspaceIndex: string
   /** 工作区文件内容所在目录。 */
   workspaceRoot: string
@@ -29,6 +33,8 @@ export function buildDataPaths(userDataDir: string): DataPaths {
     messages: join(dataDir, 'messages.json'),
     assistants: join(dataDir, 'assistants.json'),
     providerSettings: join(dataDir, 'provider.json'),
+    providerAccounts: join(dataDir, 'provider-accounts.json'),
+    usageLedger: join(dataDir, 'usage-ledger.json'),
     workspaceIndex: join(dataDir, 'workspace.json'),
     workspaceRoot: join(dataDir, 'workspace'),
     crashDir: join(dataDir, 'crash')

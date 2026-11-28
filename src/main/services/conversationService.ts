@@ -9,6 +9,7 @@ import {
   validateConversationParams,
   validateMessageContent,
   validateModelId,
+  validateProviderId,
   validateTitle,
   type Conversation,
   type ConversationParams,
@@ -139,7 +140,7 @@ export class ConversationService {
    */
   async setModel(
     id: string,
-    patch: { model?: string | null; params?: ConversationParams }
+    patch: { model?: string | null; providerId?: string | null; params?: ConversationParams }
   ): Promise<ServiceResult<Conversation>> {
     const items = await this.conversations.readAll()
     const index = items.findIndex((item) => item.id === id)
@@ -158,6 +159,18 @@ export class ConversationService {
         delete next.model
       } else {
         next.model = model.value
+      }
+    }
+
+    if (patch.providerId !== undefined) {
+      const provider = validateProviderId(patch.providerId)
+      if (!provider.ok) {
+        return { ok: false, errors: [provider.error] }
+      }
+      if (provider.value === null) {
+        delete next.providerId
+      } else {
+        next.providerId = provider.value
       }
     }
 

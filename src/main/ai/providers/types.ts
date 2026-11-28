@@ -25,6 +25,19 @@ export interface ChatStreamRequest {
   messages: ChatMessageInput[]
   params?: ChatStreamParams
   signal?: AbortSignal
+  /** 用于 OpenCode Go 的 `x-opencode-session`；其他平台忽略。 */
+  sessionId?: string
+  /** 收到 SSE 尾帧 usage 时回调；不注入则不解析。 */
+  onUsage?: (usage: TokenUsageSample) => void
+}
+
+/** 一次真实调用的 token 用量（来自平台返回，不是估算）。 */
+export interface TokenUsageSample {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  /** DeepSeek / OpenCode Go 的缓存命中 token；没有则为 0。 */
+  cacheHitTokens: number
 }
 
 export interface ChatProvider {
@@ -39,7 +52,13 @@ export interface ChatProvider {
   streamChat(request: ChatStreamRequest): AsyncIterable<string>
 }
 
-export type ProviderErrorCode = 'E_MISSING_KEY' | 'E_HTTP' | 'E_STREAM' | 'E_ABORTED'
+export type ProviderErrorCode =
+  | 'E_MISSING_KEY'
+  | 'E_HTTP'
+  | 'E_STREAM'
+  | 'E_ABORTED'
+  | 'E_PROTOCOL'
+  | 'E_RESPONSE'
 
 export class ProviderError extends Error {
   readonly code: ProviderErrorCode

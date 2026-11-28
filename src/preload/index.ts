@@ -10,6 +10,7 @@ import {
   ASSISTANT_CHANNELS,
   CHAT_CHANNELS,
   CONVERSATION_CHANNELS,
+  PROVIDERS_CHANNELS,
   type AssistantBridge,
   type AssistantDto,
   type AssistantDraftRequest,
@@ -24,9 +25,16 @@ import {
   type ConversationDto,
   type ConversationParamsDto,
   type CreateConversationRequest,
+  type FetchModelsResultDto,
   type IpcResult,
   type MessageDto,
   type PointStudioApi,
+  type ProviderAccountViewDto,
+  type ProviderUsageDto,
+  type ProvidersBridge,
+  type SaveProviderAccountRequest,
+  type UsageLedgerSummaryDto,
+  type UsageRangeDto,
   SETTINGS_CHANNELS,
   WORKSPACE_CHANNELS,
   AGENT_CHANNELS,
@@ -126,6 +134,27 @@ const assistants: AssistantBridge = {
     ipcRenderer.invoke(ASSISTANT_CHANNELS.remove, id) as Promise<IpcResult<true>>
 }
 
+const providers: ProvidersBridge = {
+  listAccounts: (): Promise<ProviderAccountViewDto[]> =>
+    ipcRenderer.invoke(PROVIDERS_CHANNELS.listAccounts) as Promise<ProviderAccountViewDto[]>,
+  saveAccount: (request: SaveProviderAccountRequest): Promise<IpcResult<ProviderAccountViewDto>> =>
+    ipcRenderer.invoke(PROVIDERS_CHANNELS.saveAccount, request) as Promise<
+      IpcResult<ProviderAccountViewDto>
+    >,
+  clearAccount: (providerId: string): Promise<IpcResult<true>> =>
+    ipcRenderer.invoke(PROVIDERS_CHANNELS.clearAccount, providerId) as Promise<IpcResult<true>>,
+  fetchModels: (providerId: string): Promise<IpcResult<FetchModelsResultDto>> =>
+    ipcRenderer.invoke(PROVIDERS_CHANNELS.fetchModels, providerId) as Promise<
+      IpcResult<FetchModelsResultDto>
+    >,
+  fetchUsage: (providerId: string): Promise<IpcResult<ProviderUsageDto>> =>
+    ipcRenderer.invoke(PROVIDERS_CHANNELS.fetchUsage, providerId) as Promise<
+      IpcResult<ProviderUsageDto>
+    >,
+  readLedger: (range: UsageRangeDto): Promise<UsageLedgerSummaryDto> =>
+    ipcRenderer.invoke(PROVIDERS_CHANNELS.readLedger, range) as Promise<UsageLedgerSummaryDto>
+}
+
 const settings: SettingsBridge = {
   readProvider: (): Promise<ProviderSettingsViewDto> =>
     ipcRenderer.invoke(SETTINGS_CHANNELS.readProvider) as Promise<ProviderSettingsViewDto>,
@@ -191,6 +220,7 @@ const api: PointStudioApi = {
   conversations,
   assistants,
   settings,
+  providers,
   workspace,
   agent,
   backup,

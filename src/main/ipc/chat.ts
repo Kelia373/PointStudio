@@ -19,7 +19,7 @@ import { ProviderError } from '../ai/providers/types.ts'
 import { REPLY_CHUNK_DELAY_MS } from '../services/chatReply.ts'
 import { resolveMode, type ChatEngineDeps } from '../services/chatEngine.ts'
 import type { SearchHit } from '../ai/domain/search.ts'
-import { streamAssistantReply, type AssistantLookup } from '../services/chatFlow.ts'
+import { streamAssistantReply, type AssistantLookup, type ChatFlowDeps } from '../services/chatFlow.ts'
 import { StreamRegistry } from '../services/streamRegistry.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 import { isChatSendRequest, isUuid } from './validators.ts'
@@ -36,6 +36,8 @@ export interface ChatIpcOptions {
   assistants: AssistantLookup
   /** 可选：工作区检索。不注入则对话不引用任何文件。 */
   retrieval?: { search(query: string): Promise<SearchHit[]> }
+  /** 真实用量落账本；不注入则不记录。 */
+  onUsageRecorded?: ChatFlowDeps['onUsageRecorded']
 }
 
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
@@ -79,6 +81,7 @@ async function streamReply(
       engine: options.engine,
       signal,
       retrieval: options.retrieval,
+      ...(options.onUsageRecorded ? { onUsageRecorded: options.onUsageRecorded } : {}),
       onContextTrimmed: (droppedCount) => {
         if (!sender.isDestroyed()) {
           sender.send(CHAT_CHANNELS.notice, { id, droppedCount } satisfies ChatNoticeEvent)

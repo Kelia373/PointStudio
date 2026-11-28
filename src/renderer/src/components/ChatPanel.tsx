@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { ConversationDto } from '../../../shared/types/ipc.ts'
+import type { ConversationDto, ProviderAccountViewDto } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
 import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
@@ -38,7 +38,8 @@ import { downloadText, exportFileName } from '../lib/exportFile'
 import {
   MODEL_SERVICES_KEY,
   collectModelPositionOptions,
-  parseModelServicesState
+  parseModelServicesState,
+  providerDisplayName
 } from '../lib/modelServices'
 import { CHAT_PAGE, pageAfterSessionPick, pageTitleOf } from '../lib/pageNav'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
@@ -203,6 +204,7 @@ export default function ChatPanel() {
     : null
   const [theme, setTheme] = useState<Theme>(readTheme)
   const [provider, setProvider] = useField('provider')
+  const [accounts, setAccounts] = useState<ProviderAccountViewDto[]>([])
   const [mcpConnections, setMcpConnections] = useField('mcpConnections')
   const [lastRunMs, setLastRunMs] = useField('lastRunMs')
   // 内容列宽：消息流与输入框共用，拖拽右边界调整，存 local storage。
@@ -313,7 +315,12 @@ export default function ChatPanel() {
   }, [])
 
   const refreshProvider = useCallback(async (): Promise<void> => {
-    setProvider(await window.pointstudio.settings.readProvider())
+    const [view, accountList] = await Promise.all([
+      window.pointstudio.settings.readProvider(),
+      window.pointstudio.providers.listAccounts()
+    ])
+    setProvider(view)
+    setAccounts(accountList)
   }, [])
 
   const refreshMcp = useCallback(async (): Promise<void> => {
@@ -721,12 +728,22 @@ export default function ChatPanel() {
   }
 
   async function applyPrimarySlot(conversationId: string): Promise<void> {
-    const primary = readModelServices().slots.primaryModel
+    const view = readModelServices()
+    const primary = view.slots.primaryModel
     if (primary === '' || primary === AUTO_ROUTE_MODEL) {
       return
     }
+    // 槽位只存模型名：从已配通的服务商里反查归属，连同 providerId 一起写入会话，
+    // 否则跨家同名的模型会被发到默认服务商。
+    const ready = accounts
+      .filter((account) => account.hasKey || account.protocol === 'ollama')
+      .map((account) => account.providerId)
+    const matched = collectModelPositionOptions(view, ready).find(
+      (option) => option.value === primary
+    )
     const applied = await window.pointstudio.conversations.setModel(conversationId, {
-      model: primary
+      model: primary,
+      ...(matched?.providerId ? { providerId: matched.providerId } : {})
     })
     if (!applied.ok) {
       // 不静默吞错：新会话会退回 provider 默认模型，得让用户知道
@@ -903,10 +920,18 @@ export default function ChatPanel() {
   const primarySlot = modelServicesView.slots.primaryModel
   const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
   const defaultModelValue = activeConversation?.model ?? (provider?.model || slotFallback)
+  // 只有主进程里真正配通（有 Key / 本地协议）的服务商模型才能选。
+  const readyProviderIds = accounts
+    .filter((account) => account.hasKey || account.protocol === 'ollama')
+    .map((account) => account.providerId)
   const externalModelValues = collectModelPositionOptions(
     modelServicesView,
-    provider?.providerId ?? null
+    readyProviderIds
   ).map((option) => option.value)
+  const activeProviderId =
+    boundAssistant?.providerId ?? activeConversation?.providerId ?? provider?.providerId ?? null
+  const activeModelLabel =
+    activeConversation?.model ?? boundAssistant?.modelId ?? provider?.model ?? ''
   const modeLabel = busy ? '生成中' : mode === 'live' ? '真模型' : mode === 'local' ? '本地假流式' : '未发送'
 
   return (
@@ -1016,6 +1041,16 @@ export default function ChatPanel() {
             <i className="chip__dot" />
             {modeLabel}
           </span>
+
+          {activeProviderId !== null ? (
+            <span
+              className="chip"
+              title="当前会话实际使用的服务商与模型（会话覆盖 > 助手绑定 > 全局默认）"
+            >
+              {providerDisplayName(activeProviderId, modelServicesView)}
+              {activeModelLabel === '' ? '' : ` · ${activeModelLabel}`}
+            </span>
+          ) : null}
 
           {lastRunMs !== null ? (
             <span className="chip" title="上一轮生成耗时">
@@ -1554,7 +1589,7 @@ export default function ChatPanel() {
 
       {agentDialogOpen ? (
         <AgentCreateDialog
-          provider={provider}
+          accounts={accounts}
           existingNames={assistants.map((item) => item.name)}
           onClose={() => setAgentDialogOpen(false)}
           onCreated={(assistant) => {

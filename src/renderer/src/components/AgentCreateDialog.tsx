@@ -8,15 +8,14 @@ import { describeError } from '../../../shared/i18n/errors.ts'
 import type {
   AgentPermissionMode,
   AssistantDto,
-  ProviderSettingsViewDto
+  ProviderAccountViewDto
 } from '../../../shared/types/ipc.ts'
 import { AVATAR_KEYS, pickAgentAvatar, type AvatarKey } from '../lib/agentAvatar'
-import { modelChoices } from '../lib/modelOptions'
 import {
   MODEL_SERVICES_KEY,
   collectModelPositionOptions,
-  modelDisplayLabel,
-  parseModelServicesState
+  parseModelServicesState,
+  providerDisplayName
 } from '../lib/modelServices'
 import {
   PERMISSION_MODE_META,
@@ -30,12 +29,13 @@ const SOUL_MAX = 200
 const NAME_MAX = 60
 
 export default function AgentCreateDialog({
-  provider,
+  accounts,
   existingNames,
   onClose,
   onCreated
 }: {
-  provider: ProviderSettingsViewDto | null
+  accounts: ProviderAccountViewDto[]
+  // ProviderAccountViewDto[]
   existingNames: string[]
   onClose: () => void
   onCreated: (assistant: AssistantDto) => void
@@ -44,7 +44,8 @@ export default function AgentCreateDialog({
   const [soul, setSoul] = useState('')
   const [permissionMode, setPermissionMode] = useState<AgentPermissionMode>('smart')
   const [avatar, setAvatar] = useState<string | null>(null)
-  const [modelId, setModelId] = useState('')
+  // 选择值编码成 `${providerId}::${modelId}`：同名模型可能出现在多家。
+  const [modelSelection, setModelSelection] = useState('')
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [menu, setMenu] = useState<{
     kind: 'mode' | 'model'
@@ -60,17 +61,18 @@ export default function AgentCreateDialog({
     () => parseModelServicesState(window.localStorage.getItem(MODEL_SERVICES_KEY)),
     []
   )
-  const models = useMemo(
-    () =>
-      modelChoices(
-        provider?.providerId ?? null,
-        null,
-        collectModelPositionOptions(services, provider?.providerId ?? null).map(
-          (option) => option.value
-        )
-      ),
-    [provider?.providerId, services]
-  )
+  const modelOptions = useMemo(() => {
+    const ready = accounts
+      .filter((account) => account.hasKey || account.protocol === 'ollama')
+      .map((account) => account.providerId)
+    return collectModelPositionOptions(services, ready).map((option) => ({
+      value: `${option.providerId ?? ''}::${option.modelId ?? option.value}`,
+      label: `${providerDisplayName(option.providerId ?? '', services)} · ${option.modelId ?? option.value}`,
+      providerId: option.providerId ?? null,
+      modelId: option.modelId ?? option.value
+    }))
+  }, [accounts, services])
+  const pickedModel = modelOptions.find((item) => item.value === modelSelection) ?? null
   const previewKey = pickAgentAvatar('', name, avatar)
   const modeMeta = permissionModeMeta(permissionMode)
 
@@ -94,7 +96,7 @@ export default function AgentCreateDialog({
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, soul, permissionMode, avatar, modelId, busy, menu])
+  }, [name, soul, permissionMode, avatar, modelSelection, pickedModel, busy, menu])
 
   function openMenu(
     kind: 'mode' | 'model',
@@ -139,8 +141,8 @@ export default function AgentCreateDialog({
       systemPrompt: soul,
       permissionMode,
       avatar,
-      providerId: provider?.providerId ?? null,
-      modelId: modelId === '' ? null : modelId
+      providerId: pickedModel?.providerId ?? null,
+      modelId: pickedModel?.modelId ?? null
     })
     if (!result.ok) {
       setBusy(false)
@@ -283,7 +285,7 @@ export default function AgentCreateDialog({
                 aria-label="模型"
                 onClick={(event) => openMenu('model', event)}
               >
-                <span>{modelId === '' ? '跟随全局默认' : modelDisplayLabel(modelId, services)}</span>
+                <span>{pickedModel ? pickedModel.label : '跟随全局默认'}</span>
                 <Icon name="arrow-down" size={12} />
               </button>
             </div>
@@ -352,25 +354,26 @@ export default function AgentCreateDialog({
                       </button>
                     )
                   })
-                : [{ value: '', label: '跟随全局默认' }, ...models.map((model) => ({ value: model, label: modelDisplayLabel(model, services) }))].map(
-                    (item) => (
-                      <button
-                        key={item.value === '' ? '__default__' : item.value}
-                        className={`agent-dialog__menu-item${
-                          modelId === item.value ? ' is-on' : ''
-                        }`}
-                        type="button"
-                        role="option"
-                        aria-selected={modelId === item.value}
-                        onClick={() => {
-                          setModelId(item.value)
-                          setMenu(null)
-                        }}
-                      >
-                        {item.label}
-                      </button>
-                    )
-                  )}
+                : [
+                    { value: '', label: '跟随全局默认' },
+                    ...modelOptions.map((item) => ({ value: item.value, label: item.label }))
+                  ].map((item) => (
+                    <button
+                      key={item.value === '' ? '__default__' : item.value}
+                      className={`agent-dialog__menu-item${
+                        modelSelection === item.value ? ' is-on' : ''
+                      }`}
+                      type="button"
+                      role="option"
+                      aria-selected={modelSelection === item.value}
+                      onClick={() => {
+                        setModelSelection(item.value)
+                        setMenu(null)
+                      }}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
             </div>
           </>
         ) : null}

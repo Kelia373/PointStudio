@@ -140,6 +140,8 @@ export interface ConversationDto {
   workspaceId?: string | null
   /** 会话级模型覆盖；缺省表示跟随助手 / 全局默认。 */
   model?: string | null
+  /** 会话级服务商覆盖；缺省表示跟随助手绑定 / 全局默认。 */
+  providerId?: string | null
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParamsDto
   createdAt: string
@@ -251,7 +253,7 @@ export interface ConversationBridge {
    */
   setModel(
     id: string,
-    patch: { model?: string | null; params?: ConversationParamsDto }
+    patch: { model?: string | null; providerId?: string | null; params?: ConversationParamsDto }
   ): Promise<IpcResult<ConversationDto>>
   /** 删除「这一轮」：用户消息连同其后的助手回复。 */
   deleteTurn(conversationId: string, messageId: string): Promise<IpcResult<{ removed: number }>>
@@ -474,6 +476,7 @@ export interface PointStudioApi {
   conversations: ConversationBridge
   assistants: AssistantBridge
   settings: SettingsBridge
+  providers: ProvidersBridge
   workspace: WorkspaceBridge
   agent: AgentBridge
   backup: BackupBridge
@@ -521,4 +524,117 @@ export interface SettingsBridge {
   readProvider(): Promise<ProviderSettingsViewDto>
   saveProvider(request: ProviderSettingsDraftRequest): Promise<IpcResult<ProviderSettingsViewDto>>
   clearProvider(): Promise<IpcResult<true>>
+}
+
+// ---------------------------------------------------------------- 多服务商凭据 / 模型 / 用量
+
+export const PROVIDERS_CHANNELS = {
+  listAccounts: 'providers:list-accounts',
+  saveAccount: 'providers:save-account',
+  clearAccount: 'providers:clear-account',
+  fetchModels: 'providers:fetch-models',
+  fetchUsage: 'providers:fetch-usage',
+  readLedger: 'providers:read-ledger'
+} as const
+
+/** 发请求时走的线路协议。 */
+export type ProviderWireProtocolDto =
+  | 'openai-compatible'
+  | 'deepseek'
+  | 'opencode-go'
+  | 'anthropic'
+  | 'gemini'
+  | 'ollama'
+
+/** 跨进程脱敏账户视图：明文 apiKey 永不出主进程。 */
+export interface ProviderAccountViewDto {
+  providerId: string
+  protocol: ProviderWireProtocolDto
+  hasKey: boolean
+  maskedKey: string
+  baseUrl: string
+  defaultModel: string
+  params?: ProviderParamsDto
+  updatedAt: string | null
+}
+
+export interface SaveProviderAccountRequest {
+  providerId: string
+  protocol?: ProviderWireProtocolDto
+  /** 留空或省略表示保留已保存的 Key（改地址 / 模型不丢 Key）。 */
+  apiKey?: string
+  baseUrl: string
+  defaultModel?: string
+  params?: ProviderParamsDto
+}
+
+export interface DiscoveredModelDto {
+  id: string
+  /** OpenCode Go 等平台可能分线路由。 */
+  wire?: 'openai' | 'anthropic' | 'google'
+  /** `-free` 模型仅官方客户端可用，标记为不可直选。 */
+  selectable: boolean
+  note?: string
+}
+
+export interface FetchModelsResultDto {
+  providerId: string
+  models: DiscoveredModelDto[]
+  latencyMs: number
+  fetchedAt: string
+}
+
+export interface QuotaWindowDto {
+  window: 'rolling' | 'weekly' | 'monthly'
+  percent: number
+  resetsAt: string | null
+  status?: string
+}
+
+export interface BalanceInfoDto {
+  currency: string
+  totalBalance: string
+  grantedBalance?: string
+  toppedUpBalance?: string
+}
+
+export interface ProviderUsageDto {
+  providerId: string
+  kind: 'balance' | 'quota-windows' | 'unsupported'
+  available?: boolean
+  balances?: BalanceInfoDto[]
+  windows?: QuotaWindowDto[]
+  fetchedAt: string
+  note?: string
+}
+
+export type UsageRangeDto = 'today' | '7d' | '30d' | 'all'
+
+export interface UsageBucketDto {
+  key: string
+  calls: number
+  promptTokens: number
+  completionTokens: number
+  cacheHitTokens: number
+  totalTokens: number
+}
+
+export interface UsageLedgerSummaryDto {
+  range: UsageRangeDto
+  totalCalls: number
+  totalPromptTokens: number
+  totalCompletionTokens: number
+  totalCacheHitTokens: number
+  totalTokens: number
+  byProvider: UsageBucketDto[]
+  byAssistant: UsageBucketDto[]
+}
+
+export interface ProvidersBridge {
+  listAccounts(): Promise<ProviderAccountViewDto[]>
+  saveAccount(request: SaveProviderAccountRequest): Promise<IpcResult<ProviderAccountViewDto>>
+  clearAccount(providerId: string): Promise<IpcResult<true>>
+  fetchModels(providerId: string): Promise<IpcResult<FetchModelsResultDto>>
+  fetchUsage(providerId: string): Promise<IpcResult<ProviderUsageDto>>
+  readLedger(range: UsageRangeDto): Promise<UsageLedgerSummaryDto>
 }

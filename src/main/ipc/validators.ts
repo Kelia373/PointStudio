@@ -10,10 +10,19 @@ import type {
   AgentRunRequest,
   ChatSendRequest,
   CreateConversationRequest,
-  ProviderSettingsDraftRequest
+  ProviderSettingsDraftRequest,
+  SaveProviderAccountRequest,
+  UsageRangeDto
 } from '../../shared/types/ipc.ts'
 import { AGENT_PERMISSION_MODES } from '../../shared/types/ipc.ts'
 import type { AssistantDraft } from '../ai/domain/assistant.ts'
+import {
+  isProviderAccountId,
+  isWireProtocol,
+  type ProviderAccountParams
+} from '../ai/domain/providerAccounts.ts'
+
+export { isProviderAccountId } from '../ai/domain/providerAccounts.ts'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_TEXT_LENGTH = 8_000
@@ -156,6 +165,7 @@ export function isWorkspaceImportPath(value: unknown): value is string {
 /** 会话级模型设置：model 允许 null / 字符串；params 只允许三个数字字段。 */
 export function isConversationModelPatch(value: unknown): value is {
   model?: string | null
+  providerId?: string | null
   params?: { temperature?: number; maxTokens?: number; topP?: number }
 } {
   if (typeof value !== 'object' || value === null) {
@@ -164,6 +174,14 @@ export function isConversationModelPatch(value: unknown): value is {
   const input = value as Record<string, unknown>
 
   if ('model' in input && input['model'] !== null && typeof input['model'] !== 'string') {
+    return false
+  }
+
+  if (
+    'providerId' in input &&
+    input['providerId'] !== null &&
+    typeof input['providerId'] !== 'string'
+  ) {
     return false
   }
 
@@ -181,4 +199,51 @@ export function isConversationModelPatch(value: unknown): value is {
   }
 
   return true
+}
+
+function isAccountParams(value: unknown): value is ProviderAccountParams {
+  if (!isObject(value)) {
+    return false
+  }
+  for (const key of ['temperature', 'maxTokens', 'topP']) {
+    const item = value[key]
+    if (item !== undefined && (typeof item !== 'number' || !Number.isFinite(item))) {
+      return false
+    }
+  }
+  return true
+}
+
+/** 多服务商账户保存请求：只做形状校验，范围校验在领域层。 */
+export function isSaveProviderAccountRequest(
+  value: unknown
+): value is SaveProviderAccountRequest {
+  if (!isObject(value)) {
+    return false
+  }
+  if (!isProviderAccountId(value.providerId)) {
+    return false
+  }
+  if (value.protocol !== undefined && !isWireProtocol(value.protocol)) {
+    return false
+  }
+  if (value.apiKey !== undefined && typeof value.apiKey !== 'string') {
+    return false
+  }
+  if (typeof value.baseUrl !== 'string') {
+    return false
+  }
+  if (value.defaultModel !== undefined && typeof value.defaultModel !== 'string') {
+    return false
+  }
+  if (value.params !== undefined && !isAccountParams(value.params)) {
+    return false
+  }
+  return true
+}
+
+const USAGE_RANGES: readonly UsageRangeDto[] = ['today', '7d', '30d', 'all']
+
+export function isUsageRange(value: unknown): value is UsageRangeDto {
+  return typeof value === 'string' && (USAGE_RANGES as readonly string[]).includes(value)
 }
