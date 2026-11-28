@@ -1186,7 +1186,10 @@ export default function ChatPanel() {
   const modelServicesView = readModelServices()
   const primarySlot = modelServicesView.slots.primaryModel
   const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
-  const defaultModelValue = activeConversation?.model ?? (provider?.model || slotFallback)
+  // chip 必须和身份栏同一条链：会话覆盖 → Agent 绑定 → 服务商默认。
+  // 少了 boundAssistant.modelId，给 Agent 单独配过模型时，chip 会报服务商默认、请求却走 Agent 的模型。
+  const defaultModelValue =
+    activeConversation?.model ?? boundAssistant?.modelId ?? (provider?.model || slotFallback)
   // 只有主进程里真正配通（有 Key / 本地协议）的服务商模型才能选。
   const readyProviderIds = accounts
     .filter((account) => account.hasKey || account.protocol === 'ollama')
