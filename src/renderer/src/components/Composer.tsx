@@ -73,7 +73,7 @@ export default function Composer({
    * 老下拉分支用的模型回调。
    * 注意：本组 prop（onModelChange / model / models）只在 `modelPolicy === undefined` 时被读取，
    * 而 ChatPanel 现在恒传 modelPolicy（且 resolveConversationComposerPolicy 带 defaultAssistantId，
-   * 恒返回 locked-*），所以现网这两条分支都不可达。保留与否等架构定，别顺手删。
+   * 恒返回 locked-*），所以现网这两条分支都不可达。已定：保留，勿删（不破 chat.composer 契约）。
    */
   onModelChange: (model: string) => void
   onEffortChange: (effort: Effort) => void
@@ -364,7 +364,7 @@ export default function Composer({
         />
         <div className="composer__bar">
           {/* 老的下拉分支：ChatPanel 现已恒传 modelPolicy（locked-*），这段在现网不可达；
-              保留给其它宿主/插件，删不删等架构定，别顺手删。 */}
+              已定：保留，勿删（不破 chat.composer 契约）。 */}
           {modelPolicy === undefined ? (
             <>
               <label className="composer__pick" title="本次执行使用的模型（只影响这个会话）">
