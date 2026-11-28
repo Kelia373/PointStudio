@@ -140,7 +140,7 @@ export default function Sidebar({
   // 工位区：整段可折叠、行上右键出菜单、改名在行内完成
   const [agentsOpen, setAgentsOpen] = useState(true)
   // 项目区：与 Agent Bench 同样是可折叠的分区头
-  const [freeChatsOpen, setProjectsOpen] = useState(true)
+  const [freeChatsOpen, setFreeChatsOpen] = useState(true)
   const [menu, setMenu] = useState<{ agentId: string; x: number; y: number } | null>(null)
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null)
   const [renamingId, setRenamingId] = useState<string | null>(null)
@@ -1125,7 +1125,7 @@ export default function Sidebar({
             type="button"
             aria-expanded={freeChatsOpen}
             title={freeChatsOpen ? '收起普通聊天' : '展开普通聊天'}
-            onClick={() => setProjectsOpen((value) => !value)}
+            onClick={() => setFreeChatsOpen((value) => !value)}
           >
             <Icon name="compass" className="side__head-icon" size={13} />
             <span className="side__head-title">普通聊天</span>
