@@ -122,3 +122,10 @@ test('已落盘资产：icon.ico 七档 PNG、icon.png 512 RGBA', () => {
   assert.equal(png.readUInt32BE(20), 512)
   assert.equal(png.readUInt8(25), 6)
 })
+
+test('favicon 与 D1 母版字节一致（防止改一处漏一处）', () => {
+  const root = process.cwd()
+  const master = readFileSync(join(root, 'src', 'main', 'assets', 'brand', 'icon.svg'))
+  const favicon = readFileSync(join(root, 'src', 'renderer', 'public', 'favicon.svg'))
+  assert.deepEqual(favicon, master)
+})

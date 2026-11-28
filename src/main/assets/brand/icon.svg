@@ -1,3 +1,5 @@
+<!-- D1 品牌母版：与 src/renderer/public/favicon.svg 字节相同；
+     BrandLogo.tsx 内联了同一几何（为隔离渐变 id），改这里要三处同步。 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <defs>
     <linearGradient id="ps-bg" x1="0" y1="0" x2="1" y2="1">

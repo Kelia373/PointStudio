@@ -33,6 +33,19 @@ async function capture(window, svg, size) {
   // 等一帧布局 + 绘制完成，避免 capturePage 抓到空白。
   await new Promise((resolve) => setTimeout(resolve, 120))
   const image = await window.capturePage({ x: 0, y: 0, width: size, height: size })
+  const bitmap = image.toBitmap()
+  let opaque = 0
+  for (let index = 3; index < bitmap.length; index += 4) {
+    if (bitmap[index] > 16) {
+      opaque += 1
+    }
+  }
+  const ratio = opaque / (size * size)
+  if (ratio < 0.1) {
+    throw new Error(
+      `渲染结果几乎全透明（${size}px，${(ratio * 100).toFixed(1)}%），拒绝写出空白图标`
+    )
+  }
   return image.toPNG()
 }
 
