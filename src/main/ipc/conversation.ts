@@ -13,8 +13,13 @@ import {
 import type { Conversation, Message } from '../ai/domain/conversation.ts'
 import type { ConversationService } from '../services/conversationService.ts'
 import { renderConversationMarkdown } from '../services/exportService.ts'
-import { deleteTurn } from '../services/turnService.ts'
-import { isConversationModelPatch, isCreateConversationRequest, isUuid } from './validators.ts'
+import { branchConversation, deleteTurn, truncateFrom } from '../services/turnService.ts'
+import {
+  isBranchConversationRequest,
+  isConversationModelPatch,
+  isCreateConversationRequest,
+  isUuid
+} from './validators.ts'
 
 function toConversationDto(conversation: Conversation): ConversationDto {
   return {
@@ -40,6 +45,8 @@ function toMessageDto(message: Message): MessageDto {
     content: message.content,
     status: message.status,
     ...(message.references ? { references: message.references } : {}),
+    ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+    ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
     createdAt: message.createdAt
   }
 }
@@ -170,4 +177,41 @@ export function registerConversationIpc(options: ConversationIpcOptions): void {
       return items.map(toMessageDto)
     }
   )
+
+  ipcMain.handle(
+    CONVERSATION_CHANNELS.truncateFrom,
+    async (
+      _event,
+      conversationId: unknown,
+      fromMessageId: unknown
+    ): Promise<IpcResult<{ removed: number }>> => {
+      if (
+        typeof conversationId !== 'string' ||
+        !isUuid(conversationId) ||
+        typeof fromMessageId !== 'string' ||
+        !isUuid(fromMessageId)
+      ) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      const result = await truncateFrom(service, conversationId, fromMessageId)
+      return result.ok
+        ? { ok: true, value: result.value }
+        : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
+  ipcMain.handle(
+    CONVERSATION_CHANNELS.branch,
+    async (_event, request: unknown): Promise<IpcResult<ConversationDto>> => {
+      if (!isBranchConversationRequest(request)) {
+        return { ok: false, code: 'E_BAD_INPUT' }
+      }
+      const result = await branchConversation(service, request)
+      return result.ok
+        ? { ok: true, value: toConversationDto(result.value) }
+        : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+
 }
+

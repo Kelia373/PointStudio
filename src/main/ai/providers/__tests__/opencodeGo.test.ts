@@ -287,3 +287,21 @@ test('OpenCode Go 的 OpenAI 线同样夹紧 xhigh/max（与通用兼容线共�
     }
   )
 })
+
+test('Anthropic thinking_delta 分流到 onReasoning，text_delta 仍是正文', async () => {
+  const reasoning: string[] = []
+  let text = ''
+  for await (const chunk of parseAnthropicSseStream(
+    fromChunks([
+      'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"想"}}\n\n',
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"答"}}\n\n',
+      'data: {"type":"message_stop"}\n\n'
+    ]),
+    undefined,
+    (delta) => reasoning.push(delta)
+  )) {
+    text += chunk
+  }
+  assert.deepEqual(reasoning, ['想'])
+  assert.equal(text, '答')
+})

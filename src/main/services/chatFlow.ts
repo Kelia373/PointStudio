@@ -52,6 +52,15 @@ export interface ChatFlowDeps {
   }) => void | Promise<void>
   /** 群聊 @ 成员：本轮由该 Agent 接管，缺省用会话绑定的 Agent。 */
   assistantOverride?: string | null
+  /** 思考增量：转给界面实时展示。 */
+  onReasoning?: (delta: string) => void
+  /** 真实用量：转给界面检查器（账本另走 onUsageRecorded）。 */
+  onUsageSample?: (sample: {
+    promptTokens: number
+    completionTokens: number
+    cacheHitTokens: number
+    totalTokens: number
+  }) => void
   /** 用户中断信号。 */
   signal?: AbortSignal
 }
@@ -168,21 +177,46 @@ export async function* streamAssistantReply(
       conversationId,
       ...sample.usage
     })
+    deps.onUsageSample?.(sample.usage)
   }
 
   let accumulated = ''
+  let reasoningText = ''
+  let reasoningStartedAt: number | null = null
+  let reasoningEndedAt: number | null = null
+  options.onReasoning = (delta) => {
+    if (reasoningStartedAt === null) {
+      reasoningStartedAt = Date.now()
+    }
+    reasoningText += delta
+    deps.onReasoning?.(delta)
+  }
+
+  const reasoningFields = (): { reasoning?: string; reasoningMs?: number } => {
+    if (reasoningText === '' || reasoningStartedAt === null) {
+      return {}
+    }
+    const end = reasoningEndedAt ?? Date.now()
+    return { reasoning: reasoningText, reasoningMs: Math.max(0, end - reasoningStartedAt) }
+  }
+
   try {
     for await (const chunk of streamReplyText(prompt, deps.engine, options)) {
+      if (reasoningStartedAt !== null && reasoningEndedAt === null) {
+        reasoningEndedAt = Date.now()
+      }
       accumulated += chunk
       yield chunk
     }
   } catch (error) {
-    // 一行都没产出时给个占位，否则界面上会出现一条空白气泡。
+    const content =
+      accumulated !== '' ? accumulated : reasoningText !== '' ? '（思考已中断）' : '（回复失败）'
     await deps.conversations.appendMessage(conversationId, {
       role: 'assistant',
-      content: accumulated === '' ? '（回复失败）' : accumulated,
+      content,
       status: 'error',
-      references: referenceItems
+      references: referenceItems,
+      ...reasoningFields()
     })
     throw error
   }
@@ -190,6 +224,7 @@ export async function* streamAssistantReply(
   await deps.conversations.appendMessage(conversationId, {
     role: 'assistant',
     content: accumulated,
-    references: referenceItems
+    references: referenceItems,
+    ...reasoningFields()
   })
 }

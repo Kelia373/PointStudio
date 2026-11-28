@@ -41,6 +41,9 @@ export interface AppendMessageInput {
   status?: MessageStatus
   /** 可选：本次回答引用了哪些片段。 */
   references?: MessageReference[]
+  /** 模型深度思考内容；只在非空时落盘。 */
+  reasoning?: string
+  reasoningMs?: number
 }
 
 export class ConversationService {
@@ -268,6 +271,10 @@ export class ConversationService {
       // 空数组也存成 undefined：旧数据没有这个字段，保持形状一致才好比较与迁移。
       ...(input.references && input.references.length > 0
         ? { references: input.references.map((item) => ({ ...item })) }
+        : {}),
+      ...(input.reasoning && input.reasoning !== '' ? { reasoning: input.reasoning } : {}),
+      ...(typeof input.reasoningMs === 'number' && input.reasoningMs >= 0
+        ? { reasoningMs: input.reasoningMs }
         : {}),
       createdAt: now,
       updatedAt: now

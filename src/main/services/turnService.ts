@@ -7,7 +7,7 @@
 // - 删用户消息 → 连带它之后、下一条用户消息之前的助手回复（即「这一轮」）；
 // - 删助手消息 → 只删这一条（提问保留，用户可以重发）；
 // - 找不到 → E_NOT_FOUND，一条都不动。
-import type { Message } from '../ai/domain/conversation.ts'
+import { TITLE_MAX_LENGTH, type Conversation, type Message } from '../ai/domain/conversation.ts'
 import type { ConversationService } from './conversationService.ts'
 
 export type ServiceResult<T> = { ok: true; value: T } | { ok: false; errors: string[] }
@@ -58,4 +58,94 @@ export async function copyMessageText(
 ): Promise<string | null> {
   const messages = await conversations.listMessages(conversationId)
   return messages.find((message) => message.id === messageId)?.content ?? null
+}
+
+
+/** 删除 fromMessageId 及其后的全部消息（编辑重发前先裁剪）。 */
+export async function truncateFrom(
+  conversations: ConversationService,
+  conversationId: string,
+  fromMessageId: string
+): Promise<ServiceResult<DeleteTurnResult>> {
+  const messages = await conversations.listMessages(conversationId)
+  const index = messages.findIndex((message) => message.id === fromMessageId)
+  if (index < 0) {
+    return { ok: false, errors: ['E_NOT_FOUND'] }
+  }
+  let removed = 0
+  for (const message of messages.slice(index)) {
+    const result = await conversations.removeMessage(message.id)
+    if (result.ok) {
+      removed += 1
+    }
+  }
+  return { ok: true, value: { removed } }
+}
+
+export interface BranchConversationInput {
+  conversationId: string
+  upToMessageId: string
+  title?: string
+}
+
+function branchTitle(sourceTitle: string): string {
+  const combined = `分支 · ${sourceTitle}`
+  const chars = Array.from(combined)
+  return chars.length > TITLE_MAX_LENGTH ? chars.slice(0, TITLE_MAX_LENGTH).join('') : combined
+}
+
+/**
+ * 从某条消息分叉：复制截至它的上下文到新会话。
+ * - 自由对话 → 新自由对话（继承模型/参数，方便换模型对比）
+ * - 单 Agent 会话 → 同 Agent 的专题（绝不设 isHome）
+ * - 小组会话 → 自由对话
+ */
+export async function branchConversation(
+  conversations: ConversationService,
+  input: BranchConversationInput
+): Promise<ServiceResult<Conversation>> {
+  const source = await conversations.get(input.conversationId)
+  if (!source) {
+    return { ok: false, errors: ['E_NOT_FOUND'] }
+  }
+  const messages = await conversations.listMessages(input.conversationId)
+  const index = messages.findIndex((message) => message.id === input.upToMessageId)
+  if (index < 0) {
+    return { ok: false, errors: ['E_NOT_FOUND'] }
+  }
+
+  const isGroup = source.groupId != null
+  const created = await conversations.create({
+    title: input.title?.trim() || branchTitle(source.title),
+    assistantId: isGroup ? null : (source.assistantId ?? null),
+    workspaceId: source.workspaceId ?? null
+  })
+  if (!created.ok) {
+    return { ok: false, errors: created.errors }
+  }
+
+  const model = source.model ?? null
+  const providerId = source.providerId ?? null
+  const params = source.params
+  if (model !== null || providerId !== null || params !== undefined) {
+    await conversations.setModel(created.value.id, {
+      model,
+      providerId,
+      ...(params !== undefined ? { params } : {})
+    })
+  }
+
+  for (const message of messages.slice(0, index + 1)) {
+    await conversations.appendMessage(created.value.id, {
+      role: message.role,
+      content: message.content,
+      status: message.status,
+      ...(message.references ? { references: message.references } : {}),
+      ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+      ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {})
+    })
+  }
+
+  const result = await conversations.get(created.value.id)
+  return { ok: true, value: result ?? created.value }
 }

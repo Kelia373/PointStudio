@@ -33,6 +33,8 @@ export interface ChatStreamRequest {
   sessionId?: string
   /** 收到 SSE 尾帧 usage 时回调；不注入则不解析。 */
   onUsage?: (usage: TokenUsageSample) => void
+  /** 推理模型的思考增量（reasoning_content / thinking_delta）；不注入则丢弃。 */
+  onReasoning?: (delta: string) => void
   /**
    * 这条通道真实支持的思考档位（由引擎按模型能力算好）。
    * 具体怎么落参数由 provider 按自己的 wire 决定，避免「档位」与「发法」分叉。

@@ -69,7 +69,7 @@ export function pickWire(model: string): OpencodeWire {
 
 interface AnthropicEvent {
   type?: string
-  delta?: { type?: string; text?: string }
+  delta?: { type?: string; text?: string; thinking?: string }
   message?: { usage?: AnthropicUsage }
   usage?: AnthropicUsage
 }
@@ -89,7 +89,8 @@ interface AnthropicUsage {
  */
 export async function* parseAnthropicSseStream(
   chunks: AsyncIterable<Uint8Array>,
-  onUsage?: (usage: TokenUsageSample) => void
+  onUsage?: (usage: TokenUsageSample) => void,
+  onReasoning?: (delta: string) => void
 ): AsyncGenerator<string, void, unknown> {
   const decoder = new TextDecoder('utf-8')
   let buffer = ''
@@ -126,6 +127,12 @@ export async function* parseAnthropicSseStream(
     }
     if (parsed.type === 'message_stop') {
       finished = true
+      return null
+    }
+    if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'thinking_delta') {
+      if (onReasoning && typeof parsed.delta.thinking === 'string' && parsed.delta.thinking !== '') {
+        onReasoning(parsed.delta.thinking)
+      }
       return null
     }
     if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
@@ -243,8 +250,8 @@ export class OpencodeGoProvider implements ChatProvider {
     }
 
     yield* wire === 'openai'
-      ? parseOpenAiSseStream(response.body, request.onUsage)
-      : parseAnthropicSseStream(response.body, request.onUsage)
+      ? parseOpenAiSseStream(response.body, request.onUsage, request.onReasoning)
+      : parseAnthropicSseStream(response.body, request.onUsage, request.onReasoning)
   }
 
   private openAiBody(request: ChatStreamRequest): string {

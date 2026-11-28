@@ -2,6 +2,7 @@
 import { useState } from 'react'
 
 import { shouldCollapse, splitProcessAndConclusion, type LensMode } from '../lib/timelineLens'
+import MarkdownBody from './MarkdownBody'
 
 export interface DualTrackProps {
   content: string
@@ -16,7 +17,7 @@ export default function DualTrack({ content, streaming = false }: DualTrackProps
   if (streaming || !shouldCollapse(split, content)) {
     return (
       <div className="msg__body">
-        {content}
+        <MarkdownBody content={content} />
         {streaming ? <span className="msg__caret" /> : null}
       </div>
     )
@@ -42,7 +43,9 @@ export default function DualTrack({ content, streaming = false }: DualTrackProps
       </div>
 
       {mode === 'conclusion' ? (
-        <div className="msg__body dual-track__body">{split.conclusion}</div>
+        <div className="msg__body dual-track__body">
+          <MarkdownBody content={split.conclusion} />
+        </div>
       ) : (
         <ol className="dual-track__steps">
           {split.process.map((step, index) => (

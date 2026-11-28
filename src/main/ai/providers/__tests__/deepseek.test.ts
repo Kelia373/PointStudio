@@ -234,3 +234,21 @@ test('P2-B：OpenAI 兼容线把 xhigh/max 夹到 high，不发上游不认识�
     await new Promise<void>((resolve) => server.close(() => resolve()))
   }
 })
+
+test('reasoning_content 分流：onReasoning 收思考，主迭代器只出正文', async () => {
+  const reasoning: string[] = []
+  const text = await collect(
+    parseOpenAiSseStream(
+      fromChunks([
+        'data: {"choices":[{"delta":{"reasoning_content":"先想"}}]}\n\n',
+        'data: {"choices":[{"delta":{"reasoning":"再想"}}]}\n\n',
+        'data: {"choices":[{"delta":{"content":"答"}}]}\n\n',
+        'data: [DONE]\n\n'
+      ]),
+      undefined,
+      (delta) => reasoning.push(delta)
+    )
+  )
+  assert.deepEqual(reasoning, ['先想', '再想'])
+  assert.deepEqual(text, ['答'])
+})

@@ -8,7 +8,7 @@ import type {
 } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
-import { appendChunk, markStatus, startTurn, type UiMessage } from '../lib/chatState'
+import { appendChunk, appendReasoning, markStatus, startTurn, type UiMessage } from '../lib/chatState'
 import { copyToClipboard } from '../lib/clipboard'
 import {
   AUTO_ROUTE_MODEL,
@@ -159,6 +159,14 @@ export default function ChatPanel() {
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
   // 小组增删改成员后自增，避免 @ 候选每帧去 localStorage 解析一次。
   const [groupsVersion, setGroupsVersion] = useState(0)
+  // 最近一轮真实用量与首字延迟（给右侧检查器）。
+  const [lastUsage, setLastUsage] = useState<{
+    promptTokens: number
+    completionTokens: number
+    cacheHitTokens: number
+    totalTokens: number
+  } | null>(null)
+  const [firstTokenMs, setFirstTokenMs] = useState<number | null>(null)
   // 双击 / 连点的 in-flight 守卫：create 的 IPC 还没回来时，第二次点击不能再建一条。
   const creatingRef = useRef<Set<string>>(new Set())
   const [busy, setBusy] = useField('busy')
@@ -353,6 +361,8 @@ export default function ChatPanel() {
         content: message.content,
         status: message.status,
         references: message.references,
+        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+        ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
         route: message.route ?? null
       }))
     )
@@ -360,8 +370,25 @@ export default function ChatPanel() {
 
   // 订阅主进程推回来的流式事件。返回的清理函数必须调用，否则会重复追加。
   useEffect(() => {
-    const offChunk = window.pointstudio.chat.onChunk(({ id, chunk }) => {
+    const offChunk = window.pointstudio.chat.onChunk(({ id, chunk, kind }) => {
+      // 首字延迟按「任何 kind 的第一个 chunk」算：推理模型先吐思考也算已响应。
+      if (runStartedAt.current !== null) {
+        setFirstTokenMs((current) => current ?? Date.now() - (runStartedAt.current ?? Date.now()))
+      }
+      if (kind === 'reasoning') {
+        setMessages((prev) => appendReasoning(prev, id, chunk))
+        return
+      }
       setMessages((prev) => appendChunk(prev, id, chunk))
+    })
+
+    const offUsage = window.pointstudio.chat.onUsage((usage) => {
+      setLastUsage({
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        cacheHitTokens: usage.cacheHitTokens,
+        totalTokens: usage.totalTokens
+      })
     })
 
     const offDone = window.pointstudio.chat.onDone(({ id }) => {
@@ -402,6 +429,7 @@ export default function ChatPanel() {
       offDone()
       offNotice()
       offError()
+      offUsage()
       offAgent()
     }
   }, [loadMessages, reloadConversations])
@@ -512,6 +540,8 @@ export default function ChatPanel() {
     // 发新消息时退出任务链过滤，否则刚发的这句会被过滤掉
     setMissionFilter(null)
     runStartedAt.current = Date.now()
+    setFirstTokenMs(null)
+    setLastUsage(null)
     setError(null)
 
     // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
@@ -535,6 +565,37 @@ export default function ChatPanel() {
     setInflightId(null)
     setInflightConversationId(null)
     runStartedAt.current = null
+  }
+
+  async function editAndResend(messageId: string, text: string): Promise<void> {
+    // 生成中不裁剪历史：否则删完消息却因 busy 不重发，会留下没有问题的助手回复。
+    if (!activeId || busy) {
+      return
+    }
+    const cut = await window.pointstudio.conversations.truncateFrom(activeId, messageId)
+    if (!cut.ok) {
+      setError(describeError(cut.code))
+      return
+    }
+    await loadMessages(activeId)
+    await submit(text)
+  }
+
+  async function branchFrom(messageId: string): Promise<void> {
+    if (!activeId) {
+      return
+    }
+    const branched = await window.pointstudio.conversations.branch({
+      conversationId: activeId,
+      upToMessageId: messageId
+    })
+    if (!branched.ok) {
+      setError(describeError(branched.code))
+      return
+    }
+    await reloadConversations()
+    setActiveId(branched.value.id)
+    setActivePage(CHAT_PAGE)
   }
 
   async function bindAssistant(assistantId: string): Promise<void> {
@@ -1552,14 +1613,23 @@ export default function ChatPanel() {
                     role: message.role,
                     content: message.content,
                     streaming: message.status === 'streaming',
+                    streamingReasoning:
+                      message.status === 'streaming' && message.content === '',
+                    reasoning: message.reasoning,
+                    reasoningMs: message.reasoningMs,
                     failed: message.status === 'error',
                     references: message.references,
                     onReference: (chunkId: string) => void openReference(chunkId),
                     onCopy: () => void copyText(message.content),
                     onDelete: () => void removeTurn(message.id),
                     ...(message.role === 'user'
-                      ? { onResend: () => void submit(message.content) }
+                      ? {
+                          onResend: () => void submit(message.content),
+                          onEdit: (next: string) => void editAndResend(message.id, next)
+                        }
                       : {}),
+                    onBranch: () => void branchFrom(message.id),
+                    actionsDisabled: busy,
                     route: message.route ?? null,
                     ...(nextEscalation(message.route ?? null)
                       ? { onEscalate: () => void escalateFrom(index) }
@@ -1821,6 +1891,8 @@ export default function ChatPanel() {
         effectiveMaxTokens: activeConversation?.params?.maxTokens ?? provider?.params?.maxTokens,
         modelFromSession: (activeConversation?.model ?? '') !== '',
         lastRunMs,
+        firstTokenMs,
+        lastUsage,
         onOpenPlan: () => setDrawer('plan'),
         onConfirmPlan: () => void confirmAndResume(),
         canConfirmPlan,

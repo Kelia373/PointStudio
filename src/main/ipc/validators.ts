@@ -182,6 +182,21 @@ export function isAgentRunRequest(value: unknown): value is AgentRunRequest {
   return true
 }
 
+export function isBranchConversationRequest(value: unknown): value is {
+  conversationId: string
+  upToMessageId: string
+  title?: string
+} {
+  if (!isObject(value)) {
+    return false
+  }
+  return (
+    isUuid(value.conversationId) &&
+    isUuid(value.upToMessageId) &&
+    (value.title === undefined || typeof value.title === 'string')
+  )
+}
+
 export function isWorkspaceImportPath(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }

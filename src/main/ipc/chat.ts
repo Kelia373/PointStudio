@@ -13,6 +13,7 @@ import {
   type ChatNoticeEvent,
   type ChatSendRequest,
   type ChatSendResult,
+  type ChatUsageEvent,
   type IpcResult
 } from '../../shared/types/ipc.ts'
 import { ProviderError } from '../ai/providers/types.ts'
@@ -83,6 +84,26 @@ async function streamReply(
       signal,
       retrieval: options.retrieval,
       ...(options.onUsageRecorded ? { onUsageRecorded: options.onUsageRecorded } : {}),
+      onUsageSample: (usage) => {
+        if (!sender.isDestroyed()) {
+          sender.send(CHAT_CHANNELS.usage, {
+            id,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            cacheHitTokens: usage.cacheHitTokens,
+            totalTokens: usage.totalTokens
+          } satisfies ChatUsageEvent)
+        }
+      },
+      onReasoning: (delta) => {
+        if (!sender.isDestroyed()) {
+          sender.send(CHAT_CHANNELS.chunk, {
+            id,
+            chunk: delta,
+            kind: 'reasoning'
+          } satisfies ChatChunkEvent)
+        }
+      },
       onContextTrimmed: (droppedCount) => {
         if (!sender.isDestroyed()) {
           sender.send(CHAT_CHANNELS.notice, { id, droppedCount } satisfies ChatNoticeEvent)
