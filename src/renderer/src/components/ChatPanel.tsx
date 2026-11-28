@@ -1184,12 +1184,15 @@ export default function ChatPanel() {
   const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
   // parse 按原始字符串缓存：这里每帧只做一次 getItem + 字符串比较，不会重复 JSON.parse
   const modelServicesView = readModelServices()
-  const primarySlot = modelServicesView.slots.primaryModel
-  const slotFallback = primarySlot !== AUTO_ROUTE_MODEL ? primarySlot : ''
   // chip 必须和身份栏同一条链：会话覆盖 → Agent 绑定 → 服务商默认。
   // 少了 boundAssistant.modelId，给 Agent 单独配过模型时，chip 会报服务商默认、请求却走 Agent 的模型。
+  // 不再回退 slots.primaryModel：模型只由 Agent 决定（方式 1），那个槽位已标 pending。
   const defaultModelValue =
-    activeConversation?.model ?? boundAssistant?.modelId ?? (provider?.model || slotFallback)
+    activeConversation?.model ??
+    boundAssistant?.modelId ??
+    provider?.model ??
+    // 三档全空（未配模型的服务商 + 内置助手 modelId: null）时回退 Auto，别让 chip 留白。
+    (AUTO_ROUTE_MODEL as string)
   // 只有主进程里真正配通（有 Key / 本地协议）的服务商模型才能选。
   const readyProviderIds = accounts
     .filter((account) => account.hasKey || account.protocol === 'ollama')
