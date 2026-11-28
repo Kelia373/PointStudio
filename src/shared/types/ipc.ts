@@ -28,6 +28,8 @@ export interface ChatSendRequest {
   id: string
   conversationId: string
   text: string
+  /** 群聊里被 @ 的成员：本轮由该 Agent 接管回答；缺省用会话绑定的 Agent。 */
+  assistantId?: string | null
 }
 
 /**

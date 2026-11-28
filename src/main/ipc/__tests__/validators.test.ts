@@ -155,3 +155,15 @@ test('isCreateConversationRequest：groupId 可选，给了必须是字符串或
   assert.equal(isCreateConversationRequest({ groupId: null }), true)
   assert.equal(isCreateConversationRequest({ groupId: 42 }), false)
 })
+
+test('isChatSendRequest：assistantId 可选，给了必须是字符串或 null', () => {
+  const base = {
+    id: '11111111-1111-4111-8111-111111111111',
+    conversationId: '22222222-2222-4222-8222-222222222222',
+    text: 'hi'
+  }
+  assert.equal(isChatSendRequest(base), true)
+  assert.equal(isChatSendRequest({ ...base, assistantId: 'agent-b' }), true)
+  assert.equal(isChatSendRequest({ ...base, assistantId: null }), true)
+  assert.equal(isChatSendRequest({ ...base, assistantId: 42 }), false)
+})

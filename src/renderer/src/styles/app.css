@@ -831,6 +831,7 @@ select:focus {
 }
 
 .composer__box {
+  position: relative;
   max-width: var(--content-w, 720px);
   margin: 0 auto;
   border: 1px solid var(--line);
@@ -4913,4 +4914,77 @@ select:focus {
   margin-right: var(--sp-1);
   color: var(--fg-3);
   vertical-align: -2px;
+}
+
+/* 群聊 @ 成员 / 斜杠指令 */
+.composer__mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3) 0;
+}
+
+.composer__mention {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  height: 22px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-pill);
+  background: var(--raise);
+  color: var(--fg);
+  font-size: var(--fs-xs);
+}
+
+.composer__mention-x {
+  color: var(--fg-3);
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+
+.composer__mention-x:hover {
+  color: var(--fg);
+}
+
+.composer__menu {
+  position: absolute;
+  left: var(--sp-3);
+  right: var(--sp-3);
+  bottom: calc(100% + var(--sp-1));
+  z-index: 65;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: var(--sp-1);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-ctl);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+}
+
+.composer__menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 28px;
+  padding: 0 var(--sp-2);
+  border-radius: var(--rad-xs);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  text-align: left;
+}
+
+.composer__menu-item:hover,
+.composer__menu-item.is-on {
+  background: var(--raise);
+  color: var(--fg);
+}
+
+.composer__menu-item code {
+  color: var(--fg);
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
 }

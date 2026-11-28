@@ -79,6 +79,7 @@ async function streamReply(
       conversations: options.conversations,
       assistants: options.assistants,
       engine: options.engine,
+      ...(request.assistantId ? { assistantOverride: request.assistantId } : {}),
       signal,
       retrieval: options.retrieval,
       ...(options.onUsageRecorded ? { onUsageRecorded: options.onUsageRecorded } : {}),

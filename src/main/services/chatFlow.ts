@@ -50,6 +50,8 @@ export interface ChatFlowDeps {
     cacheHitTokens: number
     totalTokens: number
   }) => void | Promise<void>
+  /** 群聊 @ 成员：本轮由该 Agent 接管，缺省用会话绑定的 Agent。 */
+  assistantOverride?: string | null
   /** 用户中断信号。 */
   signal?: AbortSignal
 }
@@ -66,8 +68,9 @@ async function resolveReplyOptions(
 
   // 优先级：会话级覆盖 > 助手设定 > 全局默认（引擎里再兜底）。
   // 模型是「这次执行用什么」，所以会话排在最前面。
-  const assistant = conversation.assistantId
-    ? await deps.assistants.get(conversation.assistantId)
+  const boundAssistantId = deps.assistantOverride ?? conversation.assistantId
+  const assistant = boundAssistantId
+    ? await deps.assistants.get(boundAssistantId)
     : null
 
   const conversationParams = conversation.params ?? {}
@@ -154,7 +157,8 @@ export async function* streamAssistantReply(
     void deps.onUsageRecorded?.({
       providerId: sample.providerId,
       modelId: sample.model,
-      assistantId: conversationSnapshot.assistantId ?? null,
+      assistantId:
+        deps.assistantOverride ?? conversationSnapshot.assistantId ?? null,
       conversationId,
       ...sample.usage
     })
