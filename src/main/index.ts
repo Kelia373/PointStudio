@@ -18,7 +18,7 @@ import { resolveProviderConfig, type ProviderSettings } from './ai/domain/provid
 import { JsonFileStore } from './data/fileStore.ts'
 import { buildDataPaths } from './core/paths.ts'
 import { resolveAppIconPath } from './core/appIcon.ts'
-import { isSafeExternalUrl } from './core/externalLink.ts'
+import { isInternalNavigation, isSafeExternalUrl } from './core/externalLink.ts'
 import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
@@ -91,13 +91,8 @@ function createWindow(): void {
     return { action: 'deny' }
   })
   window.webContents.on('will-navigate', (event, url) => {
-    const current = window.webContents.getURL()
-    try {
-      if (current !== '' && new URL(url).origin === new URL(current).origin) {
-        return
-      }
-    } catch {
-      // 畸形 URL 按外部处理
+    if (isInternalNavigation(window.webContents.getURL(), url)) {
+      return
     }
     event.preventDefault()
     if (isSafeExternalUrl(url)) {
