@@ -200,6 +200,17 @@ export async function* streamAssistantReply(
     return { reasoning: reasoningText, reasoningMs: Math.max(0, end - reasoningStartedAt) }
   }
 
+  // 归因在写入时定死：之后换 Agent / 换模型，历史回复的署名不会被改写。
+  const attributionFields = (): {
+    assistantId?: string
+    providerId?: string
+    modelId?: string
+  } => ({
+    ...(bound.resolvedAssistantId ? { assistantId: bound.resolvedAssistantId } : {}),
+    ...(bound.providerId ? { providerId: bound.providerId } : {}),
+    ...(bound.model ? { modelId: bound.model } : {})
+  })
+
   try {
     for await (const chunk of streamReplyText(prompt, deps.engine, options)) {
       if (reasoningStartedAt !== null && reasoningEndedAt === null) {
@@ -216,8 +227,10 @@ export async function* streamAssistantReply(
       content,
       status: 'error',
       references: referenceItems,
+      ...attributionFields(),
       ...reasoningFields()
     })
+
     throw error
   }
 
@@ -225,6 +238,8 @@ export async function* streamAssistantReply(
     role: 'assistant',
     content: accumulated,
     references: referenceItems,
+    ...attributionFields(),
     ...reasoningFields()
   })
+
 }

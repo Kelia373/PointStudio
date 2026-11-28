@@ -1,5 +1,5 @@
 // MarkdownBody —— 结构化 Markdown 渲染（零 dangerouslySetInnerHTML）。
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   parseInlineTokens,
@@ -63,7 +63,8 @@ function Inline({ tokens }: { tokens: InlineToken[] }) {
 function CodeBlock({ lang, code, closed }: { lang: string; code: string; closed: boolean }) {
   const [copied, setCopied] = useState(false)
   // 纯 React <span> 着色：不拼 HTML 字符串，模型输出里的标签不会被当成标记。
-  const tokens = tokenizeCode(code, lang)
+  // 流式时每个 chunk 都会重渲染：把词法结果缓存住，别整块重扫。
+  const tokens = useMemo(() => tokenizeCode(code, lang), [code, lang])
   return (
     <div className={`md__code${closed ? '' : ' is-streaming'}`}>
       <div className="md__code-head">

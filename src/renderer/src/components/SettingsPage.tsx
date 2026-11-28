@@ -507,6 +507,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                   <select
                     className="settings__input"
                     value={services.slots[card.key]}
+                    disabled={card.pending === true}
                     onChange={(event) => setSlot(card.key, event.target.value)}
                   >
                     {card.key !== 'primaryModel' ? <option value="">未指定</option> : null}

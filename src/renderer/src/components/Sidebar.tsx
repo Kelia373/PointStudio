@@ -36,7 +36,7 @@ import { buildAgentMenuItems, type AgentMenuAction } from '../lib/agentMenu'
 import { computeAgentBenchStatus, computeAgentWorkerLanes, LIGHT_LABEL } from '../lib/dispatchFilter'
 import type { PlanRunStatus } from '../lib/planRunState'
 import { nextActivePage } from '../lib/pageNav'
-import { partitionConversations } from '../lib/conversationBuckets'
+import { filterBuckets, partitionConversations } from '../lib/conversationBuckets'
 import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { registry } from '../runtime/registry'
 import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
@@ -389,8 +389,14 @@ export default function Sidebar({
     groupView !== 'grouped' || sortMode !== 'manual' || hideDisabled
   const buckets = useMemo(
     // 全员归属：无主 / 孤儿单聊兜底进通用助手专题，侧栏不再有「自由对话」这一桶。
-    () => partitionConversations(conversations, assistants, { defaultAssistantId: DEFAULT_ASSISTANT_ID }),
-    [conversations, assistants]
+    () =>
+      filterBuckets(
+        partitionConversations(conversations, assistants, {
+          defaultAssistantId: DEFAULT_ASSISTANT_ID
+        }),
+        keyword
+      ),
+    [conversations, assistants, keyword]
   )
 
   useEffect(() => {
@@ -649,7 +655,7 @@ export default function Sidebar({
               <span className="side__feat-label">工作区</span>
             </button>
           </li>
-          <Slot name="sidebar.projects.header" />
+          <Slot name="sidebar.projects.header" props={{ count: 0 }} />
           {features.map((entry) => {
             const page = entry.def
             const isPinned = pinned[page.id] ?? page.defaultPinned ?? false

@@ -57,6 +57,7 @@ export default function ThinkingBlock({
           <span className="thinking__meta">· {seconds}</span>
         ) : null}
       </button>
-      {open ? <div className="thinking__body">{reasoning}</div> : null}    </div>
+      {open ? <div className="thinking__body">{reasoning}</div> : null}
+    </div>
   )
 }

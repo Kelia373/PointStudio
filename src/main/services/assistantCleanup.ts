@@ -84,6 +84,7 @@ export async function adoptUnboundConversations(
   const known = new Set((await assistants.list()).map((item) => item.id))
 
   let adopted = 0
+  const ids: string[] = []
   for (const conversation of await conversations.list()) {
     if (conversation.groupId != null) {
       continue
@@ -92,9 +93,13 @@ export async function adoptUnboundConversations(
     if (typeof owner === 'string' && owner !== '' && known.has(owner)) {
       continue
     }
-    const result = await conversations.adopt(conversation.id, DEFAULT_ASSISTANT_ID)
+    ids.push(conversation.id)
+  }
+  if (ids.length > 0) {
+    // 批量收编：一次读、一次写，别在启动时做成 O(n²)。
+    const result = await conversations.adoptMany(ids, DEFAULT_ASSISTANT_ID)
     if (result.ok) {
-      adopted += 1
+      adopted = result.value
     }
   }
 

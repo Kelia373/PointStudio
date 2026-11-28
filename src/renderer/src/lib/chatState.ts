@@ -25,6 +25,10 @@ export interface UiMessage {
   /** 模型思考内容 */
   reasoning?: string
   reasoningMs?: number
+  /** 历史归因：这条回复当时由谁 / 哪个模型产出。 */
+  assistantId?: string
+  providerId?: string
+  modelId?: string
 }
 
 /**

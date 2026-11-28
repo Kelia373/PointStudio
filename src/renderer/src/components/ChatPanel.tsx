@@ -376,6 +376,9 @@ export default function ChatPanel() {
         references: message.references,
         ...(message.reasoning ? { reasoning: message.reasoning } : {}),
         ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+        ...(typeof message.assistantId === 'string' ? { assistantId: message.assistantId } : {}),
+        ...(typeof message.providerId === 'string' ? { providerId: message.providerId } : {}),
+        ...(typeof message.modelId === 'string' ? { modelId: message.modelId } : {}),
         route: message.route ?? null
       }))
     )
@@ -1655,17 +1658,25 @@ export default function ChatPanel() {
                       agentName: boundAssistant?.name ?? 'PointStudio',
                       onChanged: () => setMemoryTick((value) => value + 1)
                     },
-                    // 助手身份栏：头像 + Agent 名 + 厂商图标/模型名（仿 Cherry Studio）
-                    assistantMeta:
-                      message.role === 'assistant'
-                        ? {
-                            agentId: boundAssistant?.id ?? DEFAULT_ASSISTANT_ID,
-                            name: boundAssistant?.name ?? '通用助手',
-                            avatar: boundAssistant?.avatar ?? null,
-                            providerId: activeProviderId,
-                            modelLabel: activeModelLabel === '' ? null : activeModelLabel
-                          }
-                        : null
+                    // 助手身份栏：用**这条消息写入时**的归因，别拿「当前」绑定去改写历史。
+                    // 没有归因的老消息退回中性品牌标（不声称是当前 Agent 说的）。
+                    assistantMeta: (() => {
+                      if (message.role !== 'assistant') {
+                        return null
+                      }
+                      const ownerId = message.assistantId
+                      if (typeof ownerId !== 'string') {
+                        return null
+                      }
+                      const agent = assistants.find((item) => item.id === ownerId)
+                      return {
+                        agentId: ownerId,
+                        name: agent?.name ?? 'Agent',
+                        avatar: agent?.avatar ?? null,
+                        providerId: message.providerId ?? null,
+                        modelLabel: message.modelId ?? null
+                      }
+                    })()
                   }}
                 />
               ))}
