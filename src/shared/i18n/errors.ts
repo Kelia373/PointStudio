@@ -11,6 +11,12 @@ export const ERROR_MESSAGES: Record<string, string> = {
   E_INTERNAL: '程序内部出错了，可以重试一次',
   E_NOT_FOUND: '找不到对应的内容，可能已被删除',
   E_CANCELLED: '已取消',
+  E_IMAGE_INVALID: '图片数据不完整，请重新选择',
+  E_IMAGE_TYPE: '只支持 PNG / JPEG / WebP / GIF 图片',
+  E_IMAGE_TOO_LARGE: '单张图片不能超过 10 MB',
+  E_IMAGE_UNREADABLE: '图片读取失败，可能已被清理，请重新上传',
+  E_TOO_MANY_IMAGES: '一条消息最多 6 张图片',
+  E_BAD_IMAGE: '图片信息不合法，请重新选择',
   E_VISION_UNSUPPORTED:
     '当前模型不支持识图，请在右侧 Agent 设置中切换支持视觉的模型（如 kimi-k2.5 / GPT-4o / Claude / Gemini / Qwen-VL）',
 

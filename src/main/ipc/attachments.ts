@@ -20,6 +20,11 @@ function isSaveRequest(value: unknown): boolean {
   if (typeof record['dataUrl'] !== 'string') {
     return false
   }
+  // 先卡长度再解码：10MB 二进制约 13.4MB base64，留一点余量；
+  // 否则超大字符串会先被 Buffer 全量分配再拒。
+  if (record['dataUrl'].length > 14 * 1024 * 1024) {
+    return false
+  }
   return record['name'] === undefined || typeof record['name'] === 'string'
 }
 

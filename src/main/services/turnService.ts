@@ -143,7 +143,9 @@ export async function branchConversation(
       status: message.status,
       ...(message.references ? { references: message.references } : {}),
       ...(message.reasoning ? { reasoning: message.reasoning } : {}),
-      ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {})
+      ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+      // 分叉要让历史附图跟着走，否则缩略图与胶囊全丢。
+      ...(message.images && message.images.length > 0 ? { images: message.images } : {})
     })
   }
 

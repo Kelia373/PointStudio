@@ -129,9 +129,21 @@ export function removeImageSlot(
   images: readonly PendingImage[],
   slotToRemove: number
 ): { text: string; images: PendingImage[] } {
-  const withoutToken = text.replace(new RegExp(`\\[Image #${slotToRemove}\\]`, 'g'), '')
+  const marker = `[Image #${slotToRemove}]`
+  let withoutToken = text
+  // 删除时只合并「标记两侧」产生的那一对空格，别把用户正文里的缩进/双空格一起吃掉。
+  for (;;) {
+    const at = withoutToken.indexOf(marker)
+    if (at < 0) {
+      break
+    }
+    const before = withoutToken.slice(0, at)
+    const after = withoutToken.slice(at + marker.length)
+    const joinCollapsed = before.endsWith(' ') && after.startsWith(' ') ? after.slice(1) : after
+    withoutToken = before + joinCollapsed
+  }
   const remaining = images.filter((image) => image.index !== slotToRemove)
-  return renumber(withoutToken.replace(/  +/g, ' '), remaining)
+  return renumber(withoutToken, remaining)
 }
 
 /**

@@ -161,10 +161,12 @@ export async function* streamAssistantReply(
   const previous = await deps.conversations.listMessages(conversationId)
   const bound = await resolveReplyOptions(conversationId, deps)
 
-  // 视觉拦在落库之前：模型明确不吃图就直接拒，用户输入框里的草稿和图片都还在。
+  // 视觉拦截在落库之前：模型明确不吃图就直接拒，用户输入框里的草稿和图片都还在。
+  // 注意：内置助手的 providerId / modelId 都是 null，这里必须回落到引擎默认值，
+  // 否则「没显式配模型」的默认路径会直接跳过拦截。
   if (images.length > 0) {
-    const providerId = bound.providerId
-    const model = bound.model
+    const providerId = bound.providerId ?? deps.engine.provider.id
+    const model = bound.model ?? deps.engine.model
     if (providerId && model) {
       const caps = capabilitiesForSend(providerId, model)
       if (caps.supportsVision === false) {

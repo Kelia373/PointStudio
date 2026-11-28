@@ -55,7 +55,6 @@ function hasAny(haystack: string, needles: readonly string[]): boolean {
 }
 
 /** 与主进程规则表对齐的兜底推断；只在没有 fetchModels 缓存时使用。 */
-/** 与主进程规则表对齐的兜底推断；只在没有 fetchModels 缓存时使用。 */
 const RENDERER_TEXT_ONLY = [
   'deepseek-chat',
   'deepseek-reasoner',
