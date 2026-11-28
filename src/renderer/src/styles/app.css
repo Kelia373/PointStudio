@@ -4393,3 +4393,103 @@ select:focus {
   width: 100%;
   height: 100%;
 }
+
+/* ── 设置中心 · 用量与账本 ─────────────────────────────────────── */
+
+.settings-usage-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.settings-usage-section__title {
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.settings-usage-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-ctl);
+  background: var(--panel-2);
+}
+
+.settings-usage-block__head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.settings-usage-block__head > span:first-child {
+  flex: 1;
+  color: var(--fg);
+  font-size: var(--fs-md);
+}
+
+.settings-usage-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--rad-ctl);
+  background: var(--panel);
+}
+
+.settings-usage-card__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+}
+
+.settings-usage-card__row b {
+  color: var(--fg);
+}
+
+.settings-usage-bar {
+  display: inline-flex;
+  align-items: center;
+  width: 120px;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--rad-pill);
+  background: var(--raise);
+}
+
+.settings-usage-bar__fill {
+  height: 100%;
+  border-radius: var(--rad-pill);
+  background: var(--ok);
+}
+
+.settings-usage-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid var(--line);
+  color: var(--fg-2);
+  font-size: var(--fs-sm);
+}
+
+.settings-usage-row:last-child {
+  border-bottom: none;
+}
+
+.settings-usage-row > span:first-child {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+.settings-usage-row b {
+  color: var(--fg);
+}

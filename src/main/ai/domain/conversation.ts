@@ -26,6 +26,8 @@ export interface Conversation {
    * 模型是「这次执行用什么」，所以跟着会话走，而不是全局一刀切。
    */
   model?: string | null
+  /** 会话级服务商覆盖；缺省跟随助手绑定 / 全局默认。 */
+  providerId?: string | null
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParams
   createdAt: string
@@ -112,6 +114,26 @@ export function validateModelId(value: unknown): { ok: true; value: string | nul
   }
   if (trimmed.length > 120) {
     return { ok: false, error: 'E_BAD_MODEL' }
+  }
+  return { ok: true, value: trimmed }
+}
+
+/** 服务商 id：允许空（跟随默认），否则只认小写字母/数字/下划线/短横线。 */
+export function validateProviderId(
+  value: unknown
+): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (value === null || value === undefined) {
+    return { ok: true, value: null }
+  }
+  if (typeof value !== 'string') {
+    return { ok: false, error: 'E_BAD_PROVIDER' }
+  }
+  const trimmed = value.trim()
+  if (trimmed === '') {
+    return { ok: true, value: null }
+  }
+  if (!/^[a-z0-9][a-z0-9_-]{0,48}$/.test(trimmed)) {
+    return { ok: false, error: 'E_BAD_PROVIDER' }
   }
   return { ok: true, value: trimmed }
 }

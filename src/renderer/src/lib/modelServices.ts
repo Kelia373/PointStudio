@@ -95,6 +95,9 @@ export interface ModelOption {
   value: string
   label: string
   kind: ModelServiceKind
+  /** 模型位专用：这个模型属于哪家服务商（用于同时落 providerId + modelId）。 */
+  providerId?: string
+  modelId?: string
 }
 
 const FLAGS = {
@@ -899,33 +902,66 @@ export function collectAvailableModelOptions(state: ModelServicesState): ModelOp
 /**
  * 模型位（新建智能体 / 四槽位 / 输入栏）可选的口径。
  *
- * 只列「主进程当前 provider」的模型：请求只能带 model 覆盖，baseUrl / key 仍走
- * 唯一那行 provider 设置，所以把别家的模型选进来必然把模型名发错地址。
- * CLI 引擎同样没有执行路径，`cli:xxx` 只会被当成模型名发出去，也排除。
+ * 只列「主进程里已经配通」的服务商：请求只能覆盖 model，baseUrl / key 仍按
+ * providerId 取，所以把没配 Key 的别家模型选进来只会失败。
+ * CLI 引擎同样没有执行路径，`cli:xxx` 会被当成模型名发出去，也排除。
  *
- * activeProviderId 来自 settings.readProvider()：null（还没读到）时返回空，
- * 由调用方只显示会话当前值，不猜。
+ * readyProviderIds 来自 providers.listAccounts()（hasKey 或本地协议）。
+ * 兼容传单个 id；null / 空数组时返回空，调用方只显示会话当前值。
  */
 export function collectModelPositionOptions(
   state: ModelServicesState,
-  activeProviderId: string | null
+  readyProviderIds: string | readonly string[] | null
 ): ModelOption[] {
-  if (!activeProviderId) {
+  const ready =
+    readyProviderIds === null
+      ? []
+      : typeof readyProviderIds === 'string'
+        ? [readyProviderIds]
+        : [...readyProviderIds]
+  if (ready.length === 0) {
     return []
   }
-  const api = state.api.find((item) => item.id === activeProviderId)
+
+  const options: ModelOption[] = []
+  for (const providerId of ready) {
+    const api = state.api.find((item) => item.id === providerId)
+    if (api) {
+      for (const model of api.models) {
+        options.push({
+          value: model,
+          label: model,
+          kind: 'api',
+          providerId,
+          modelId: model
+        })
+      }
+      continue
+    }
+    const runtime = state.local.find((item) => item.id === providerId)
+    if (runtime) {
+      for (const model of runtime.models) {
+        options.push({
+          value: model,
+          label: `${runtime.name} · ${model}`,
+          kind: 'local',
+          providerId,
+          modelId: model
+        })
+      }
+    }
+  }
+  return options
+}
+
+/** 服务商显示名：目录里的中文名优先，未知 id 原样返回。 */
+export function providerDisplayName(providerId: string, state: ModelServicesState): string {
+  const api = state.api.find((item) => item.id === providerId)
   if (api) {
-    return api.models.map((model) => ({ value: model, label: model, kind: 'api' }))
+    return api.name
   }
-  const runtime = state.local.find((item) => item.id === activeProviderId)
-  if (runtime) {
-    return runtime.models.map((model) => ({
-      value: model,
-      label: `${runtime.name} · ${model}`,
-      kind: 'local'
-    }))
-  }
-  return []
+  const local = state.local.find((item) => item.id === providerId)
+  return local ? local.name : providerId
 }
 
 /** 某个模型标识在下拉里显示什么。 */

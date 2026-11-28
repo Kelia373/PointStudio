@@ -11,6 +11,8 @@ import {
   isChatSendRequest,
   isCreateConversationRequest,
   isProviderSettingsDraft,
+  isSaveProviderAccountRequest,
+  isUsageRange,
   isUuid,
   isWorkspaceImportPath
 } from '../validators.ts'
@@ -101,4 +103,34 @@ test('isAgentRunRequest：permissionMode 只认五档，缺省允许', () => {
   assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 'full-access' }), true)
   assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 'root' }), false)
   assert.equal(isAgentRunRequest({ id: UUID, goal: '做事', permissionMode: 1 }), false)
+})
+
+test('isSaveProviderAccountRequest：形状校验，非法 providerId / protocol 拒绝', () => {
+  assert.equal(
+    isSaveProviderAccountRequest({
+      providerId: 'opencode-go',
+      protocol: 'opencode-go',
+      baseUrl: 'https://opencode.ai/inference/go/openai/v1'
+    }),
+    true
+  )
+  assert.equal(isSaveProviderAccountRequest(null), false)
+  assert.equal(isSaveProviderAccountRequest({ providerId: 'Bad Id', baseUrl: 'https://x/v1' }), false)
+  assert.equal(
+    isSaveProviderAccountRequest({ providerId: 'deepseek', protocol: 'nope', baseUrl: 'https://x/v1' }),
+    false
+  )
+  assert.equal(
+    isSaveProviderAccountRequest({ providerId: 'deepseek', baseUrl: 'https://x/v1', params: { temperature: 'x' } }),
+    false
+  )
+})
+
+test('isUsageRange：只认四档时间窗', () => {
+  assert.equal(isUsageRange('today'), true)
+  assert.equal(isUsageRange('7d'), true)
+  assert.equal(isUsageRange('30d'), true)
+  assert.equal(isUsageRange('all'), true)
+  assert.equal(isUsageRange('1y'), false)
+  assert.equal(isUsageRange(null), false)
 })

@@ -2,11 +2,21 @@
 //
 // 放在 services 而不是 ipc：这是业务选择（有凭据就真的调模型，没有就降级），
 // 不是协议细节。ipc 层只负责把它接到通道上。
-import type { ChatProvider, ChatStreamParams } from '../ai/providers/types.ts'
+import type { ChatProvider, ChatStreamParams, TokenUsageSample } from '../ai/providers/types.ts'
 import type { ProviderParams } from '../ai/domain/providerSettings.ts'
 import type { ContextMessage } from '../ai/domain/context.ts'
 import type { ChatMode } from '../../shared/types/ipc.ts'
 import { buildReplyChunks } from './chatReply.ts'
+
+/** 按 providerId 解析出的运行时账户（含明文 Key，只在主进程里流转）。 */
+export interface ResolvedRuntimeAccount {
+  provider: ChatProvider
+  providerId: string
+  apiKey: string | null
+  baseUrl: string
+  model: string
+  params?: ProviderParams
+}
 
 export interface ChatEngineDeps {
   provider: ChatProvider
@@ -16,12 +26,21 @@ export interface ChatEngineDeps {
   apiKey: string | null
   baseUrl: string
   model: string
+  /**
+   * 多服务商路由：按 providerId 取账户。返回 null 时回退到上面的静态依赖，
+   * 因此既有测试与旧调用（不注入）行为完全不变。
+   */
+  resolveAccount?: (providerId?: string | null) => Promise<ResolvedRuntimeAccount | null>
 }
 
 /** 单次调用可覆盖的部分：来自助手绑定，缺省则用引擎默认值。 */
 export interface ReplyOptions {
   systemPrompt?: string
   model?: string
+  /** 助手 / 会话绑定的服务商；缺省走引擎默认。 */
+  providerId?: string | null
+  /** 会话 id：OpenCode Go 用它做 `x-opencode-session`。 */
+  sessionId?: string
   params?: ChatStreamParams
   /** 已裁剪过的历史消息（不含本轮输入）。 */
   history?: ContextMessage[]
@@ -29,6 +48,8 @@ export interface ReplyOptions {
   references?: string
   /** 中断信号：用户点「停止」时由外壳触发。 */
   signal?: AbortSignal
+  /** 平台回传真实 token 用量时回调（用于本地账本）。 */
+  onUsage?: (sample: { providerId: string; model: string; usage: TokenUsageSample }) => void
 }
 
 /**
@@ -38,10 +59,15 @@ export interface ReplyOptions {
  * 本地模型（requiresApiKey === false）即使没 Key 也走真模型。
  */
 export function resolveMode(deps: ChatEngineDeps): ChatMode {
-  if (deps.provider.requiresApiKey === false) {
+  return resolveModeFor(deps.provider, deps.apiKey)
+}
+
+/** 单条通道的模式判断：本地模型免 Key，其余看 Key 是否为空。 */
+export function resolveModeFor(provider: ChatProvider, apiKey: string | null): ChatMode {
+  if (provider.requiresApiKey === false) {
     return 'live'
   }
-  return (deps.apiKey?.trim() ?? '') === '' ? 'local' : 'live'
+  return (apiKey?.trim() ?? '') === '' ? 'local' : 'live'
 }
 
 /**
@@ -58,7 +84,23 @@ export async function* streamReplyText(
   deps: ChatEngineDeps,
   options: ReplyOptions = {}
 ): AsyncGenerator<string, void, unknown> {
-  if (resolveMode(deps) === 'local') {
+  // 绑定服务商优先：解析成功后整条通道（provider / key / baseUrl / model）都换掉。
+  let active: ResolvedRuntimeAccount = {
+    provider: deps.provider,
+    providerId: deps.provider.id,
+    apiKey: deps.apiKey,
+    baseUrl: deps.baseUrl,
+    model: deps.model,
+    ...(deps.params ? { params: deps.params } : {})
+  }
+  if (options.providerId) {
+    const resolved = await deps.resolveAccount?.(options.providerId)
+    if (resolved) {
+      active = resolved
+    }
+  }
+
+  if (resolveModeFor(active.provider, active.apiKey) === 'local') {
     yield* buildReplyChunks(prompt)
     return
   }
@@ -77,14 +119,22 @@ export async function* streamReplyText(
     ...history.map((item) => ({ role: item.role, content: item.content })),
     { role: 'user' as const, content: userContent }
   ]
+  const model = options.model?.trim() ? options.model : active.model
 
-  yield* deps.provider.streamChat({
-    apiKey: deps.apiKey ?? '',
-    baseUrl: deps.baseUrl,
-    model: options.model?.trim() ? options.model : deps.model,
+  yield* active.provider.streamChat({
+    apiKey: active.apiKey ?? '',
+    baseUrl: active.baseUrl,
+    model,
     messages,
     // 单次覆盖优先，其次平台默认。params 里的 undefined 不影响对方默认值。
-    params: options.params ?? deps.params,
-    signal: options.signal
+    params: options.params ?? active.params,
+    signal: options.signal,
+    ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+    ...(options.onUsage
+      ? {
+          onUsage: (usage) =>
+            options.onUsage?.({ providerId: active.providerId, model, usage })
+        }
+      : {})
   })
 }

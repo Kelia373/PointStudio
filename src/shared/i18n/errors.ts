@@ -38,6 +38,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   E_KEY_REQUIRED: '这个平台需要 API Key',
   E_BASE_URL_INVALID: '接口地址不合法，需要以 http(s):// 开头',
   E_PROVIDER_UNSUPPORTED: '这个平台还不支持',
+  E_PROVIDER_NOT_CONFIGURED: '还没有保存这家服务商的凭据，先在设置里填入并保存',
 
   // 工作区与文件
   E_PATH_UNSAFE: '路径不合法，只能使用工作区内的相对路径',

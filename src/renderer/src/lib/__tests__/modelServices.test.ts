@@ -12,6 +12,7 @@ import {
   createDefaultModelServicesState,
   modelDisplayLabel,
   parseModelServicesState,
+  providerDisplayName,
   removeCustomApiProvider,
   serializeModelServicesState
 } from '../modelServices.ts'
@@ -259,4 +260,28 @@ test('缓存结果被冻结：原地修改直接抛错，不会污染同一份 r
   const second = parseModelServicesState(raw)
   assert.equal(second, first, '同一份 raw 应命中缓存')
   assert.equal(second.api[0].enabled, true)
+})
+
+test('模型位：多服务商已配通时按家分组，每个选项带 providerId + modelId', () => {
+  const state = createDefaultModelServicesState()
+  const options = collectModelPositionOptions(state, ['deepseek', 'ollama'])
+  assert.deepEqual(
+    options.map((item) => [item.providerId, item.modelId, item.kind]),
+    [
+      ['deepseek', 'deepseek-chat', 'api'],
+      ['deepseek', 'deepseek-reasoner', 'api'],
+      ['ollama', 'llama3.1', 'local'],
+      ['ollama', 'qwen2.5', 'local']
+    ]
+  )
+  // 未配通的别家不进列表
+  assert.equal(options.some((item) => item.providerId === 'openai'), false)
+  assert.deepEqual(collectModelPositionOptions(state, []), [])
+})
+
+test('服务商显示名：目录名优先，未知 id 原样返回', () => {
+  const state = createDefaultModelServicesState()
+  assert.equal(providerDisplayName('deepseek', state), 'DeepSeek')
+  assert.equal(providerDisplayName('ollama', state), 'Ollama')
+  assert.equal(providerDisplayName('mystery', state), 'mystery')
 })

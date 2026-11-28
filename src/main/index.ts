@@ -1,14 +1,18 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { DeepSeekProvider } from './ai/providers/deepseek.ts'
 import { OllamaProvider } from './ai/providers/ollama.ts'
+import { OpencodeGoProvider } from './ai/providers/opencodeGo.ts'
+import { OpenAiCompatibleProvider } from './ai/providers/openaiCompatible.ts'
 import type { ChatProvider } from './ai/providers/types.ts'
+import { protocolRequiresKey, type ProviderAccount } from './ai/domain/providerAccounts.ts'
 import type { ProviderId } from './ai/domain/providerSettings.ts'
 import type { Assistant } from './ai/domain/assistant.ts'
 import type { Conversation, Message } from './ai/domain/conversation.ts'
+import type { UsageLedgerRecord } from './ai/domain/usageLedger.ts'
 import { resolveProviderConfig, type ProviderSettings } from './ai/domain/providerSettings.ts'
 import { JsonFileStore } from './data/fileStore.ts'
 import { buildDataPaths } from './core/paths.ts'
@@ -16,6 +20,7 @@ import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
 import { registerSettingsIpc } from './ipc/settings.ts'
+import { registerProvidersIpc } from './ipc/providers.ts'
 import { registerAgentIpc } from './ipc/agent.ts'
 import { registerBackupIpc } from './ipc/backup.ts'
 import { registerMcpIpc } from './ipc/mcp.ts'
@@ -34,6 +39,8 @@ import { AssistantService } from './services/assistantService.ts'
 import type { ChatEngineDeps } from './services/chatEngine.ts'
 import { ConversationService } from './services/conversationService.ts'
 import { ProviderSettingsService } from './services/providerSettingsService.ts'
+import { ProviderAccountsService } from './services/providerAccountsService.ts'
+import { UsageLedgerService } from './services/usageLedgerService.ts'
 
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
 // 它是组合根：负责把内核目录接起来（注册通道、注入存储与凭据），但自己不含业务逻辑。
@@ -81,10 +88,30 @@ function createProvider(id: ProviderId): ChatProvider {
   return id === 'ollama' ? new OllamaProvider() : new DeepSeekProvider()
 }
 
+/** 多服务商账户 → 对应的线路实现。未知协议按 OpenAI 兼容处理。 */
+function createProviderForAccount(account: ProviderAccount): ChatProvider {
+  switch (account.protocol) {
+    case 'ollama':
+      return new OllamaProvider()
+    case 'opencode-go':
+      return new OpencodeGoProvider()
+    case 'deepseek':
+      return new DeepSeekProvider()
+    default:
+      return new OpenAiCompatibleProvider({
+        id: account.id,
+        defaultBaseUrl: account.baseUrl,
+        defaultModel: account.defaultModel
+      })
+  }
+}
+
 interface Services {
   conversations: ConversationService
   assistants: AssistantService
   settings: ProviderSettingsService
+  accounts: ProviderAccountsService
+  ledger: UsageLedgerService
   settingsFilePath: string
   workspace: WorkspaceService
   importer: WorkspaceImportService
@@ -113,10 +140,39 @@ function buildServices(): Services {
   const conversationStore = new JsonFileStore<Conversation>(paths.conversations, { immediate: false })
   const messageStore = new JsonFileStore<Message>(paths.messages, { immediate: false })
   const assistantStore = new JsonFileStore<Assistant>(paths.assistants, { immediate: false })
+  const ledgerStore = new JsonFileStore<UsageLedgerRecord>(paths.usageLedger, { immediate: false })
   storesToFlush.push(
     () => conversationStore.flush(),
     () => messageStore.flush(),
-    () => assistantStore.flush()
+    () => assistantStore.flush(),
+    () => ledgerStore.flush()
+  )
+
+  const settings = new ProviderSettingsService(
+    new JsonFileStore<ProviderSettings>(paths.providerSettings),
+    { now: () => new Date().toISOString() }
+  )
+  const accounts = new ProviderAccountsService(
+    new JsonFileStore<ProviderAccount>(paths.providerAccounts),
+    {
+      now: () => new Date().toISOString(),
+      // 首次启动时把旧的单行凭据迁进多账号库，Key 不用重填。
+      legacy: { read: () => settings.read() },
+      // 迁移哨兵：用户清空账户后重启，不会被旧 provider.json 复活。
+      migration: {
+        isDone: async () => {
+          try {
+            await access(paths.providerAccounts + '.migrated')
+            return true
+          } catch {
+            return false
+          }
+        },
+        markDone: async () => {
+          await writeFile(paths.providerAccounts + '.migrated', new Date().toISOString(), 'utf8')
+        }
+      }
+    }
   )
 
   return {
@@ -125,8 +181,11 @@ function buildServices(): Services {
     }),
     conversations: new ConversationService(conversationStore, messageStore, deps),
     assistants: new AssistantService(assistantStore, deps),
-    settings: new ProviderSettingsService(new JsonFileStore<ProviderSettings>(paths.providerSettings), {
-      now: () => new Date().toISOString()
+    settings,
+    accounts,
+    ledger: new UsageLedgerService(ledgerStore, {
+      now: () => new Date().toISOString(),
+      newId: () => randomUUID()
     }),
     settingsFilePath: paths.providerSettings,
     workspace,
@@ -258,6 +317,10 @@ void app.whenReady().then(async () => {
     conversations: services.conversations,
     assistants: services.assistants,
     engine,
+    // 真实用量落本地账本（按服务商 + 助手聚合，供「设置 → 用量」展示）。
+    onUsageRecorded: async (record) => {
+      await services.ledger.record(record)
+    },
     // 检索是可选能力：工作区为空时它自然返回空数组，不影响对话。
     retrieval: {
       search: async (query) =>
@@ -266,6 +329,29 @@ void app.whenReady().then(async () => {
         })
     }
   })
+  registerProvidersIpc({ accounts: services.accounts, ledger: services.ledger })
+
+  // 多服务商路由：会话 / 助手绑定了 providerId 时，按该家的 Key 与地址发起请求。
+  engine.resolveAccount = async (providerId) => {
+    if (!providerId) {
+      return null
+    }
+    const account = await services.accounts.getInternal(providerId)
+    if (!account) {
+      return null
+    }
+    if (protocolRequiresKey(account.protocol) && account.apiKey.trim() === '') {
+      return null
+    }
+    return {
+      provider: createProviderForAccount(account),
+      providerId: account.id,
+      apiKey: account.apiKey,
+      baseUrl: account.baseUrl,
+      model: account.defaultModel,
+      ...(account.params ? { params: account.params } : {})
+    }
+  }
 
   createWindow()
 

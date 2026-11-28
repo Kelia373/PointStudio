@@ -5,7 +5,15 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { describeError } from '../../../shared/i18n/errors.ts'
-import type { McpConnectionDto, ProviderSettingsViewDto } from '../../../shared/types/ipc.ts'
+import type {
+  McpConnectionDto,
+  ProviderAccountViewDto,
+  ProviderSettingsViewDto,
+  ProviderUsageDto,
+  UsageBucketDto,
+  UsageLedgerSummaryDto,
+  UsageRangeDto
+} from '../../../shared/types/ipc.ts'
 import Icon from './Icon'
 import ProviderLogo from './ProviderLogo'
 import { AUTO_ROUTE_MODEL, MODEL_LABEL } from '../lib/modelOptions'
@@ -18,6 +26,7 @@ import {
   parseModelServicesState,
   removeCustomApiProvider,
   serializeModelServicesState,
+  providerDisplayName,
   type ApiProviderProfile,
   type CliEngineProfile,
   type LocalRuntimeProfile,
@@ -80,11 +89,16 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   const [provider, setProvider] = useState<ProviderSettingsViewDto | null>(null)
   const [mcp, setMcp] = useState<McpConnectionDto[]>([])
   const [message, setMessage] = useState<string | null>(null)
+  const [accounts, setAccounts] = useState<ProviderAccountViewDto[]>([])
+  const [usageByProvider, setUsageByProvider] = useState<Record<string, ProviderUsageDto>>({})
+  const [busyKey, setBusyKey] = useState<string | null>(null)
+  const [ledgerRange, setLedgerRange] = useState<UsageRangeDto>('7d')
+  const [ledger, setLedger] = useState<UsageLedgerSummaryDto | null>(null)
 
   const [serviceTrack, setServiceTrack] = useState<'api' | 'cli'>('api')
   const [selectedApiId, setSelectedApiId] = useState('deepseek')
   const [providerQuery, setProviderQuery] = useState('')
-  const [enabledOnly, setEnabledOnly] = useState(false)
+  const [configuredOnly, setConfiguredOnly] = useState(false)
   const [addingProvider, setAddingProvider] = useState(false)
   const [newProviderName, setNewProviderName] = useState('')
   const [newProviderBaseUrl, setNewProviderBaseUrl] = useState('')
@@ -97,9 +111,20 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
   const section = findSettingsSection(sectionId)
   const groups = useMemo(() => filterSettingsGroups(query), [query])
+  const readyProviderIds = useMemo(
+    () =>
+      accounts
+        .filter((account) => account.hasKey || account.protocol === 'ollama')
+        .map((account) => account.providerId),
+    [accounts]
+  )
   const modelOptions = useMemo(
-    () => collectModelPositionOptions(services, provider?.providerId ?? null),
-    [services, provider?.providerId]
+    () =>
+      collectModelPositionOptions(
+        services,
+        readyProviderIds.length > 0 ? readyProviderIds : (provider?.providerId ?? null)
+      ),
+    [services, readyProviderIds, provider?.providerId]
   )
   const slotValues = useMemo(
     () => [AUTO_ROUTE_MODEL, ...modelOptions.map((option) => option.value)],
@@ -112,12 +137,16 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     void (async () => {
-      const [providerView, connections] = await Promise.all([
+      const [providerView, connections, accountList, ledgerView] = await Promise.all([
         window.pointstudio.settings.readProvider(),
-        window.pointstudio.mcp.list()
+        window.pointstudio.mcp.list(),
+        window.pointstudio.providers.listAccounts(),
+        window.pointstudio.providers.readLedger('7d')
       ])
       setProvider(providerView)
       setMcp(connections)
+      setAccounts(accountList)
+      setLedger(ledgerView)
     })()
   }, [])
 
@@ -134,7 +163,8 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
   const api = services.api.find((item) => item.id === selectedApiId) ?? services.api[0]
 
   const visibleApi = services.api.filter((item) => {
-    if (enabledOnly && !item.enabled) {
+    // 「已配置」以主进程真实凭据为准（hasKey），不再看目录里的 enabled 布尔位。
+    if (configuredOnly && !accountOf(item.id)?.hasKey) {
       return false
     }
     const needle = providerQuery.trim().toLowerCase()
@@ -203,34 +233,213 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
     setServices((current) => ({ ...current, browser: { ...current.browser, ...patch } }))
   }
 
-  async function saveDeepSeek(): Promise<void> {
-    const saved = await window.pointstudio.settings.saveProvider({
-      providerId: 'deepseek',
-      apiKey,
-      baseUrl: api?.baseUrl,
-      model: api?.defaultModel
-    })
-    if (!saved.ok) {
-      setMessage(describeError(saved.code))
-      return
-    }
-    setProvider(saved.value)
-    setApiKey('')
-    setMessage('DeepSeek 已保存，下一轮对话立即生效')
+  function accountOf(providerId: string): ProviderAccountViewDto | undefined {
+    return accounts.find((item) => item.providerId === providerId)
   }
 
-  async function saveOllama(runtime: LocalRuntimeProfile): Promise<void> {
-    const saved = await window.pointstudio.settings.saveProvider({
-      providerId: 'ollama',
-      baseUrl: runtime.baseUrl,
-      model: runtime.models[0]
-    })
-    if (!saved.ok) {
-      setMessage(describeError(saved.code))
+  /** OpenCode Go 有专属网关协议；其余沿用目录里的线路。 */
+  function wireProtocolOf(
+    profile: ApiProviderProfile
+  ): 'openai-compatible' | 'deepseek' | 'anthropic' | 'gemini' | 'opencode-go' {
+    return profile.id === 'opencode-go' ? 'opencode-go' : profile.protocol
+  }
+
+  async function refreshAccounts(): Promise<void> {
+    setAccounts(await window.pointstudio.providers.listAccounts())
+  }
+
+  function refreshLedger(range: UsageRangeDto): void {
+    setLedgerRange(range)
+    void window.pointstudio.providers.readLedger(range).then(setLedger)
+  }
+
+  async function saveApiAccount(profile: ApiProviderProfile): Promise<void> {
+    setBusyKey(`save:${profile.id}`)
+    try {
+      const saved = await window.pointstudio.providers.saveAccount({
+        providerId: profile.id,
+        protocol: wireProtocolOf(profile),
+        // 只有当前行有 Key 输入；其余行留空表示沿用已保存的 Key。
+        apiKey: profile.id === selectedApiId ? apiKey : '',
+        baseUrl: profile.baseUrl,
+        defaultModel: profile.defaultModel
+      })
+      if (!saved.ok) {
+        setMessage(describeError(saved.code))
+        return
+      }
+      setApiKey('')
+      await refreshAccounts()
+      setMessage(
+        `${profile.name} 凭据已保存${
+          saved.value.hasKey ? `（${saved.value.maskedKey}）` : ''
+        }，切换其他服务商不会覆盖`
+      )
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  async function clearApiAccount(providerId: string): Promise<void> {
+    const cleared = await window.pointstudio.providers.clearAccount(providerId)
+    if (!cleared.ok) {
+      setMessage(describeError(cleared.code))
       return
     }
-    setProvider(saved.value)
-    setMessage('Ollama 配置已写入主进程')
+    await refreshAccounts()
+    setMessage(`已清除 ${providerDisplayName(providerId, services)} 的凭据`)
+  }
+
+  async function fetchModelsFor(profile: ApiProviderProfile): Promise<void> {
+    setBusyKey(`models:${profile.id}`)
+    try {
+      const result = await window.pointstudio.providers.fetchModels(profile.id)
+      if (!result.ok) {
+        setMessage(describeError(result.code))
+        return
+      }
+      const discovered = result.value.models
+      const selectable = discovered.filter((item) => item.selectable).map((item) => item.id)
+      const skipped = discovered.length - selectable.length
+      if (selectable.length > 0) {
+        patchApi(profile.id, {
+          models: selectable,
+          defaultModel: selectable.includes(profile.defaultModel)
+            ? profile.defaultModel
+            : selectable[0]
+        })
+      }
+      setMessage(
+        `✓ 已连通 · 获取 ${discovered.length} 个模型 · ${result.value.latencyMs} ms${
+          skipped > 0 ? `（${skipped} 个仅官方客户端可用，未加入）` : ''
+        }`
+      )
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  async function fetchUsageFor(providerId: string): Promise<void> {
+    setBusyKey(`usage:${providerId}`)
+    try {
+      const result = await window.pointstudio.providers.fetchUsage(providerId)
+      if (!result.ok) {
+        setMessage(describeError(result.code))
+        return
+      }
+      setUsageByProvider((current) => ({ ...current, [providerId]: result.value }))
+      setMessage(
+        result.value.kind === 'unsupported'
+          ? (result.value.note ?? '该平台暂未提供官方用量接口')
+          : '已刷新官方用量'
+      )
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  async function saveLocalAccount(runtime: LocalRuntimeProfile): Promise<void> {
+    if (runtime.id !== 'ollama') {
+      setMessage(`${runtime.name} 的主进程链路尚未接入，先只在目录里保存配置`)
+      return
+    }
+    setBusyKey(`save:${runtime.id}`)
+    try {
+      const saved = await window.pointstudio.providers.saveAccount({
+        providerId: runtime.id,
+        protocol: 'ollama',
+        baseUrl: runtime.baseUrl,
+        defaultModel: runtime.models[0]
+      })
+      if (!saved.ok) {
+        setMessage(describeError(saved.code))
+        return
+      }
+      await refreshAccounts()
+      setMessage('Ollama 已写入主进程，不影响 DeepSeek / OpenCode Go 的 Key')
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  function renderUsageCard(providerId: string) {
+    const usage = usageByProvider[providerId]
+    if (!usage) {
+      return null
+    }
+    if (usage.kind === 'unsupported') {
+      return <p className="settings-note">{usage.note}</p>
+    }
+    if (usage.kind === 'balance') {
+      return (
+        <div className="settings-usage-card">
+          {(usage.balances ?? []).map((balance) => (
+            <div key={balance.currency} className="settings-usage-card__row">
+              <span>余额（{balance.currency}）</span>
+              <b>{balance.totalBalance}</b>
+              {balance.grantedBalance !== undefined ? (
+                <span className="settings-note">赠金 {balance.grantedBalance}</span>
+              ) : null}
+              {balance.toppedUpBalance !== undefined ? (
+                <span className="settings-note">充值 {balance.toppedUpBalance}</span>
+              ) : null}
+            </div>
+          ))}
+          {(usage.balances ?? []).length === 0 ? (
+            <p className="settings-note">平台未返回余额明细。</p>
+          ) : null}
+          {usage.available === false ? (
+            <p className="settings-note">该账户当前不可用（is_available=false）。</p>
+          ) : null}
+        </div>
+      )
+    }
+    return (
+      <div className="settings-usage-card">
+        {(usage.windows ?? []).map((window) => (
+          <div key={window.window} className="settings-usage-card__row">
+            <span>
+              {window.window === 'rolling' ? '5h 滚动' : window.window === 'weekly' ? '每周' : '每月'}
+            </span>
+            <span className="settings-usage-bar">
+              <span
+                className="settings-usage-bar__fill"
+                style={{ width: `${Math.max(0, Math.min(100, window.percent))}%` }}
+              />
+            </span>
+            <b>{window.percent}%</b>
+            {window.resetsAt ? (
+              <span className="settings-note">
+                重置 {new Date(window.resetsAt).toLocaleString()}
+              </span>
+            ) : null}
+          </div>
+        ))}
+        {(usage.windows ?? []).length === 0 ? (
+          <p className="settings-note">平台未返回配额窗口。</p>
+        ) : null}
+      </div>
+    )
+  }
+
+  function renderLedgerBuckets(buckets: UsageBucketDto[], emptyText: string) {
+    if (buckets.length === 0) {
+      return <p className="settings-note">{emptyText}</p>
+    }
+    return (
+      <ul className="settings-list">
+        {buckets.map((bucket) => (
+          <li key={bucket.key} className="settings-usage-row">
+            <span>{bucket.key === 'direct' ? '普通对话' : bucket.key}</span>
+            <span className="settings-note">{bucket.calls} 次</span>
+            <span>输入 {bucket.promptTokens}</span>
+            <span>输出 {bucket.completionTokens}</span>
+            <span>缓存命中 {bucket.cacheHitTokens}</span>
+            <b>{bucket.totalTokens}</b>
+          </li>
+        ))}
+      </ul>
+    )
   }
 
   async function addMcp(): Promise<void> {
@@ -368,12 +577,12 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                       onChange={(event) => setProviderQuery(event.target.value)}
                     />
                     <button
-                      className={`settings-rail__filter${enabledOnly ? ' is-on' : ''}`}
+                      className={`settings-rail__filter${configuredOnly ? ' is-on' : ''}`}
                       type="button"
-                      aria-pressed={enabledOnly}
-                      title={enabledOnly ? '显示全部平台' : '只看已启用'}
-                      aria-label={enabledOnly ? '显示全部平台' : '只看已启用'}
-                      onClick={() => setEnabledOnly((value) => !value)}
+                      aria-pressed={configuredOnly}
+                      title={configuredOnly ? '显示全部平台' : '仅看已配置'}
+                      aria-label={configuredOnly ? '显示全部平台' : '仅看已配置'}
+                      onClick={() => setConfiguredOnly((value) => !value)}
                     >
                       <Icon name="filter" size={12} />
                     </button>
@@ -392,11 +601,12 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                             <ProviderLogo providerId={item.id} size={16} />
                           </span>
                           <span className="settings-list__name">{item.name}</span>
-                          {item.enabled ? (
-                            <span className="settings-dot is-on" />
-                          ) : (
-                            <Icon name="chevron-right" size={11} />
-                          )}
+                          <span
+                            className={`settings-dot${accountOf(item.id)?.hasKey ? ' is-on' : ''}`}
+                            title={
+                              accountOf(item.id)?.hasKey ? '已配置凭据' : '未配置凭据'
+                            }
+                          />
                         </button>
                       </li>
                     ))}
@@ -468,19 +678,14 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                           {PROTOCOL_LABEL[api.protocol]} · {api.id}
                         </span>
                       </span>
-                      <label className="settings-toggle" title={api.enabled ? '停用' : '启用'}>
-                        <input
-                          type="checkbox"
-                          checked={api.enabled}
-                          aria-label={`启用 ${api.name}`}
-                          onChange={(event) =>
-                            patchApi(api.id, { enabled: event.target.checked })
-                          }
-                        />
-                        <span className="settings-toggle__track">
-                          <span className="settings-toggle__thumb" />
-                        </span>
-                      </label>
+                      <span
+                        className={`settings-dot${accountOf(api.id)?.hasKey ? ' is-on' : ''}`}
+                        title={
+                          accountOf(api.id)?.hasKey
+                            ? `已配置 ${accountOf(api.id)?.maskedKey}`
+                            : '未配置凭据'
+                        }
+                      />
                     </div>
 
                     <label className="settings__row">
@@ -514,53 +719,82 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                       />
                     </label>
 
-                    {api.id === 'deepseek' ? (
-                      <>
-                        <label className="settings__row">
-                          <span className="settings__label">API Key</span>
-                          <input
-                            className="settings__input"
-                            type="password"
-                            value={apiKey}
-                            placeholder={
-                              provider?.hasKey
-                                ? `已保存 ${provider.maskedKey}，留空则不修改`
-                                : 'sk-...'
-                            }
-                            onChange={(event) => setApiKey(event.target.value)}
-                          />
-                        </label>
-                        <div className="settings__actions">
-                          <button
-                            className="settings__save"
-                            type="button"
-                            onClick={() => void saveDeepSeek()}
-                          >
-                            保存到主进程
-                          </button>
-                          <button
-                            className="settings__clear"
-                            type="button"
-                            onClick={() => {
-                              void window.pointstudio.settings.clearProvider().then(() => {
-                                setMessage('已清除主进程凭据')
-                                void window.pointstudio.settings
-                                  .readProvider()
-                                  .then(setProvider)
-                              })
-                            }}
-                          >
-                            清除凭据
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="settings-note">
-                        {api.id === 'opencode-go'
-                          ? 'OpenCode Go 暂只保存地址与模型；/inference/go/v1/models 与 /usage 的真实链路留到下期主进程专题。'
-                          : '本期只有 DeepSeek 与 Ollama 走主进程凭据；其余 API 先保存配置，Key 接入留后续主进程专题。'}
-                      </p>
-                    )}
+                    <label className="settings__row">
+                      <span className="settings__label">API Key</span>
+                      <input
+                        className="settings__input"
+                        type="password"
+                        value={apiKey}
+                        placeholder={
+                          accountOf(api.id)?.hasKey
+                            ? `已保存 ${accountOf(api.id)?.maskedKey}，留空则不修改`
+                            : 'sk-...'
+                        }
+                        onChange={(event) => setApiKey(event.target.value)}
+                      />
+                    </label>
+                    <div className="settings__actions">
+                      <button
+                        className="settings__save"
+                        type="button"
+                        disabled={
+                          busyKey === `save:${api.id}` ||
+                          api.protocol === 'anthropic' ||
+                          api.protocol === 'gemini'
+                        }
+                        title={
+                          api.protocol === 'anthropic' || api.protocol === 'gemini'
+                            ? '原生协议适配器排后续，本期只接通 OpenAI 兼容线'
+                            : '保存到多服务商凭据库'
+                        }
+                        onClick={() => void saveApiAccount(api)}
+                      >
+                        {busyKey === `save:${api.id}` ? '保存中…' : '保存凭据'}
+                      </button>
+                      <button
+                        className="settings__save"
+                        type="button"
+                        disabled={
+                          busyKey === `models:${api.id}` ||
+                          api.protocol === 'anthropic' ||
+                          api.protocol === 'gemini'
+                        }
+                        onClick={() => void fetchModelsFor(api)}
+                      >
+                        {busyKey === `models:${api.id}` ? '拉取中…' : '拉取模型列表'}
+                      </button>
+                      <button
+                        className="settings__clear"
+                        type="button"
+                        disabled={
+                          busyKey === `usage:${api.id}` ||
+                          api.protocol === 'anthropic' ||
+                          api.protocol === 'gemini'
+                        }
+                        onClick={() => void fetchUsageFor(api.id)}
+                      >
+                        {busyKey === `usage:${api.id}` ? '刷新中…' : '刷新余额/配额'}
+                      </button>
+                      {accountOf(api.id)?.hasKey ? (
+                        <button
+                          className="settings__clear"
+                          type="button"
+                          onClick={() => void clearApiAccount(api.id)}
+                        >
+                          清除凭据
+                        </button>
+                      ) : null}
+                    </div>
+                    <p className="settings-note">
+                      凭据按服务商独立保存（userData/provider-accounts.json），切换别的平台不会覆盖这一家。
+                      {api.id === 'opencode-go'
+                        ? ' OpenCode Go 走 /inference/go 网关，模型与用量由官方接口实时返回。'
+                        : ''}
+                      {api.protocol === 'anthropic' || api.protocol === 'gemini'
+                        ? ' 该平台是原生协议，适配器排后续；本期只接通 OpenAI 兼容线（DeepSeek / OpenCode Go / 各兼容平台 / Ollama）。'
+                        : ''}
+                    </p>
+                    {renderUsageCard(api.id)}
 
                     {api.id.startsWith('custom-') ? (
                       <button
@@ -779,13 +1013,35 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
                   </label>
                   {runtime.id === 'ollama' ? (
                     <>
-                      <button
-                        className="settings__save"
-                        type="button"
-                        onClick={() => void saveOllama(runtime)}
-                      >
-                        写入主进程
-                      </button>
+                      <div className="settings__actions">
+                        <button
+                          className="settings__save"
+                          type="button"
+                          disabled={busyKey === 'save:ollama'}
+                          onClick={() => void saveLocalAccount(runtime)}
+                        >
+                          {busyKey === 'save:ollama' ? '保存中…' : '写入主进程'}
+                        </button>
+                        <button
+                          className="settings__clear"
+                          type="button"
+                          disabled={busyKey === 'models:ollama'}
+                          onClick={() =>
+                            void fetchModelsFor({
+                              id: runtime.id,
+                              kind: 'api',
+                              name: runtime.name,
+                              protocol: 'openai-compatible',
+                              enabled: runtime.enabled,
+                              baseUrl: runtime.baseUrl,
+                              models: runtime.models,
+                              defaultModel: runtime.models[0] ?? ''
+                            })
+                          }
+                        >
+                          {busyKey === 'models:ollama' ? '拉取中…' : '拉取本地模型'}
+                        </button>
+                      </div>
                       <p className="settings-note">
                         写入主进程只送 Base URL 与首个模型；numCtx / keepAlive 仅本地保存。
                       </p>
@@ -799,9 +1055,8 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             ))}
             </div>
             <p className="settings-note">
-              已知边界：主进程当前只保存一行 provider 配置，写 Ollama 会覆盖 DeepSeek
-              那一行（反之亦然），切回来需要重新填 Key。多服务商凭据库排在下一单，
-              这里先按「同一时间只用一家」使用。
+              多服务商凭据库已启用：每家一条记录，写 Ollama 不会再覆盖 DeepSeek /
+              OpenCode Go 的 Key。LM Studio / vLLM 仍只保存在目录里，主进程链路留后续。
             </p>
           </>
         )
@@ -920,6 +1175,79 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             <button className="settings__save" type="button" onClick={() => void addMcp()}>
               连接
             </button>
+          </div>
+        )
+
+      case 'usage':
+        return (
+          <div className="settings-form">
+            <p className="settings-note">
+              上半部分是各平台官方余额 / 配额（DeepSeek 余额、OpenCode Go 5h/周/月），
+              下半部分是本机真实 Token 账本（来自流式响应的 usage 尾帧）。
+            </p>
+            <div className="settings-usage-section">
+              <span className="settings-usage-section__title">官方余额 / 配额</span>
+              {accounts.length === 0 ? (
+                <p className="settings-note">还没有保存任何服务商凭据。</p>
+              ) : (
+                accounts.map((account) => (
+                  <div key={account.providerId} className="settings-usage-block">
+                    <div className="settings-usage-block__head">
+                      <span>{providerDisplayName(account.providerId, services)}</span>
+                      <span className="settings-note">
+                        {account.hasKey ? account.maskedKey : '未配置凭据'}
+                      </span>
+                      <button
+                        className="settings__clear"
+                        type="button"
+                        disabled={busyKey === `usage:${account.providerId}`}
+                        onClick={() => void fetchUsageFor(account.providerId)}
+                      >
+                        {busyKey === `usage:${account.providerId}` ? '刷新中…' : '刷新'}
+                      </button>
+                    </div>
+                    {renderUsageCard(account.providerId)}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="settings-usage-section">
+              <span className="settings-usage-section__title">本地 Token 账本</span>
+              <div className="settings-seg" role="tablist" aria-label="账本时间范围">
+                {(['today', '7d', '30d', 'all'] as const).map((range) => (
+                  <button
+                    key={range}
+                    className={`settings-seg__btn${ledgerRange === range ? ' is-on' : ''}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={ledgerRange === range}
+                    onClick={() => refreshLedger(range)}
+                  >
+                    {range === 'today' ? '今日' : range === '7d' ? '7 天' : range === '30d' ? '30 天' : '全部'}
+                  </button>
+                ))}
+              </div>
+              {ledger ? (
+                <>
+                  <p className="settings-note">
+                    共 {ledger.totalCalls} 次调用 · 输入 {ledger.totalPromptTokens} · 输出{' '}
+                    {ledger.totalCompletionTokens} · 缓存命中 {ledger.totalCacheHitTokens} · 合计{' '}
+                    {ledger.totalTokens}
+                  </p>
+                  <div className="settings-usage-section">
+                    <span className="settings-usage-section__title">按服务商</span>
+                    {renderLedgerBuckets(ledger.byProvider, '这个时间窗还没有真实调用。')}
+                  </div>
+                  <div className="settings-usage-section">
+                    <span className="settings-usage-section__title">按驻场 Agent</span>
+                    {renderLedgerBuckets(ledger.byAssistant, '这个时间窗还没有真实调用。')}
+                  </div>
+                </>
+              ) : (
+                <p className="settings-note">正在读取账本…</p>
+              )}
+            </div>
           </div>
         )
 

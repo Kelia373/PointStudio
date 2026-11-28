@@ -23,6 +23,7 @@ function toConversationDto(conversation: Conversation): ConversationDto {
     assistantId: conversation.assistantId,
     ...(conversation.workspaceId !== undefined ? { workspaceId: conversation.workspaceId } : {}),
     ...(conversation.model ? { model: conversation.model } : {}),
+    ...(conversation.providerId ? { providerId: conversation.providerId } : {}),
     ...(conversation.params ? { params: conversation.params } : {}),
     createdAt: conversation.createdAt,
     updatedAt: conversation.updatedAt

@@ -39,6 +39,17 @@ export interface ChatFlowDeps {
   retrieval?: { search(query: string): Promise<SearchHit[]> }
   /** 命中参考片段时回调，便于界面显示「引用了哪些文件」。 */
   onReferences?: (hits: SearchHit[]) => void
+  /** 真实用量落账本；不注入则不记录。 */
+  onUsageRecorded?: (record: {
+    providerId: string
+    modelId: string
+    assistantId: string | null
+    conversationId: string
+    promptTokens: number
+    completionTokens: number
+    cacheHitTokens: number
+    totalTokens: number
+  }) => void | Promise<void>
   /** 用户中断信号。 */
   signal?: AbortSignal
 }
@@ -64,8 +75,10 @@ async function resolveReplyOptions(
   const params = { ...assistantParams, ...conversationParams }
 
   const model = conversation.model ?? assistant?.modelId ?? undefined
+  // 服务商优先级与会话模型一致：会话覆盖 > 助手绑定 > 引擎默认。
+  const providerId = conversation.providerId ?? assistant?.providerId ?? null
 
-  const options: ReplyOptions = { model }
+  const options: ReplyOptions = { model, providerId, sessionId: conversationId }
   if (assistant?.systemPrompt) {
     options.systemPrompt = assistant.systemPrompt
   }
@@ -134,7 +147,18 @@ export async function* streamAssistantReply(
     }
   }
 
-  const options = { ...bound, history: trimmed.messages, references, signal: deps.signal }
+  const options: ReplyOptions = { ...bound, history: trimmed.messages, references, signal: deps.signal }
+  // 绑定关系在落用户消息前已经读到，这里用同一份 conversation 组装账本维度。
+  const conversationSnapshot = conversation
+  options.onUsage = (sample) => {
+    void deps.onUsageRecorded?.({
+      providerId: sample.providerId,
+      modelId: sample.model,
+      assistantId: conversationSnapshot.assistantId ?? null,
+      conversationId,
+      ...sample.usage
+    })
+  }
 
   let accumulated = ''
   try {

@@ -378,3 +378,182 @@ test('没有检索命中时，助手消息不带引用字段', async () => {
     assert.equal(assistant?.references, undefined)
   })
 })
+
+test('跨服务商路由：Agent A 走 DeepSeek、Agent B 走 OpenCode Go，各自命中凭据并记账', async () => {
+  const seen: Array<{ providerId: string; apiKey: string; baseUrl: string; model: string; sessionId?: string }> = []
+  const usage: Array<{ providerId: string; modelId: string; assistantId: string | null }> = []
+
+  const assistants: AssistantLookup = {
+    get: async (id) =>
+      id === 'agent-a'
+        ? {
+            id: 'agent-a',
+            name: 'A',
+            systemPrompt: '',
+            providerId: 'deepseek',
+            modelId: 'deepseek-chat',
+            params: { temperature: 0.7, maxTokens: 1024, topP: 1 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z'
+          }
+        : {
+            id: 'agent-b',
+            name: 'B',
+            systemPrompt: '',
+            providerId: 'opencode-go',
+            modelId: 'kimi-k2.5',
+            params: { temperature: 0.7, maxTokens: 1024, topP: 1 },
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z'
+          }
+  }
+
+  const provider: ChatProvider = {
+    id: 'default',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      const providerId = request.baseUrl.includes('opencode') ? 'opencode-go' : 'deepseek'
+      seen.push({
+        providerId,
+        apiKey: request.apiKey,
+        baseUrl: request.baseUrl,
+        model: request.model,
+        ...(request.sessionId ? { sessionId: request.sessionId } : {})
+      })
+      request.onUsage?.({
+        promptTokens: 7,
+        completionTokens: 3,
+        totalTokens: 10,
+        cacheHitTokens: 1
+      })
+      yield 'ok'
+    }
+  }
+
+  const accounts: Record<string, { provider: ChatProvider; providerId: string; apiKey: string; baseUrl: string; model: string }> = {
+    deepseek: {
+      provider,
+      providerId: 'deepseek',
+      apiKey: 'sk-ds-test',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat'
+    },
+    'opencode-go': {
+      provider,
+      providerId: 'opencode-go',
+      apiKey: 'oc_sk_test',
+      baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+      model: 'kimi-k2.5'
+    }
+  }
+
+  const engine = {
+    provider,
+    apiKey: null,
+    baseUrl: 'https://default',
+    model: 'default-model',
+    resolveAccount: async (providerId?: string | null) =>
+      (providerId && accounts[providerId]) || null
+  }
+
+  const runAgent = async (assistantId: string): Promise<void> => {
+    await withFlow(
+      async ({ conversations, conversationId }) => {
+        for await (const _chunk of streamAssistantReply(conversationId, 'hi', {
+          conversations,
+          assistants,
+          engine,
+          onUsageRecorded: (record) => {
+            usage.push({
+              providerId: record.providerId,
+              modelId: record.modelId,
+              assistantId: record.assistantId
+            })
+          }
+        })) {
+          // 消费流
+        }
+        const conversation = await conversations.get(conversationId)
+        assert.equal(conversation?.assistantId, assistantId)
+      },
+      assistants,
+      assistantId
+    )
+  }
+
+  await runAgent('agent-a')
+  await runAgent('agent-b')
+
+  assert.equal(seen.length, 2)
+  assert.deepEqual(
+    seen.map((item) => [item.providerId, item.apiKey, item.model]),
+    [
+      ['deepseek', 'sk-ds-test', 'deepseek-chat'],
+      ['opencode-go', 'oc_sk_test', 'kimi-k2.5']
+    ]
+  )
+  assert.equal(seen[1].baseUrl, 'https://opencode.ai/inference/go/openai/v1')
+  assert.ok(seen.every((item) => typeof item.sessionId === 'string' && item.sessionId.length > 0))
+  assert.deepEqual(usage, [
+    { providerId: 'deepseek', modelId: 'deepseek-chat', assistantId: 'agent-a' },
+    { providerId: 'opencode-go', modelId: 'kimi-k2.5', assistantId: 'agent-b' }
+  ])
+})
+
+test('会话级模型与服务商覆盖优先于助手绑定', async () => {
+  const seen: Array<{ model: string; baseUrl: string }> = []
+  const provider: ChatProvider = {
+    id: 'fake',
+    async *streamChat(request: ChatStreamRequest): AsyncGenerator<string> {
+      seen.push({ model: request.model, baseUrl: request.baseUrl })
+      yield 'x'
+    }
+  }
+  const assistants: AssistantLookup = {
+    get: async () => ({
+      id: 'a1',
+      name: 'A',
+      systemPrompt: '',
+      providerId: 'deepseek',
+      modelId: 'deepseek-chat',
+      params: { temperature: 0.7, maxTokens: 1024, topP: 1 },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    })
+  }
+  await withFlow(
+    async ({ conversations, conversationId }) => {
+      const patched = await conversations.setModel(conversationId, {
+        model: 'claude-sonnet-4-5',
+        providerId: 'opencode-go'
+      })
+      assert.equal(patched.ok, true)
+      for await (const _chunk of streamAssistantReply(conversationId, 'hi', {
+        conversations,
+        assistants,
+        engine: {
+          provider,
+          apiKey: null,
+          baseUrl: 'https://default',
+          model: 'default',
+          resolveAccount: async (providerId) =>
+            providerId === 'opencode-go'
+              ? {
+                  provider,
+                  providerId: 'opencode-go',
+                  apiKey: 'oc_sk_test',
+                  baseUrl: 'https://opencode.ai/inference/go/openai/v1',
+                  model: 'kimi-k2.5'
+                }
+              : null
+        }
+      })) {
+        // 消费流
+      }
+    },
+    assistants,
+    'a1'
+  )
+  assert.deepEqual(seen, [
+    { model: 'claude-sonnet-4-5', baseUrl: 'https://opencode.ai/inference/go/openai/v1' }
+  ])
+})
