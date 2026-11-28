@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  deleteTokenAtCaret,
   insertImageTokenAtCaret,
   parseTextWithImageTokens,
   removeImageSlot,
@@ -102,4 +103,27 @@ test('没有标签的图片不会被丢掉（补在末尾，保持可见）', ()
   const next = renumber('只有文字', images(2))
   assert.deepEqual(next.images.map((item) => item.index), [1, 2])
   assert.equal(next.text, '只有文字')
+})
+
+test('原子退格：光标紧贴标记右侧时整颗删掉，返回槽位号', () => {
+  const text = '看 [Image #1] 这张'
+  const caret = text.indexOf('[Image #1]') + '[Image #1]'.length
+  const result = deleteTokenAtCaret(text, caret, 'backspace')
+  assert.equal(result.text, '看  这张')
+  assert.equal(result.caret, 2)
+  assert.equal(result.removedSlot, 1)
+})
+
+test('原子删除：光标紧贴标记左侧时删掉它', () => {
+  const text = 'a[Image #2]b'
+  const result = deleteTokenAtCaret(text, 1, 'delete')
+  assert.equal(result.text, 'ab')
+  assert.equal(result.removedSlot, 2)
+})
+
+test('光标不贴着标记时不动（正常退格交给浏览器）', () => {
+  const text = 'abc [Image #1]'
+  const result = deleteTokenAtCaret(text, 2, 'backspace')
+  assert.equal(result.text, text)
+  assert.equal(result.removedSlot, null)
 })

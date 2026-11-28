@@ -36,11 +36,24 @@ export interface UiMessage {
  */
 export function startTurn(
   messages: UiMessage[],
-  input: { requestId: string; text: string; route?: RouteDecisionDto | null }
+  input: {
+    requestId: string
+    text: string
+    route?: RouteDecisionDto | null
+    /** 本轮附图：乐观气泡立即显示缩略图，避免流式期间闪一下。 */
+    images?: MessageImageDto[]
+  }
 ): UiMessage[] {
+  const images = input.images ?? []
   return [
     ...messages,
-    { id: `local-${input.requestId}`, role: 'user', content: input.text, status: 'complete' },
+    {
+      id: `local-${input.requestId}`,
+      role: 'user',
+      content: input.text,
+      status: 'complete',
+      ...(images.length > 0 ? { images } : {})
+    },
     {
       id: input.requestId,
       role: 'assistant',

@@ -8,6 +8,15 @@ import { resolveComposerAction } from '../lib/composerCommands'
 import type { ComposerModelPolicy } from '../lib/modelPicker'
 import { Slot } from '../runtime/SlotRenderer'
 import Icon from './Icon'
+import { ImageLightbox, type LightboxState } from './ChatImages'
+import {
+  deleteTokenAtCaret,
+  insertImageTokenAtCaret,
+  removeImageSlot,
+  syncImagesWithText,
+  type PendingImage
+} from '../lib/imageTokens'
+import { describeError } from '../../../shared/i18n/errors.ts'
 
 interface MentionCandidate {
   id: string
@@ -52,7 +61,9 @@ export default function Composer({
   modelPicker,
   mentionCandidates,
   mentionedIds,
-  onMentionedChange
+  onMentionedChange,
+  images = [],
+  onImagesChange
 }: {
   draft: string
   busy: boolean
@@ -82,13 +93,113 @@ export default function Composer({
   /** 已被 @ 的成员 id（由上层持有，发送时用来路由）。 */
   mentionedIds?: string[]
   onMentionedChange?: (ids: string[]) => void
+  /** 待发图片（受控；不传时输入框不显示图片功能）。 */
+  images?: PendingImage[]
+  onImagesChange?: (next: PendingImage[]) => void
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
   const [hint, setHint] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
+  const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+  const MAX_IMAGES = 6
+  const ALLOWED = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 
   const candidates = mentionCandidates ?? []
   const mentioned = mentionedIds ?? []
+
+  /** 后缀优先：.svg 一律拒，哪怕 File.type 写着 image/png（宁可多拦一次）。 */
+  function mimeOf(file: File): string {
+    const ext = (file.name.split('.').pop() ?? '').toLowerCase()
+    if (ext === 'svg') {
+      return 'image/svg+xml'
+    }
+    const byExt =
+      ext === 'jpg' || ext === 'jpeg'
+        ? 'image/jpeg'
+        : ext === 'png' || ext === 'webp' || ext === 'gif'
+          ? `image/${ext}`
+          : ''
+    if (file.type !== '' && ALLOWED.includes(file.type)) {
+      return file.type
+    }
+    return byExt
+  }
+
+  function readAsDataUrl(file: File): Promise<string | null> {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+      reader.onerror = () => resolve(null)
+      reader.readAsDataURL(file)
+    })
+  }
+
+  async function addFiles(files: File[]): Promise<void> {
+    if (onImagesChange === undefined) {
+      return
+    }
+    const next = [...images]
+    const inserted: PendingImage[] = []
+    for (const file of files) {
+      const mime = mimeOf(file)
+      if (!ALLOWED.includes(mime)) {
+        setHint('只支持 PNG / JPEG / WebP / GIF（SVG 不可用）')
+        continue
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setHint('单张图片不能超过 10 MB')
+        continue
+      }
+      if (next.length + inserted.length >= MAX_IMAGES) {
+        setHint(`一条消息最多 ${MAX_IMAGES} 张图片`)
+        break
+      }
+      const previewUrl = await readAsDataUrl(file)
+      if (previewUrl === null) {
+        setHint('读取图片失败')
+        continue
+      }
+      const saved = await window.pointstudio.attachments.save({
+        dataUrl: previewUrl,
+        name: file.name
+      })
+      if (!saved.ok) {
+        setHint(describeError(saved.code))
+        continue
+      }
+      const index = next.length + inserted.length + 1
+      inserted.push({ index, dto: saved.value, previewUrl })
+    }
+    if (inserted.length === 0) {
+      return
+    }
+    onImagesChange([...next, ...inserted])
+    // 光标处插入占位符；多张依次插入并以空格分隔。
+    let caret = inputRef.current?.selectionStart ?? draft.length
+    let text = draft
+    for (const image of inserted) {
+      const placed = insertImageTokenAtCaret(text, caret, image.index)
+      text = placed.nextText
+      caret = placed.nextCaret
+    }
+    onDraftChange(text)
+    setHint(null)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus()
+      inputRef.current?.setSelectionRange(caret, caret)
+    })
+  }
+
+  function removeSlot(slot: number): void {
+    if (onImagesChange === undefined) {
+      return
+    }
+    const next = removeImageSlot(draft, images, slot)
+    onDraftChange(next.text)
+    onImagesChange(next.images)
+  }
 
   // 高度自适应：内容长高就长高，但不超过 CSS 的 max-height。
   useEffect(() => {
@@ -264,7 +375,70 @@ export default function Composer({
         handleSubmitAction()
       }}
     >
-      <div className="composer__box">
+      <div
+        className="composer__box"
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes('Files')) {
+            event.preventDefault()
+          }
+        }}
+        onDrop={(event) => {
+          // 不拦就会让 Chromium 把图片当成导航，整个窗口跳到 file://
+          event.preventDefault()
+          event.stopPropagation()
+          if (event.dataTransfer.files.length > 0) {
+            void addFiles(Array.from(event.dataTransfer.files))
+          }
+        }}
+      >
+        {images.length > 0 ? (
+          <>
+            <div className="composer__thumbs" aria-label="待发送图片">
+              {images.map((image, position) => (
+                <div key={image.dto.id} className="composer__thumb">
+                  <button
+                    className="thumb thumb--composer"
+                    type="button"
+                    title={image.dto.name}
+                    onClick={() =>
+                      setLightbox({
+                        images: images.map((item) => item.dto),
+                        start: position
+                      })
+                    }
+                  >
+                    <img className="thumb__img" src={image.previewUrl} alt={image.dto.name} />
+                    <span className="thumb__badge">#{image.index}</span>
+                  </button>
+                  <button
+                    className="composer__thumb-x"
+                    type="button"
+                    aria-label={`移除图片 #${image.index}`}
+                    title="移除"
+                    onClick={() => removeSlot(image.index)}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="composer__chips" aria-label="图片标签">
+              {images.map((image, position) => (
+                <button
+                  key={`chip-${image.dto.id}`}
+                  className="image-chip"
+                  type="button"
+                  title="点击放大预览"
+                  onClick={() =>
+                    setLightbox({ images: images.map((item) => item.dto), start: position })
+                  }
+                >
+                  🖼 图片 #{image.index}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
         {mentioned.length > 0 ? (
           <div className="composer__mentions" aria-label="已 @ 的成员">
             {mentioned.map((id) => {
@@ -340,10 +514,36 @@ export default function Composer({
           value={draft}
           rows={1}
           placeholder="输入消息，Enter 发送，Shift+Enter 换行；@ 成员，/ 指令"
+          onPaste={(event) => {
+            // 只认文件型图片项：同一张图不再走 text/html 分支被插两次。
+            const files = Array.from(event.clipboardData.items)
+              .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+              .map((item) => item.getAsFile())
+              .filter((file): file is File => file !== null)
+            if (files.length > 0 && onImagesChange !== undefined) {
+              event.preventDefault()
+              void addFiles(files)
+            }
+          }}
           onChange={(event) => {
             const value = event.target.value
             setHint(null)
-            onDraftChange(value)
+            // 框选删掉了某个 [Image #N] → 缩略图跟着消失并重排，绝不留幽灵附图。
+            if (onImagesChange !== undefined && images.length > 0) {
+              const synced = syncImagesWithText(value, images)
+              if (synced.images.length !== images.length) {
+                onImagesChange(synced.images)
+                if (synced.text !== value) {
+                  onDraftChange(synced.text)
+                } else {
+                  onDraftChange(value)
+                }
+              } else {
+                onDraftChange(value)
+              }
+            } else {
+              onDraftChange(value)
+            }
             refreshMenu(value, event.target.selectionStart)
             // 手动删掉 @名字 时，把对应 chip 一并撤掉，避免发送时路由到没提到的人。
             const stillMentioned = mentioned.filter((id) => {
@@ -354,9 +554,61 @@ export default function Composer({
               onMentionedChange?.(stillMentioned)
             }
           }}
-          onKeyDown={handleKeyDown}
+          onKeyDown={(event) => {
+            // 原子退格：光标紧贴 [Image #N] 时整颗删，和上方缩略图 1:1 联动。
+            if (
+              onImagesChange !== undefined &&
+              images.length > 0 &&
+              !event.nativeEvent.isComposing &&
+              (event.key === 'Backspace' || event.key === 'Delete')
+            ) {
+              const node = event.currentTarget
+              const hit = deleteTokenAtCaret(
+                draft,
+                node.selectionStart,
+                event.key === 'Backspace' ? 'backspace' : 'delete'
+              )
+              if (hit.removedSlot !== null && node.selectionStart === node.selectionEnd) {
+                event.preventDefault()
+                const removed = removeImageSlot(hit.text, images, hit.removedSlot)
+                onDraftChange(removed.text)
+                onImagesChange(removed.images)
+                requestAnimationFrame(() => {
+                  node.setSelectionRange(hit.caret, hit.caret)
+                })
+                return
+              }
+            }
+            handleKeyDown(event)
+          }}
         />
         <div className="composer__bar">
+          {onImagesChange !== undefined ? (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                hidden
+                onChange={(event) => {
+                  if (event.target.files !== null) {
+                    void addFiles(Array.from(event.target.files))
+                  }
+                  event.target.value = ''
+                }}
+              />
+              <button
+                className="composer__add"
+                type="button"
+                aria-label="添加图片"
+                title="添加图片（也可粘贴或拖入）"
+                onClick={() => fileRef.current?.click()}
+              >
+                <Icon name="plus" size={13} />
+              </button>
+            </>
+          ) : null}
           {/* 老的下拉分支：ChatPanel 现已走 modelPolicy；保留给其它宿主/插件。 */}
           {modelPolicy === undefined ? (
             <>
@@ -434,6 +686,7 @@ export default function Composer({
           )}
         </div>
       </div>
+      <ImageLightbox state={lightbox} onClose={() => setLightbox(null)} />
     </form>
   )
 }

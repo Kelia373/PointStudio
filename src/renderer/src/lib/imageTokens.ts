@@ -155,3 +155,31 @@ export function syncImagesWithText(
 export function shouldShowMessageText(text: string, _imageCount: number): boolean {
   return stripImageTokens(text) !== ''
 }
+
+/**
+ * 原子退格 / 删除：光标紧贴 [Image #N] 时整颗删掉，而不是一个字一个字啃。
+ * 返回新的文本、新的光标，以及被删掉的槽位号（调用方据此同步移除缩略图并重排）。
+ */
+export function deleteTokenAtCaret(
+  text: string,
+  caret: number,
+  key: 'backspace' | 'delete'
+): { text: string; caret: number; removedSlot: number | null } {
+  const safeCaret = Math.max(0, Math.min(caret, text.length))
+  const pattern = /\[Image #(\d+)\]/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) {
+    const start = match.index
+    const end = start + match[0].length
+    const hit = key === 'backspace' ? end === safeCaret : start === safeCaret
+    if (!hit) {
+      continue
+    }
+    return {
+      text: text.slice(0, start) + text.slice(end),
+      caret: start,
+      removedSlot: Number(match[1])
+    }
+  }
+  return { text, caret: safeCaret, removedSlot: null }
+}
