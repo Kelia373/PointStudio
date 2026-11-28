@@ -61,6 +61,8 @@ test('中文输入法合成期间不重建 DOM、不删胶囊', () => {
     composer.includes('if (el === null || isComposingRef.current)'),
     '投影同步必须在合成期直接返回'
   )
+  assert.ok(composer.includes('replace(/\\u00a0/g'), '入库前必须归一不换行空格')
+  assert.ok(composer.includes('caretAfterRenumber'), '删图后必须按文字锚重定位光标')
 })
 
 test('输入框不再出现 emoji 占位与独立胶囊行（行内胶囊用矢量图标）', () => {

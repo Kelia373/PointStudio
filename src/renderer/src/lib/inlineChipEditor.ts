@@ -154,6 +154,43 @@ export function getLogicalCaretOffset(
   return nodes.reduce((total, node) => total + nodeLogicalLength(node), 0)
 }
 
+/**
+ * 删除/重排后重新定位光标。
+ *
+ * 删一张图会删掉一个 `[Image #N]`，并把后面的 `#2/#3` 缩短成 `#1/#2`——
+ * 直接用旧偏移会把光标落偏几位。这里用「非 token 文字字符」当锚：
+ * 普通文字在重排里不改（除删图时合并过一对空格），所以按文字计数最稳。
+ */
+export function caretAfterRenumber(oldText: string, newText: string, caret: number): number {
+  const map = (text: string): { positions: number[] } => {
+    const positions: number[] = []
+    let cursor = 0
+    const token = /\[Image #\d+\]/g
+    let match: RegExpExecArray | null
+    while ((match = token.exec(text)) !== null) {
+      for (; cursor < match.index; cursor += 1) {
+        positions.push(cursor)
+      }
+      cursor = match.index + match[0].length
+    }
+    for (; cursor < text.length; cursor += 1) {
+      positions.push(cursor)
+    }
+    return { positions }
+  }
+
+  const before = map(oldText)
+  const after = map(newText)
+  let plainIndex = 0
+  while (plainIndex < before.positions.length && before.positions[plainIndex] < caret) {
+    plainIndex += 1
+  }
+  if (plainIndex >= after.positions.length) {
+    return newText.length
+  }
+  return after.positions[plainIndex]
+}
+
 export interface EditorCaret {
   path: number[]
   offset: number
@@ -169,7 +206,10 @@ export interface EditorCaret {
  * HTML 永远不会进 DOM：组件里粘贴前先 `preventDefault`，只插文本节点。
  */
 export function sanitizePastedText(text: string): string {
-  return text.replace(/\r\n?/g, '\n').replace(/\[Image #\d+\]\s*/g, '')
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\[Image #\d+\]\s*/g, '')
 }
 
 /** 逻辑光标位置 → 节点路径（组件用它落回真实 Selection）。 */

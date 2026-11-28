@@ -224,8 +224,8 @@ const attachments: AttachmentsBridge = {
     ipcRenderer.invoke(ATTACHMENT_CHANNELS.save, request) as Promise<IpcResult<MessageImageDto>>,
   readDataUrl: (id: string): Promise<IpcResult<string>> =>
     ipcRenderer.invoke(ATTACHMENT_CHANNELS.readDataUrl, id) as Promise<IpcResult<string>>,
-  pasteClipboard: (): Promise<IpcResult<ClipboardImageDraft[]>> =>
-    ipcRenderer.invoke(ATTACHMENT_CHANNELS.pasteClipboard) as Promise<
+  pasteClipboard: (limit?: number): Promise<IpcResult<ClipboardImageDraft[]>> =>
+    ipcRenderer.invoke(ATTACHMENT_CHANNELS.pasteClipboard, limit) as Promise<
       IpcResult<ClipboardImageDraft[]>
     >
 }

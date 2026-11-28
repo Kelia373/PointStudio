@@ -45,7 +45,7 @@ const MIME_BY_EXT: Record<string, MessageImageDto['mimeType']> = {
   '.gif': 'image/gif'
 }
 
-const CLIPBOARD_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const
+const CLIPBOARD_IMAGE_TYPES = IMAGE_MIME_TYPES
 
 /**
  * Electron 45 的 clipboard 是 W3C 风格异步 API：`read()` 返回 ClipboardItem[]，
@@ -108,13 +108,20 @@ export function registerAttachmentsIpc(options: AttachmentsIpcOptions): void {
   )
   ipcMain.handle(
     ATTACHMENT_CHANNELS.pasteClipboard,
-    async (): Promise<IpcResult<ClipboardImageDraft[]>> => {
+    async (_event, limitRaw: unknown): Promise<IpcResult<ClipboardImageDraft[]>> => {
+      const limit =
+        typeof limitRaw === 'number' && Number.isFinite(limitRaw)
+          ? Math.max(1, Math.min(6, Math.floor(limitRaw)))
+          : 6
       try {
         const items = await clipboard.read()
         const drafts: ClipboardImageDraft[] = []
         let uriList = ''
 
         for (const item of items) {
+          if (drafts.length >= limit) {
+            break
+          }
           const imageType = (item.types ?? []).find((type) =>
             (CLIPBOARD_IMAGE_TYPES as readonly string[]).includes(type)
           )
@@ -171,7 +178,8 @@ export function registerAttachmentsIpc(options: AttachmentsIpcOptions): void {
 
         return { ok: true, value: drafts }
       } catch {
-        return { ok: true, value: [] }
+        // 读剪贴板失败要说出来：静默返回空数组时用户只会觉得「按了没反应」。
+        return { ok: false, code: 'E_IMAGE_UNREADABLE' }
       }
     }
   )

@@ -7,6 +7,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  caretAfterRenumber,
   getLogicalCaretOffset,
   nodeLogicalLength,
   parseEditorSegments,
@@ -165,4 +166,21 @@ test('粘贴净化：只留纯文本，统一换行并剥掉重复的图片引�
   // 用户排版不能动：连续空格、缩进、字面量标签都当普通文字。
   assert.equal(sanitizePastedText('  hello  world  '), '  hello  world  ')
   assert.equal(sanitizePastedText('<b>不是富文本</b>'), '<b>不是富文本</b>')
+})
+
+test('删图后光标重定位：按文字字符锚定，不随重新编号漂移', () => {
+  const oldText = '看 [Image #1] 和 [Image #2] 结尾'
+  const next = removeImageSlot(oldText, [image(1), image(2)], 1)
+  assert.equal(next.text, '看 和 [Image #1] 结尾')
+
+  // 光标原来在第二张图之后（#2 结束处）：重排后应对应新的 #1 之后。
+  const caretAfterSecond = oldText.indexOf('[Image #2]') + '[Image #2]'.length
+  const mapped = caretAfterRenumber(oldText, next.text, caretAfterSecond)
+  assert.equal(next.text.slice(0, mapped), '看 和 [Image #1] ')
+
+  // 光标在整段末尾：钉在末尾，不越过。
+  assert.equal(caretAfterRenumber(oldText, next.text, oldText.length), next.text.length)
+
+  // 光标在第一张图之前：普通文字没变，位置原样。
+  assert.equal(caretAfterRenumber(oldText, next.text, 1), 1)
 })

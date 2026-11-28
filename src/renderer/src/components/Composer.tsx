@@ -23,6 +23,7 @@ import {
   type PendingImage
 } from '../lib/imageTokens'
 import {
+  caretAfterRenumber,
   getLogicalCaretOffset,
   parseEditorSegments,
   sanitizePastedText,
@@ -451,8 +452,13 @@ export default function Composer({
     if (onImagesChange === undefined) {
       return
     }
+    const room = MAX_IMAGES - images.length
+    if (room <= 0) {
+      setHint(`一条消息最多 ${MAX_IMAGES} 张图片`)
+      return
+    }
     try {
-      const result = await window.pointstudio.attachments.pasteClipboard()
+      const result = await window.pointstudio.attachments.pasteClipboard(room)
       if (!result.ok) {
         setHint(describeError(result.code))
         return
@@ -470,9 +476,15 @@ export default function Composer({
     if (onImagesChange === undefined) {
       return
     }
+    const el = editorRef.current
+    const caret = el !== null && document.activeElement === el ? caretOffsetOf(el) : null
     const next = removeImageSlot(draft, images, slot)
     onDraftChange(next.text)
     onImagesChange(next.images)
+    if (caret !== null) {
+      // 重排会缩短后续编号，旧偏移得按文字锚重新定位，否则光标偏几位。
+      pendingCaretRef.current = caretAfterRenumber(draft, next.text, caret)
+    }
   }
 
   // 投影同步：draft / 胶囊编号与 DOM 不一致时按 draft 重建并恢复光标。
@@ -644,7 +656,8 @@ export default function Composer({
     if (el === null || isComposingRef.current) {
       return
     }
-    const value = readEditor(el)
+    // Chromium 在行尾打空格会存成不换行空格：入库前归一，避免正文/标题带 U+00A0。
+    const value = readEditor(el).replace(/\u00a0/g, ' ')
     const caret = caretOffsetOf(el) ?? value.length
     setHint(null)
 
@@ -718,7 +731,7 @@ export default function Composer({
             const removed = removeImageSlot(hit.text, images, hit.removedSlot)
             onDraftChange(removed.text)
             onImagesChange(removed.images)
-            pendingCaretRef.current = hit.caret
+            pendingCaretRef.current = caretAfterRenumber(draft, removed.text, hit.caret)
             return
           }
         }

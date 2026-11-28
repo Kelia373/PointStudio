@@ -222,7 +222,7 @@ export interface ClipboardImageDraft {
 export interface AttachmentsBridge {
   save: (request: SaveAttachmentRequest) => Promise<IpcResult<MessageImageDto>>
   readDataUrl: (id: string) => Promise<IpcResult<string>>
-  pasteClipboard: () => Promise<IpcResult<ClipboardImageDraft[]>>
+  pasteClipboard: (limit?: number) => Promise<IpcResult<ClipboardImageDraft[]>>
 }
 
 export interface MessageDto {
