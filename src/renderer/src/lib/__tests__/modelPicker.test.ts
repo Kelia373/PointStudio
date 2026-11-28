@@ -254,3 +254,28 @@ test('P2-A：unselectableModels 仍持久化，-free 灰显不因重启丢失', 
     '仅官方客户端'
   )
 })
+
+test('P3-2：serialize 不写能力画像，但保留 unselectableModels', () => {
+  const services = createDefaultModelServicesState()
+  const marked = {
+    ...services,
+    api: services.api.map((provider) =>
+      provider.id === 'opencode-go'
+        ? {
+            ...provider,
+            modelCapabilities: {
+              'kimi-k2.5': {
+                supportsTools: true,
+                supportedEfforts: ['low', 'mid', 'high'] as ReasoningEffortDto[],
+                effortMode: 'reasoning_effort' as const
+              }
+            },
+            unselectableModels: { 'glm-4.5-free': '仅官方客户端' }
+          }
+        : provider
+    )
+  }
+  const raw = serializeModelServicesState(marked)
+  assert.equal(raw.includes('modelCapabilities'), false, '能力画像不落 localStorage')
+  assert.equal(raw.includes('unselectableModels'), true, '不可选标记仍保留')
+})

@@ -142,7 +142,7 @@ export async function* parseOpenAiSseStream(
 }
 
 // OpenAI 兼容网关普遍只认 low/medium/high；xhigh/max 夹到 high，避免 400。
-const OPENAI_EFFORT: Record<string, string> = {
+export const OPENAI_EFFORT: Record<string, string> = {
   low: 'low',
   mid: 'medium',
   high: 'high',

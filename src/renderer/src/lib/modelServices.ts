@@ -502,7 +502,17 @@ export function createDefaultModelServicesState(): ModelServicesState {
 
 
 export function serializeModelServicesState(state: ModelServicesState): string {
-  return JSON.stringify(state)
+  // 能力画像是本次会话的临时缓存（重启两侧一起回退规则表），不写进 localStorage；
+  // unselectableModels 是静态标记，照常保留。
+  const strip = <T extends { modelCapabilities?: unknown }>(provider: T): Omit<T, 'modelCapabilities'> => {
+    const { modelCapabilities: _ignored, ...rest } = provider
+    return rest
+  }
+  return JSON.stringify({
+    ...state,
+    api: state.api.map(strip),
+    local: state.local.map(strip)
+  })
 }
 
 /**

@@ -261,3 +261,29 @@ test('Anthropic 线：thinking budget 与首条 assistant 裁剪', async () => {
     }
   )
 })
+
+test('OpenCode Go 的 OpenAI 线同样夹紧 xhigh/max（与通用兼容线共用一张表）', async () => {
+  await withServer(
+    (_request, response) => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.write('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n')
+      response.write('data: [DONE]\n\n')
+      response.end()
+    },
+    async (baseUrl, requests) => {
+      const provider = new OpencodeGoProvider()
+      for await (const _chunk of provider.streamChat({
+        apiKey: 'oc_sk_test',
+        baseUrl,
+        model: 'gpt-5.2-codex',
+        supportedEfforts: ['low', 'mid', 'high', 'xhigh'],
+        messages: [{ role: 'user', content: 'hi' }],
+        params: { effort: 'xhigh' }
+      })) {
+        // 消费
+      }
+      const body = JSON.parse(requests[0].body) as Record<string, unknown>
+      assert.equal(body.reasoning_effort, 'high')
+    }
+  )
+})

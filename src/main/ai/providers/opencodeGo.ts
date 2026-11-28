@@ -14,7 +14,7 @@ import {
   type ChatStreamRequest,
   type TokenUsageSample
 } from './types.ts'
-import { parseOpenAiSseStream } from './openaiCompatible.ts'
+import { OPENAI_EFFORT, parseOpenAiSseStream } from './openaiCompatible.ts'
 
 export const OPENCODE_GO_DEFAULT_BASE_URL = 'https://opencode.ai/inference/go/openai/v1'
 export const OPENCODE_GO_DEFAULT_MODEL = 'kimi-k2.5'
@@ -22,7 +22,6 @@ export const OPENCODE_USER_AGENT = 'PointStudio/0.1'
 /** 没有会话 id 时的稳定兜底，避免每次请求都被判成新会话。 */
 export const OPENCODE_FALLBACK_SESSION = 'pointstudio-local'
 
-const OPENAI_EFFORT: Record<string, string> = { low: 'low', mid: 'medium', high: 'high', xhigh: 'xhigh', max: 'max' }
 const THINKING_BUDGET: Record<string, number> = { low: 1024, mid: 2048, high: 4096, xhigh: 8192, max: 16384 }
 
 export type OpencodeWire = 'openai' | 'anthropic'
