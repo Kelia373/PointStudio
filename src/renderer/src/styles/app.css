@@ -5622,3 +5622,143 @@ select:focus {
   opacity: 0.4;
   cursor: default;
 }
+/* ------------------------------------------------------------ 聊天附图 */
+.msg__thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+.thumb {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-card);
+  overflow: hidden;
+  background: var(--panel-2);
+}
+
+.thumb__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb__pending {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--raise);
+}
+
+.thumb__badge {
+  position: absolute;
+  left: var(--sp-1);
+  bottom: var(--sp-1);
+  padding: 0 var(--sp-1);
+  border-radius: var(--rad-pill);
+  background: var(--mask-bg);
+  color: var(--fg);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+.image-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  margin: 0 2px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-pill);
+  background: var(--raise);
+  color: var(--fg-2);
+  font-size: var(--fs-xs);
+  vertical-align: baseline;
+}
+
+.image-chip:hover {
+  color: var(--fg);
+}
+
+.msg__inline-text {
+  white-space: pre-wrap;
+}
+
+/* 灯箱：全屏遮罩 + 居中大图 */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+}
+
+.lightbox__mask {
+  position: absolute;
+  inset: 0;
+  background: var(--mask-bg);
+}
+
+.lightbox__head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--fg);
+  font-size: var(--fs-sm);
+}
+
+.lightbox__close {
+  padding: 0 var(--sp-2);
+  height: 28px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--rad-ctl);
+  color: var(--fg-2);
+  font-size: var(--fs-xs);
+}
+
+.lightbox__img {
+  position: relative;
+  max-width: 90vw;
+  max-height: 84vh;
+  object-fit: contain;
+  border-radius: var(--rad-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.lightbox__loading {
+  position: relative;
+  color: var(--fg-3);
+  font-size: var(--fs-sm);
+}
+
+.lightbox__nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--rad-pill);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  color: var(--fg);
+  font-size: var(--fs-h3);
+}
+
+.lightbox__nav--prev {
+  left: var(--sp-4);
+}
+
+.lightbox__nav--next {
+  right: var(--sp-4);
+}

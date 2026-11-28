@@ -27,7 +27,10 @@ import { isChatSendRequest, isUuid } from './validators.ts'
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-function toChatErrorCode(error: unknown): 'E_UPSTREAM' | 'E_INTERNAL' {
+function toChatErrorCode(error: unknown): 'E_UPSTREAM' | 'E_INTERNAL' | 'E_VISION_UNSUPPORTED' {
+  if (error instanceof Error && error.message === 'E_VISION_UNSUPPORTED') {
+    return 'E_VISION_UNSUPPORTED'
+  }
   return error instanceof ProviderError ? 'E_UPSTREAM' : 'E_INTERNAL'
 }
 
@@ -39,6 +42,8 @@ export interface ChatIpcOptions {
   retrieval?: { search(query: string): Promise<SearchHit[]> }
   /** 真实用量落账本；不注入则不记录。 */
   onUsageRecorded?: ChatFlowDeps['onUsageRecorded']
+  /** 读取附图 base64；不注入则带图消息按无图处理（本地假回复也能跑）。 */
+  readImage?: ChatFlowDeps['readImage']
 }
 
 /** 注册聊天域的通道。由组合根（src/main/index.ts）在窗口就绪前调用一次。 */
@@ -75,11 +80,13 @@ async function streamReply(
   onSettled: () => void
 ): Promise<void> {
   const { id, conversationId, text } = request
+  const images = request.images ?? []
   try {
     for await (const chunk of streamAssistantReply(conversationId, text, {
       conversations: options.conversations,
       assistants: options.assistants,
       engine: options.engine,
+      ...(options.readImage ? { readImage: options.readImage } : {}),
       ...(request.assistantId ? { assistantOverride: request.assistantId } : {}),
       signal,
       retrieval: options.retrieval,
@@ -109,7 +116,7 @@ async function streamReply(
           sender.send(CHAT_CHANNELS.notice, { id, droppedCount } satisfies ChatNoticeEvent)
         }
       }
-    })) {
+    }, images)) {
       if (sender.isDestroyed()) {
         return
       }

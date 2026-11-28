@@ -1,3 +1,5 @@
+import type { ImageMimeTypeDto } from '../../../shared/types/ipc.ts'
+
 // ai/domain/context —— 上下文窗口的裁剪规则。
 //
 // 目标不是「精确算 token」（各家 tokenizer 不同、还要下载词表），而是
@@ -9,7 +11,12 @@ export type ContextRole = 'system' | 'user' | 'assistant'
 export interface ContextMessage {
   role: ContextRole
   content: string
+  /** 附图（仅用户消息）：内容是读出来的 base64，随消息一起裁。 */
+  images?: Array<{ mimeType: ImageMimeTypeDto; base64: string }>
 }
+
+/** 一张图在上下文预算里按这个常量折算：只用于裁剪，不用于计费。 */
+export const IMAGE_CONTEXT_TOKENS = 512
 
 export interface TrimOptions {
   /** 最多保留多少条历史消息。 */
@@ -66,7 +73,10 @@ export function trimHistory(history: ContextMessage[], options: TrimOptions): Tr
     let used = 0
     let index = history.length - 1
     while (index >= start) {
-      const cost = estimateTokens(history[index].content)
+      const item = history[index]
+      // 图片折算成固定常量：不读像素，只保证「带图的轮次」别把窗口挤爆。
+      const cost =
+        estimateTokens(item.content) + (item.images?.length ?? 0) * IMAGE_CONTEXT_TOKENS
       const isLast = index === history.length - 1
       if (!isLast && used + cost > maxTokens) {
         start = index + 1

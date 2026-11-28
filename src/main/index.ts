@@ -337,19 +337,37 @@ void app.whenReady().then(async () => {
   }
 
   // 先注册通道再建窗，避免窗口刚起来就发消息、handler 还没就位。
-  registerConversationIpc({ conversations: services.conversations })
+  const attachments = new AttachmentService(
+    buildDataPaths(app.getPath('userData')).attachmentsDir,
+    { newId: () => randomUUID() }
+  )
+
+  /** 全库剩余的图片引用集：分叉共享的历史图片必须算在内。 */
+  const collectReferencedImages = async (): Promise<Set<string>> => {
+    const ids = new Set<string>()
+    for (const conversation of await services.conversations.list()) {
+      for (const message of await services.conversations.listMessages(conversation.id)) {
+        for (const image of message.images ?? []) {
+          ids.add(image.id)
+        }
+      }
+    }
+    return ids
+  }
+
+  registerConversationIpc({
+    conversations: services.conversations,
+    onMessagesChanged: async () => {
+      await attachments.pruneUnreferenced(await collectReferencedImages())
+    }
+  })
   registerWorkspaceIpc({
     workspace: services.workspace,
     importer: services.importer,
     readStoredFile: (relativePath) => readFile(join(services.workspaceRoot, relativePath), 'utf8')
   })
   registerBackupIpc({ backup: services.backup })
-  registerAttachmentsIpc({
-    attachments: new AttachmentService(
-      buildDataPaths(app.getPath('userData')).attachmentsDir,
-      { newId: () => randomUUID() }
-    )
-  })
+  registerAttachmentsIpc({ attachments })
   registerClipboardIpc()
 
   // 工具注册表：内置只读工具 + 工作区读取。MCP 工具待传输层落地后再注册。
@@ -394,6 +412,11 @@ void app.whenReady().then(async () => {
     conversations: services.conversations,
     assistants: services.assistants,
     engine,
+    // 附图：只读 base64 交给三套协议，图片本身永不进 messages.json。
+    readImage: async (id) => {
+      const read = await attachments.readBase64(id)
+      return read.ok ? read.value : null
+    },
     // 真实用量落本地账本（按服务商 + 助手聚合，供「设置 → 用量」展示）。
     onUsageRecorded: async (record) => {
       await services.ledger.record(record)

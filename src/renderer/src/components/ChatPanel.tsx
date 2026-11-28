@@ -1656,8 +1656,7 @@ export default function ChatPanel() {
                       onChanged: () => setMemoryTick((value) => value + 1)
                     },
                     // 助手身份栏：头像 + Agent 名 + 厂商图标/模型名（仿 Cherry Studio）
-                    assistantMeta:
-                      message.role === 'assistant'
+                    assistantMeta:                      message.role === 'assistant'
                         ? {
                             agentId: boundAssistant?.id ?? DEFAULT_ASSISTANT_ID,
                             name: boundAssistant?.name ?? '通用助手',
@@ -1665,7 +1664,8 @@ export default function ChatPanel() {
                             providerId: activeProviderId,
                             modelLabel: activeModelLabel === '' ? null : activeModelLabel
                           }
-                        : null
+                        : null,
+                    images: message.images ?? []
                   }}
                 />
               ))}

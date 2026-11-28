@@ -5,13 +5,20 @@
 // 本文件禁止 import electron / react，也禁止自己读环境变量或配置文件——
 // 密钥、baseUrl 一律由外壳注入进来。
 
-import type { ReasoningEffortDto } from '../../../shared/types/ipc.ts'
+import type { ImageMimeTypeDto, ReasoningEffortDto } from '../../../shared/types/ipc.ts'
 
 export type ChatRole = 'system' | 'user' | 'assistant'
 
 export interface ChatMessageInput {
   role: ChatRole
   content: string
+  /** 附图：由 chatFlow 从 attachments/ 读出 base64 后填入；无图消息不带此字段。 */
+  images?: ChatMessageImage[]
+}
+
+export interface ChatMessageImage {
+  mimeType: ImageMimeTypeDto
+  base64: string
 }
 
 export interface ChatStreamParams {

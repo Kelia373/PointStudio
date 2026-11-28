@@ -6,7 +6,7 @@
 //
 // 约定：所有函数**返回新数组**，不修改入参——React 靠引用变化判断是否重渲染。
 
-import type { RouteDecisionDto, HandoffEnvelopeDto } from '../../../shared/types/ipc.ts'
+import type { RouteDecisionDto, HandoffEnvelopeDto, MessageImageDto } from '../../../shared/types/ipc.ts'
 
 export type UiMessageStatus = 'complete' | 'error' | 'streaming'
 
@@ -25,6 +25,8 @@ export interface UiMessage {
   /** 模型思考内容 */
   reasoning?: string
   reasoningMs?: number
+  /** 附图元数据（用户提问才有）。 */
+  images?: MessageImageDto[]
 }
 
 /**

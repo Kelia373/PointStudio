@@ -14,6 +14,7 @@ import {
   type ChatStreamRequest,
   type TokenUsageSample
 } from './types.ts'
+import { toOpenAiMessages } from './wireMessages.ts'
 
 interface DeltaPayload {
   choices?: Array<{
@@ -200,7 +201,7 @@ export class OpenAiCompatibleProvider implements ChatProvider {
     const baseUrl = (request.baseUrl || this.defaultBaseUrl).replace(/\/+$/, '')
     const body = JSON.stringify({
       model: request.model || this.defaultModel,
-      messages: request.messages,
+      messages: toOpenAiMessages(request.messages),
       stream: true,
       stream_options: { include_usage: true },
       ...(request.params?.temperature !== undefined
