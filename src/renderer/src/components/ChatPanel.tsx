@@ -9,7 +9,14 @@ import type {
 import { DEFAULT_ASSISTANT_ID } from '../../../shared/types/ipc.ts'
 import { describeError } from '../../../shared/i18n/errors.ts'
 import { splitMessages, studioStore, useField, useStudioSlice } from '../store/studioStore.ts'
-import { appendChunk, appendReasoning, markStatus, startTurn, type UiMessage } from '../lib/chatState'
+import {
+  appendChunk,
+  appendReasoning,
+  markStatus,
+  startTurn,
+  storedToUiMessages,
+  type UiMessage
+} from '../lib/chatState'
 import { copyToClipboard } from '../lib/clipboard'
 import {
   AUTO_ROUTE_MODEL,
@@ -57,6 +64,7 @@ import {
   resolvePickerModelCapabilities
 } from '../lib/modelPicker'
 import { renumber, type PendingImage } from '../lib/imageTokens'
+import type { MessageImageDto } from '../../../shared/types/ipc.ts'
 import { AGENT_GROUPS_KEY, parseAgentGroups } from '../lib/agentGroups'
 import { findAgentHomeConversation } from '../lib/conversationBuckets'
 import { computeAgentBenchStatus, type AgentLightState } from '../lib/dispatchFilter'
@@ -165,6 +173,11 @@ export default function ChatPanel() {
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([])
   // 本轮快照：onError 兜底回滚时用（后端未落库时把内容还回输入框）。
   const inflightSnapshot = useRef<{ text: string; images: PendingImage[] } | null>(null)
+  // onError 的订阅闭包会用到「最新」草稿，用 ref 避开展示层陈旧闭包。
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+  const pendingImagesRef = useRef(pendingImages)
+  pendingImagesRef.current = pendingImages
   // 群聊里被 @ 的成员：发送时只有恰好一个时由该成员接管本轮。
   const [mentionedIds, setMentionedIds] = useState<string[]>([])
   // 小组增删改成员后自增，避免 @ 候选每帧去 localStorage 解析一次。
@@ -376,18 +389,7 @@ export default function ChatPanel() {
 
   const loadMessages = useCallback(async (conversationId: string): Promise<void> => {
     const stored = await window.pointstudio.conversations.messages(conversationId)
-    setMessages(
-      stored.map((message) => ({
-        id: message.id,
-        role: message.role,
-        content: message.content,
-        status: message.status,
-        references: message.references,
-        ...(message.reasoning ? { reasoning: message.reasoning } : {}),
-        ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
-        route: message.route ?? null
-      }))
-    )
+    setMessages(storedToUiMessages(stored))
   }, [])
 
   // 订阅主进程推回来的流式事件。返回的清理函数必须调用，否则会重复追加。
@@ -414,6 +416,8 @@ export default function ChatPanel() {
     })
 
     const offDone = window.pointstudio.chat.onDone(({ id }) => {
+      // 真正有产出/结束才丢弃快照；error 分支需要它回滚。
+      inflightSnapshot.current = null
       setMessages((prev) => markStatus(prev, id, 'complete'))
       setBusy(false)
       setInflightId(null)
@@ -548,15 +552,24 @@ export default function ChatPanel() {
    */
   async function submit(
     textOverride?: string,
-    routeOverride?: RouteDecisionDto | null
+    routeOverride?: RouteDecisionDto | null,
+    imagesOverride?: MessageImageDto[]
   ): Promise<void> {
     const text = (textOverride ?? draft).trim()
     const conversationId = activeId
-    // 唯一快照：乐观气泡、请求、失败回填都用它，避免「显示 2 张、发 1 张」。
-    const snapshot = {
-      text: textOverride ?? draft,
-      images: pendingImages
-    }
+    // 唯一快照。历史重发（给了 textOverride）不读输入框里的待发图，
+    // 否则会把用户正在打的图片偷塞进历史请求。
+    const snapshot =
+      textOverride === undefined
+        ? { text: textOverride ?? draft, images: pendingImages }
+        : {
+            text: textOverride,
+            images: (imagesOverride ?? []).map((dto, index) => ({
+              index: index + 1,
+              dto,
+              previewUrl: ''
+            }))
+          }
     const outgoingImages = snapshot.images.map((image) => image.dto)
     if ((text === '' && outgoingImages.length === 0) || busy || !conversationId) {
       return
@@ -631,8 +644,8 @@ export default function ChatPanel() {
     if (result.ok) {
       setMode(result.mode)
       setMentionedIds([])
-      // 快照用完即弃：成功路径不需要回填。
-      inflightSnapshot.current = null
+      // 不能在这里清快照：主进程先同步返回 ok，再异步推 error（视觉拦截走这条），
+      // 提前清会让 onError 的回滚拿不到内容。清空点放在 onDone / 首个 chunk。
       return
     }
     setMessages((prev) => markStatus(prev, requestId, 'error', `（${describeError(result.code)}）`))
@@ -652,14 +665,16 @@ export default function ChatPanel() {
     if (text.trim() === '' && images.length === 0) {
       return
     }
-    const hasNewContent = draft.trim() !== '' || pendingImages.length > 0
+    const latestDraft = draftRef.current
+    const latestImages = pendingImagesRef.current
+    const hasNewContent = latestDraft.trim() !== '' || latestImages.length > 0
     if (!hasNewContent) {
       setDraft(text)
       setPendingImages(images)
       return
     }
-    const mergedImages = [...images, ...pendingImages]
-    const mergedText = text === '' ? draft : draft === '' ? text : `${text}\n${draft}`
+    const mergedImages = [...images, ...latestImages]
+    const mergedText = text === '' ? latestDraft : latestDraft === '' ? text : `${text}\n${latestDraft}`
     const merged = renumber(mergedText, mergedImages)
     setDraft(merged.text)
     setPendingImages(merged.images)
@@ -1709,7 +1724,8 @@ export default function ChatPanel() {
                     onDelete: () => void removeTurn(message.id),
                     ...(message.role === 'user'
                       ? {
-                          onResend: () => void submit(message.content),
+                          onResend: () =>
+                            void submit(message.content, null, message.images ?? []),
                           onEdit: (next: string) => void editAndResend(message.id, next)
                         }
                       : {}),

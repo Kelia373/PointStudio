@@ -120,3 +120,30 @@ export function removeMessage(messages: UiMessage[], id: string): UiMessage[] {
   const next = messages.filter((message) => message.id !== id)
   return next.length === messages.length ? messages : next
 }
+
+/** 把落库消息映射成界面消息：**必须带上 images**，否则 onDone 覆盖后附图会消失。 */
+export function storedToUiMessages(
+  stored: ReadonlyArray<{
+    id: string
+    role: 'user' | 'assistant'
+    content: string
+    status: 'complete' | 'error'
+    references?: Array<{ chunkId: string; source: string }>
+    reasoning?: string
+    reasoningMs?: number
+    route?: RouteDecisionDto | null
+    images?: MessageImageDto[]
+  }>
+): UiMessage[] {
+  return stored.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+    status: message.status,
+    references: message.references,
+    ...(message.reasoning ? { reasoning: message.reasoning } : {}),
+    ...(typeof message.reasoningMs === 'number' ? { reasoningMs: message.reasoningMs } : {}),
+    ...(message.images && message.images.length > 0 ? { images: message.images } : {}),
+    route: message.route ?? null
+  }))
+}
