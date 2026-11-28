@@ -41,6 +41,7 @@ import { Overridable, Slot, useRegistryVersion } from '../runtime/SlotRenderer'
 import Icon from './Icon'
 import SessionItem from './SessionItem'
 import AgentAvatar from './AgentAvatar'
+import FloatingMenu from './FloatingMenu'
 
 const RUN_STATUS_LABEL: Record<AgentWorkerRunDto['status'], string> = {
   working: '执行中',
@@ -975,11 +976,10 @@ export default function Sidebar({
               setFilterMenu(null)
             }}
           />
-          <div
+          <FloatingMenu
+            anchor={{ x: filterMenu.x, y: filterMenu.y }}
             className="side__filter"
-            style={{ left: filterMenu.x, top: filterMenu.y }}
-            role="menu"
-            aria-label="分组排序筛选"
+            ariaLabel="分组排序筛选"
           >
             <span className="side__filter-head">分组</span>
             <button
@@ -1025,7 +1025,7 @@ export default function Sidebar({
               隐藏已停用的 Agent
             </button>
             <span className="side__filter-note">小组协同 · 路由拆解待接入</span>
-          </div>
+          </FloatingMenu>
         </>
       ) : null}
 
@@ -1040,11 +1040,10 @@ export default function Sidebar({
               setAddMenu(null)
             }}
           />
-          <div
+          <FloatingMenu
+            anchor={{ x: addMenu.x, y: addMenu.y }}
             className="side__filter"
-            style={{ left: addMenu.x, top: addMenu.y }}
-            role="menu"
-            aria-label="新增"
+            ariaLabel="新增"
           >
             <button
               className="side__filter-item"
@@ -1067,7 +1066,7 @@ export default function Sidebar({
             >
               新建小组
             </button>
-          </div>
+          </FloatingMenu>
         </>
       ) : null}
 
@@ -1082,7 +1081,7 @@ export default function Sidebar({
               setMenu(null)
             }}
           />
-          <div className="ctx-menu" style={{ left: menu.x, top: menu.y }} role="menu">
+          <FloatingMenu anchor={{ x: menu.x, y: menu.y }} className="ctx-menu">
             <span className="ctx-menu__head">{menuAgent.name}</span>
             <button
               className="ctx-menu__item"
@@ -1114,7 +1113,7 @@ export default function Sidebar({
                   : item.label}
               </button>
             ))}
-          </div>
+          </FloatingMenu>
         </>
       ) : null}
 
@@ -1191,11 +1190,10 @@ export default function Sidebar({
             }
             const nowIso = (): string => new Date().toISOString()
             return (
-              <div
+              <FloatingMenu
+                anchor={{ x: groupMenu.x, y: groupMenu.y }}
                 className="side__group-menu"
-                role="menu"
-                aria-label={`小组 ${target.name} 菜单`}
-                style={{ left: groupMenu.x, top: groupMenu.y }}
+                ariaLabel={`小组 ${target.name} 菜单`}
               >
                 <button
                   className="side__group-menu-item"
@@ -1307,7 +1305,7 @@ export default function Sidebar({
                     </button>
                   </div>
                 ) : null}
-              </div>
+              </FloatingMenu>
             )
           })()
         : null}

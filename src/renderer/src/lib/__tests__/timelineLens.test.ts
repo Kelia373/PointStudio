@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 
 import {
   groupTimelineByDay,
+  hasConclusionMark,
   shouldCollapse,
   splitProcessAndConclusion,
   toggleLens,
@@ -38,6 +39,17 @@ test('只有够长且真的有过程轨时才折叠', () => {
   const long = `${'过程描述'.repeat(80)}\n\n结论：改缓存`
   assert.equal(shouldCollapse(splitProcessAndConclusion(long), long), true)
   assert.equal(shouldCollapse(splitProcessAndConclusion('结论：短'), '结论：短'), false)
+})
+
+test('显式「结论：」才算真双轨；只是段落多的长答案不算', () => {
+  assert.equal(hasConclusionMark('先分析\n\n结论：改缓存'), true)
+  assert.equal(hasConclusionMark('先写步骤\n\n综上：这样就行'), true)
+  // 标记在最前面：前面没有过程，算不上双轨。
+  assert.equal(hasConclusionMark('结论：这样就行'), false)
+  // 没有标记时，末段被当成结论只是兜底，UI 不该拿它折叠整篇答案。
+  assert.equal(hasConclusionMark('第一段\n\n第二段\n\n第三段'), false)
+  assert.equal(hasConclusionMark('结论：'), false, '标记后面没内容不算')
+  assert.equal(hasConclusionMark(''), false)
 })
 
 test('时间线按天分组，新的一天排在前面', () => {

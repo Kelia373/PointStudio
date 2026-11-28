@@ -27,6 +27,8 @@ import {
 } from '../lib/modelPicker'
 import Icon from './Icon'
 import ProviderLogo from './ProviderLogo'
+import { useAnchoredPanel } from '../lib/useAnchoredPanel'
+import type { AnchorRect } from '../lib/floatingPlacement'
 
 export interface ModelPickerSelection {
   providerId: string | null
@@ -79,11 +81,14 @@ export default function ModelPickerPopover({
   // 刷新后父组件不一定立刻重渲染：这里留一份本地副本，保证列表即时更新。
   const [localServices, setLocalServices] = useState<ModelServicesState | null>(null)
   const effectiveServices = localServices ?? services
-  const [position, setPosition] = useState<{ left: number; top: number; width: number } | null>(
-    null
+  // 浮层位置：量完再显示；下方放不下会自动翻到上方（输入栏在窗口底部）。
+  const [anchor, setAnchor] = useState<AnchorRect | null>(null)
+  const panelWidth = Math.max(300, anchor?.width ?? 300)
+  const { ref: panelRef, style: panelStyle } = useAnchoredPanel<HTMLDivElement>(
+    open ? anchor : null,
+    { width: panelWidth, gap: 6, margin: 12 }
   )
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setLocalServices(null)
@@ -129,11 +134,13 @@ export default function ModelPickerPopover({
   function toggle(): void {
     if (!open && triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect()
-      const width = Math.max(300, rect.width)
-      setPosition({
-        left: Math.min(rect.left, window.innerWidth - width - 12),
-        top: rect.bottom + 6,
-        width
+      setAnchor({
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        width: rect.width,
+        height: rect.height
       })
     }
     setMessage(null)
@@ -204,13 +211,13 @@ export default function ModelPickerPopover({
         <Icon name="arrow-down" size={12} />
       </button>
 
-      {open && position ? (
+      {open && anchor ? (
         <div
           ref={panelRef}
           className="model-picker__panel"
           role="dialog"
           aria-label="选择模型"
-          style={{ left: position.left, top: position.top, width: position.width }}
+          style={panelStyle}
         >
           <div className="model-picker__rail" role="tablist" aria-label="模型来源">
             {providers.map((provider) => (

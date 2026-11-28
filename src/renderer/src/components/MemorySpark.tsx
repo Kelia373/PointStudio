@@ -7,6 +7,8 @@ import {
   loadMemories,
   saveMemories
 } from '../lib/memorySpark'
+import type { AnchorRect } from '../lib/floatingPlacement'
+import FloatingMenu from './FloatingMenu'
 import Icon from './Icon'
 
 export interface MemorySparkProps {
@@ -30,15 +32,25 @@ export default function MemorySpark({
   const [text, setText] = useState('')
   const [scope, setScope] = useState<'global' | 'project'>('global')
   const [saved, setSaved] = useState(false)
+  const [anchor, setAnchor] = useState<AnchorRect | null>(null)
 
   if (!agentId) {
     return null
   }
 
-  function begin(): void {
+  function begin(event: React.MouseEvent<HTMLButtonElement>): void {
     const candidate = detectMemoryCandidate('', content)
     setText(candidate?.suggestedText ?? content.slice(0, 80))
     setScope(candidate?.defaultScope ?? 'global')
+    const rect = event.currentTarget.getBoundingClientRect()
+    setAnchor({
+      top: rect.top,
+      bottom: rect.bottom,
+      left: rect.left,
+      right: rect.right,
+      width: rect.width,
+      height: rect.height
+    })
     setOpen(true)
   }
 
@@ -74,7 +86,7 @@ export default function MemorySpark({
       {open ? (
         <>
           <span className="spark__mask" role="presentation" onClick={() => setOpen(false)} />
-          <div className="spark-panel" role="dialog" aria-label="钉入记忆">
+          <FloatingMenu anchor={anchor} className="spark-panel" role="dialog" ariaLabel="钉入记忆" align="end">
             <textarea
               className="spark-panel__text"
               value={text}
@@ -102,7 +114,7 @@ export default function MemorySpark({
                 确认钉入
               </button>
             </div>
-          </div>
+          </FloatingMenu>
         </>
       ) : null}
     </span>
