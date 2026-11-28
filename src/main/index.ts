@@ -1,5 +1,6 @@
-import { app, BrowserWindow, Menu } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
@@ -16,6 +17,7 @@ import type { UsageLedgerRecord } from './ai/domain/usageLedger.ts'
 import { resolveProviderConfig, type ProviderSettings } from './ai/domain/providerSettings.ts'
 import { JsonFileStore } from './data/fileStore.ts'
 import { buildDataPaths } from './core/paths.ts'
+import { resolveAppIconPath } from './core/appIcon.ts'
 import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
@@ -42,11 +44,29 @@ import { ProviderSettingsService } from './services/providerSettingsService.ts'
 import { ProviderAccountsService } from './services/providerAccountsService.ts'
 import { UsageLedgerService } from './services/usageLedgerService.ts'
 
+// Windows 任务栏归并到 Electron 默认图标是 AppUserModelId 缺失导致的：
+// 必须在 ready 之前设置，开发态（pnpm dev）才不会被并到 electron.exe 下。
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.pointstudio.app')
+}
+
 // 这个文件只做三件事：创建窗口、加载页面、处理平台生命周期。
 // 它是组合根：负责把内核目录接起来（注册通道、注入存储与凭据），但自己不含业务逻辑。
 
 function createWindow(): void {
+  // 开发态/打包态都先解析一次图标；找不到就退回 Electron 默认图标。
+  const iconPath = resolveAppIconPath({
+    platform: process.platform,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    isPackaged: app.isPackaged,
+    exists: existsSync
+  })
+  const iconImage = iconPath ? nativeImage.createFromPath(iconPath) : null
+  const appIcon = iconImage && !iconImage.isEmpty() ? iconImage : null
+
   const window = new BrowserWindow({
+    ...(appIcon ? { icon: appIcon } : {}),
     // 三栏（64 + 主区 + 320）在这个尺寸下才不会互相压扁；
     // 再小就交给 CSS 折叠：侧栏变图标轨、检查器可收起。
     width: 1280,
@@ -70,6 +90,16 @@ function createWindow(): void {
         window.webContents.toggleDevTools()
       }
     })
+  }
+
+  if (appIcon) {
+    // Windows 任务栏/标题栏显式 setIcon 兜底；macOS 开发态更新 Dock。
+    if (process.platform === 'win32') {
+      window.setIcon(appIcon)
+    }
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      app.dock?.setIcon(appIcon)
+    }
   }
 
   // 等首帧就绪再显示，避免看到白屏闪烁。

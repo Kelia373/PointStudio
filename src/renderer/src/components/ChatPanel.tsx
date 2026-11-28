@@ -31,6 +31,7 @@ import { registry } from '../runtime/registry'
 import { Overridable, Slot } from '../runtime/SlotRenderer'
 import Annotate from './Annotate'
 import AgentCreateDialog from './AgentCreateDialog'
+import BrandLogo from './BrandLogo'
 import DispatchPill from './DispatchPill'
 import MemoryWakeBar from './MemoryWakeBar'
 import PlanLens from './PlanLens'
@@ -997,9 +998,7 @@ export default function ChatPanel() {
       <div className={`shell${sideCollapsed ? ' shell--collapsed' : ''}`}>
         <div className="shell__top">
           <div className="brand">
-            <span className="brand__logo" aria-hidden="true">
-              P
-            </span>
+            <BrandLogo variant="tile" size={26} className="brand__logo" />
             <span className="brand__name">PointStudio</span>
             <button
               className="brand__toggle"
@@ -1691,6 +1690,7 @@ export default function ChatPanel() {
         <span className="appbar__spacer" />
         <Slot name="appbar.right" props={{}} />
         <span className="appbar__item appbar__item--right">
+          <BrandLogo variant="mark" size={12} className="appbar__brand" />
           {appbarRight({
             sessionCount: conversations.length,
             version: `Electron ${window.pointstudio.electronVersion}`

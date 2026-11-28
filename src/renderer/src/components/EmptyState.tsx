@@ -1,5 +1,7 @@
 // 空状态：给四张建议卡，点一张就把话填进输入框（不直接发送，用户可以改）。
 // 卡片文案只承诺现有能力：普通对话、计划模式。没有「联网搜索」这类我们还没有的东西。
+import BrandLogo from './BrandLogo'
+
 const SUGGESTIONS = [
   {
     title: '拆验收清单',
@@ -40,6 +42,7 @@ export default function EmptyState({
   return (
     <div className="empty">
       <div className="empty__head">
+        <BrandLogo variant="tile" size={40} className="empty__logo" />
         <h2 className="empty__title">今天想做什么</h2>
         <p className="empty__sub">{sub}</p>
       </div>

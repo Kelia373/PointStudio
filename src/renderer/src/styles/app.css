@@ -178,16 +178,11 @@ select:focus {
 }
 
 .brand__logo {
-  display: grid;
-  place-items: center;
+  display: block;
   width: 26px;
   height: 26px;
   flex: none;
   border-radius: var(--rad-ctl);
-  background: var(--accent);
-  color: var(--on-accent);
-  font-size: var(--fs-md);
-  font-weight: 700;
   letter-spacing: -0.02em;
 }
 
@@ -4892,4 +4887,30 @@ select:focus {
   padding: var(--sp-2);
   color: var(--fg-3);
   font-size: var(--fs-sm);
+}
+
+
+/* 品牌图标 D1：空状态 / 助手消息头 / 状态栏 */
+.empty__logo {
+  display: block;
+  margin-bottom: var(--sp-3);
+}
+
+.msg__author {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+}
+
+.msg__brand {
+  flex: none;
+  color: var(--fg-3);
+}
+
+.appbar__brand {
+  display: inline-block;
+  flex: none;
+  margin-right: var(--sp-1);
+  color: var(--fg-3);
+  vertical-align: -2px;
 }
