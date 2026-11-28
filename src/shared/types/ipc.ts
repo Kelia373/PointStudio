@@ -148,6 +148,8 @@ export interface ConversationDto {
   providerId?: string | null
   /** 小组聊天归属的小组 id；普通会话缺省。 */
   groupId?: string | null
+  /** true 表示绑定 Agent 的常驻主聊天（Home Chat）；缺省/false 为普通或专题会话。 */
+  isHome?: boolean
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParamsDto
   createdAt: string
@@ -245,6 +247,8 @@ export interface CreateConversationRequest {
   workspaceId?: string | null
   /** 小组聊天：绑定到侧栏的小组 id。 */
   groupId?: string | null
+  /** 创建 Agent 的常驻主聊天；必须同时给 assistantId，且不能是小组会话。 */
+  isHome?: boolean
 }
 
 export interface ConversationBridge {

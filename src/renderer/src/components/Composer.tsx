@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { EFFORT_LABEL, MODEL_LABEL, type Effort } from '../lib/modelOptions'
-import { parseSlashCommand } from '../lib/composerCommands'
+import { resolveComposerAction } from '../lib/composerCommands'
 import type { ComposerModelPolicy } from '../lib/modelPicker'
 import { Slot } from '../runtime/SlotRenderer'
 import Icon from './Icon'
@@ -161,40 +161,58 @@ export default function Composer({
   function applyCommand(command: string): void {
     setMenu(null)
     if (command === '/plan') {
-      // 裸 /plan 不带目标时绝不发起规划，否则会把 "/plan" 当目标白烧一次调用。
-      setHint('在 /plan 后面写目标，例如：/plan 修复登录')
+      // 从菜单选中 /plan 时补全成 '/plan ' 并聚焦，不立即发起规划。
+      onDraftChange('/plan ')
+      setHint(null)
+      requestAnimationFrame(() => {
+        const node = inputRef.current
+        node?.focus()
+        node?.setSelectionRange('/plan '.length, '/plan '.length)
+      })
       return
     }
     if (command === '/stop') {
-      onStop()
+      // 菜单里点 /stop 也按「生成中可用」处理。
+      if (busy) {
+        onStop()
+      } else {
+        setHint('当前没有进行中的生成')
+      }
       onDraftChange('')
       return
     }
     onDraftChange('')
   }
 
-  /** 提交时识别 /plan <目标>、/stop、/clear；返回 true 表示已当指令处理。 */
-  function runCommandFromDraft(value: string): boolean {
-    const command = parseSlashCommand(value)
-    if (command === null) {
-      return false
+  /** Enter / 发送按钮共用：先解析指令，再决定发送、停止还是拦截。 */
+  function handleSubmitAction(): void {
+    const action = resolveComposerAction(draft, busy)
+    if (action.type === 'blocked') {
+      return
     }
-    if (command.kind === 'plan-needs-goal') {
+    if (action.type === 'stop') {
+      if (busy) {
+        onStop()
+      } else {
+        setHint('当前没有进行中的生成')
+      }
+      onDraftChange('')
+      return
+    }
+    if (action.type === 'clear') {
+      onDraftChange('')
+      return
+    }
+    if (action.type === 'plan-needs-goal') {
       setHint('在 /plan 后面写目标，例如：/plan 修复登录')
-      return true
+      return
     }
-    if (command.kind === 'plan') {
-      onPlan(command.goal)
+    if (action.type === 'plan') {
+      onPlan(action.goal)
       onDraftChange('')
-      return true
+      return
     }
-    if (command.kind === 'stop') {
-      onStop()
-      onDraftChange('')
-      return true
-    }
-    onDraftChange('')
-    return true
+    onSend()
   }
 
   function removeMention(candidate: MentionCandidate): void {
@@ -234,13 +252,7 @@ export default function Composer({
     }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      if (busy) {
-        return
-      }
-      if (runCommandFromDraft(draft)) {
-        return
-      }
-      onSend()
+      handleSubmitAction()
     }
   }
 
@@ -249,13 +261,7 @@ export default function Composer({
       className="composer"
       onSubmit={(event) => {
         event.preventDefault()
-        if (busy) {
-          return
-        }
-        if (runCommandFromDraft(draft)) {
-          return
-        }
-        onSend()
+        handleSubmitAction()
       }}
     >
       <div className="composer__box">

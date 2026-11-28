@@ -24,3 +24,33 @@ export function parseSlashCommand(value: string): SlashCommand {
   }
   return { kind: 'clear' }
 }
+
+
+export type ComposerAction =
+  | { type: 'stop' }
+  | { type: 'clear' }
+  | { type: 'plan'; goal: string }
+  | { type: 'plan-needs-goal' }
+  | { type: 'send' }
+  | { type: 'blocked' }
+
+/**
+ * 按当前忙碌状态决定这次 Enter / 发送该做什么。
+ * /stop 与 /clear 在生成中也必须可用；其余动作在 busy 时拦截。
+ */
+export function resolveComposerAction(value: string, busy: boolean): ComposerAction {
+  const command = parseSlashCommand(value)
+  if (command === null) {
+    return busy ? { type: 'blocked' } : { type: 'send' }
+  }
+  if (command.kind === 'stop') {
+    return { type: 'stop' }
+  }
+  if (command.kind === 'clear') {
+    return { type: 'clear' }
+  }
+  if (command.kind === 'plan-needs-goal') {
+    return { type: 'plan-needs-goal' }
+  }
+  return busy ? { type: 'blocked' } : { type: 'plan', goal: command.goal }
+}

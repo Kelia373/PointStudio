@@ -34,6 +34,8 @@ export interface Conversation {
   providerId?: string | null
   /** 小组聊天归属的小组 id；普通会话缺省。 */
   groupId?: string | null
+  /** true 表示绑定 Agent 的常驻主聊天；缺省/false 为普通或专题会话。 */
+  isHome?: boolean
   /** 会话级采样参数覆盖，优先级高于助手与全局默认。 */
   params?: ConversationParams
   createdAt: string

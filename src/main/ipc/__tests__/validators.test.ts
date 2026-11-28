@@ -167,3 +167,13 @@ test('isChatSendRequest：assistantId 可选，给了必须是字符串或 null'
   assert.equal(isChatSendRequest({ ...base, assistantId: null }), true)
   assert.equal(isChatSendRequest({ ...base, assistantId: 42 }), false)
 })
+
+test('isCreateConversationRequest：isHome 必须与 assistantId 成对且不是小组', () => {
+  assert.equal(isCreateConversationRequest({ isHome: true, assistantId: 'a1' }), true)
+  assert.equal(isCreateConversationRequest({ isHome: true }), false)
+  assert.equal(
+    isCreateConversationRequest({ isHome: true, assistantId: 'a1', groupId: 'g1' }),
+    false
+  )
+  assert.equal(isCreateConversationRequest({ isHome: 'yes', assistantId: 'a1' }), false)
+})
