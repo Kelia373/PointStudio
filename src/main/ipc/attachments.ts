@@ -1,16 +1,21 @@
 // ipc/attachments —— 聊天附图的跨进程边界。
 //
 // 渲染层只递 data URL，主进程负责校验、落盘、回读；图片本体永远不进 messages.json。
-import { ipcMain } from 'electron'
+import { clipboard, ipcMain } from 'electron'
+import { readFile, stat } from 'node:fs/promises'
+import { basename, extname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { MAX_IMAGE_BYTES, type AttachmentService } from '../services/attachmentService.ts'
 
 import {
+  type ClipboardImageDraft,
   ATTACHMENT_CHANNELS,
   IMAGE_MIME_TYPES,
   type AttachmentsBridge,
   type IpcResult,
   type MessageImageDto
 } from '../../shared/types/ipc.ts'
-import type { AttachmentService } from '../services/attachmentService.ts'
 
 function isSaveRequest(value: unknown): boolean {
   if (typeof value !== 'object' || value === null) {
@@ -30,6 +35,51 @@ function isSaveRequest(value: unknown): boolean {
 
 function isImageMime(value: string): boolean {
   return (IMAGE_MIME_TYPES as readonly string[]).includes(value)
+}
+
+/** 扩展名 → 白名单 MIME；不在表里的一律不碰（SVG 永远不在表里）。 */
+const MIME_BY_EXT: Record<string, MessageImageDto['mimeType']> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif'
+}
+
+const CLIPBOARD_IMAGE_TYPES = IMAGE_MIME_TYPES
+
+/**
+ * Electron 45 的 clipboard 是 W3C 风格异步 API：`read()` 返回 ClipboardItem[]，
+ * 每项按 MIME 取 Blob。截图工具的位图会作为 image/png 出现；资源管理器
+ * Ctrl+C 复制文件则以 `text/uri-list`（file:// 列表）出现——两条都要管，
+ * 因为渲染层 `clipboardData.items` 在这两种场景下都是空的。
+ */
+function filePathsFromUriList(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#'))
+    .map((line) => {
+      try {
+        // fileURLToPath 天然处理盘符、%20 空格、中文用户名与 UNC 路径。
+        return fileURLToPath(line)
+      } catch {
+        return ''
+      }
+    })
+    .filter((item) => item !== '')
+}
+
+/**
+ * Windows CF_HDROP 的兜底格式：资源管理器复制文件时可能只给这一个私有类型，
+ * 内容是 UTF-16LE 的路径列表，以 \0 分隔。
+ */
+function filePathsFromFileNameW(buffer: Buffer): string[] {
+  return buffer
+    .toString('utf16le')
+    .split('\u0000')
+    .map((item) => item.trim())
+    .filter((item) => item !== '')
 }
 
 export interface AttachmentsIpcOptions {
@@ -62,6 +112,102 @@ export function registerAttachmentsIpc(options: AttachmentsIpcOptions): void {
       return result.ok
         ? { ok: true, value: result.value }
         : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
+    }
+  )
+  ipcMain.handle(
+    ATTACHMENT_CHANNELS.pasteClipboard,
+    async (_event, limitRaw: unknown): Promise<IpcResult<ClipboardImageDraft[]>> => {
+      const limit =
+        typeof limitRaw === 'number' && Number.isFinite(limitRaw)
+          ? Math.max(1, Math.min(6, Math.floor(limitRaw)))
+          : 6
+      try {
+        const items = await clipboard.read()
+        const drafts: ClipboardImageDraft[] = []
+        let uriList = ''
+        const fileNameWPaths: string[] = []
+
+        for (const item of items) {
+          if (drafts.length >= limit) {
+            break
+          }
+          const types = item.types ?? []
+          const imageType = types.find((type) =>
+            (CLIPBOARD_IMAGE_TYPES as readonly string[]).includes(type)
+          )
+          if (imageType !== undefined) {
+            const blob = await item.getType(imageType)
+            if (!(blob instanceof Blob)) {
+              continue
+            }
+            const bytes = Buffer.from(await blob.arrayBuffer())
+            const mimeType = imageType as MessageImageDto['mimeType']
+            const saved = await options.attachments.saveBytes(bytes, mimeType, 'screenshot.png')
+            if (saved.ok) {
+              drafts.push({
+                image: saved.value,
+                previewUrl: `data:${mimeType};base64,${bytes.toString('base64')}`
+              })
+            }
+            continue
+          }
+          if (types.includes('text/uri-list')) {
+            const blob = await item.getType('text/uri-list')
+            if (blob instanceof Blob) {
+              uriList = await blob.text()
+            }
+          }
+          // Windows 私有格式：CF_HDROP / FileNameW（UTF-16LE 路径 + \0 分隔）。
+          const fileNameWType = types.find((type) =>
+            type.toLowerCase().includes('filenamew')
+          )
+          if (fileNameWType !== undefined) {
+            const blob = await item.getType(fileNameWType)
+            if (blob instanceof Blob) {
+              fileNameWPaths.push(
+                ...filePathsFromFileNameW(Buffer.from(await blob.arrayBuffer()))
+              )
+            }
+          }
+        }
+
+        // 资源管理器 Ctrl+C 复制的本地图片文件：只贴第一张，多选交给拖入。
+        // 两条来源合并去重：FileNameW 若是带 DROPFILES 头的二进制，解出来会是
+        // 垃圾路径，不能因此把本来可用的 uri-list 整条弃掉。
+        const localPaths = [
+          ...new Set([...fileNameWPaths, ...filePathsFromUriList(uriList)])
+        ]
+        if (drafts.length === 0 && localPaths.length > 0) {
+          for (const file of localPaths) {
+            const mime = MIME_BY_EXT[extname(file).toLowerCase()]
+            if (mime === undefined) {
+              continue
+            }
+            try {
+              const info = await stat(file)
+              if (!info.isFile() || info.size === 0 || info.size > MAX_IMAGE_BYTES) {
+                continue
+              }
+              const bytes = await readFile(file)
+              const saved = await options.attachments.saveBytes(bytes, mime, basename(file))
+              if (saved.ok) {
+                drafts.push({
+                  image: saved.value,
+                  previewUrl: `data:${mime};base64,${bytes.toString('base64')}`
+                })
+                break
+              }
+            } catch {
+              continue
+            }
+          }
+        }
+
+        return { ok: true, value: drafts }
+      } catch {
+        // 读剪贴板失败要说出来：静默返回空数组时用户只会觉得「按了没反应」。
+        return { ok: false, code: 'E_IMAGE_UNREADABLE' }
+      }
     }
   )
 }

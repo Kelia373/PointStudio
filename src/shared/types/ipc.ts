@@ -208,12 +208,21 @@ export interface SaveAttachmentRequest {
 
 export const ATTACHMENT_CHANNELS = {
   save: 'attachments:save',
-  readDataUrl: 'attachments:readDataUrl'
+  readDataUrl: 'attachments:readDataUrl',
+  /** 剪贴板兜底：截图工具写 CF_DIB / 资源管理器复制文件时渲染层拿不到 File 列表。 */
+  pasteClipboard: 'attachment:paste-clipboard'
 } as const
+
+/** 剪贴板落盘结果：图片元数据 + 可直接显示的 data URL。 */
+export interface ClipboardImageDraft {
+  image: MessageImageDto
+  previewUrl: string
+}
 
 export interface AttachmentsBridge {
   save: (request: SaveAttachmentRequest) => Promise<IpcResult<MessageImageDto>>
   readDataUrl: (id: string) => Promise<IpcResult<string>>
+  pasteClipboard: (limit?: number) => Promise<IpcResult<ClipboardImageDraft[]>>
 }
 
 export interface MessageDto {

@@ -35,4 +35,4 @@ if ($env:ELECTRON_RUN_AS_NODE) {
 
 Set-Location $app
 Write-Host '[dev] starting electron-vite, keep this window open' -ForegroundColor Green
-& (Join-Path $app 'node_modules\.bin\electron-vite.CMD') dev
+& (Join-Path $app 'node_modules\.bin\electron-vite.CMD') dev --watch

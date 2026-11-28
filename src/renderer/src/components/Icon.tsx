@@ -13,6 +13,7 @@ import chevronRight from '../assets/icons/chevron-right.svg?raw'
 import download from '../assets/icons/download.svg?raw'
 import filter from '../assets/icons/filter.svg?raw'
 import folder from '../assets/icons/folder.svg?raw'
+import image from '../assets/icons/image.svg?raw'
 import moon from '../assets/icons/moon.svg?raw'
 import panelRight from '../assets/icons/panel-right.svg?raw'
 import pin from '../assets/icons/pin.svg?raw'
@@ -35,6 +36,7 @@ const PATHS = {
   moon,
   user,
   folder,
+  image,
   download,
   filter,
   users,

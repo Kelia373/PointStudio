@@ -909,6 +909,28 @@ select:focus {
   line-height: 1.6;
 }
 
+/* 行内胶囊编辑区：保留换行与连续空格，超长自动滚动。 */
+.composer__editor {
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+
+/* 空编辑区的占位符：div 没有 placeholder，用 data-* + ::before 补。 */
+.composer__editor[data-empty='true']::before {
+  content: attr(data-placeholder);
+  color: var(--fg-3);
+  pointer-events: none;
+}
+
+/* 输入区里的胶囊：不可拆、不参与文字选中，点击开灯箱。 */
+.composer__inline-chip {
+  cursor: pointer;
+  user-select: none;
+  vertical-align: baseline;
+}
+
 /* 聚焦提示只落在容器上：textarea 贴满容器，全局 outline-offset 会画到框外去 */
 .composer__input:focus,
 .composer__input:focus-visible {
@@ -5806,13 +5828,6 @@ select:focus {
 .composer__thumb-x:hover {
   color: var(--danger);
   border-color: var(--danger);
-}
-
-.composer__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  padding: var(--sp-2) var(--sp-3) 0;
 }
 
 .composer__add {

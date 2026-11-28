@@ -117,3 +117,28 @@ test('回收时忽略非 UUID 命名的杂项文件（不误删）', async () =>
     assert.ok((await readdir(dir)).includes('notes.txt'))
   })
 })
+
+test('saveBytes：剪贴板字节直接落盘，白名单与空字节照样拦', async () => {
+  await withService(async ({ service }) => {
+    const png = Buffer.from(PNG.split(',')[1], 'base64')
+    const saved = await service.saveBytes(png, 'image/png', 'screenshot.png')
+    assert.equal(saved.ok, true)
+    if (saved.ok) {
+      assert.equal(saved.value.mimeType, 'image/png')
+      assert.equal(saved.value.sizeBytes, png.length)
+      assert.equal(saved.value.name, 'screenshot.png')
+    }
+
+    const svg = await service.saveBytes(Buffer.from('<svg/>'), 'image/svg+xml')
+    assert.equal(svg.ok, false)
+    if (!svg.ok) {
+      assert.deepEqual(svg.errors, ['E_IMAGE_TYPE'])
+    }
+
+    const empty = await service.saveBytes(Buffer.alloc(0), 'image/png')
+    assert.equal(empty.ok, false)
+    if (!empty.ok) {
+      assert.deepEqual(empty.errors, ['E_IMAGE_INVALID'])
+    }
+  })
+})

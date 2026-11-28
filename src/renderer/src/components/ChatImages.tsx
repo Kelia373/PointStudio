@@ -188,7 +188,7 @@ export function InlineImageText({
             aria-label={`查看图片 #${part.slot}`}
             onClick={() => onOpen(Math.max(0, Math.min(part.slot - 1, imageCount - 1)))}
           >
-            <Icon name="folder" size={11} />
+            <Icon name="image" size={12} />
             图片 #{part.slot}
           </button>
         )
