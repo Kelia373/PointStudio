@@ -105,7 +105,7 @@ export function registerWorkspaceIpc(options: WorkspaceIpcOptions): void {
       if (typeof id !== 'string' || !isUuid(id)) {
         return { ok: false, code: 'E_BAD_INPUT' }
       }
-      const result = await options.workspace.remove(id)
+      const result = await options.importer.remove(id)
       return result.ok ? { ok: true, value: true } : { ok: false, code: result.errors[0] ?? 'E_UNKNOWN' }
     }
   )

@@ -64,9 +64,10 @@ export default function WorkspacePanel({ onClose }: { onClose: () => void }) {
             <span className="workspace__size">{formatBytes(file.sizeBytes)}</span>
             <ConfirmButton
               className="workspace__remove"
+              label="移除"
               ariaLabel="移除文件"
               title="移除文件"
-              confirmLabel="移除?"
+              confirmLabel="确认移除?"
               onConfirm={() => void remove(file.id)}
             />
           </li>

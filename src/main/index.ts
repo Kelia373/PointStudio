@@ -19,6 +19,7 @@ import { JsonFileStore } from './data/fileStore.ts'
 import { buildDataPaths } from './core/paths.ts'
 import { resolveAppIconPath } from './core/appIcon.ts'
 import { isInternalNavigation, isSafeExternalUrl } from './core/externalLink.ts'
+import { isSafeRelativePath } from './utils/paths.ts'
 import { registerAssistantIpc } from './ipc/assistant.ts'
 import { registerChatIpc } from './ipc/chat.ts'
 import { registerConversationIpc } from './ipc/conversation.ts'
@@ -181,6 +182,14 @@ function buildServices(): Services {
     writeStored: async (relativePath, content) => {
       await mkdir(paths.workspaceRoot, { recursive: true })
       await writeFile(join(paths.workspaceRoot, relativePath), content, 'utf8')
+    },
+    removeStored: async (relativePath) => {
+      // 防御：登记文件被手改成 `../x` 也不许删到工作区外面去。
+      if (!isSafeRelativePath(relativePath)) {
+        return
+      }
+      // force 让「副本本来就不在」也算成功，重复点移除不会报错。
+      await rm(join(paths.workspaceRoot, relativePath), { force: true })
     }
   })
 
