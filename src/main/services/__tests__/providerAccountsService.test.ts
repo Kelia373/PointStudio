@@ -10,23 +10,37 @@ import { ProviderAccountsService } from '../providerAccountsService.ts'
 import type { ProviderAccount } from '../../ai/domain/providerAccounts.ts'
 import type { ProviderSettings } from '../../ai/domain/providerSettings.ts'
 
+interface Marker {
+  done: boolean
+  marks: number
+}
+
 async function withService(
   run: (ctx: {
     service: ProviderAccountsService
     filePath: string
     reopen: () => ProviderAccountsService
+    marker: Marker
   }) => Promise<void>,
   legacy?: () => Promise<ProviderSettings | null>
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'pointstudio-accounts-'))
   const filePath = join(dir, 'provider-accounts.json')
+  const marker: Marker = { done: false, marks: 0 }
   const build = (): ProviderAccountsService =>
     new ProviderAccountsService(new JsonFileStore<ProviderAccount>(filePath), {
       now: () => '2026-01-01T00:00:00.000Z',
-      ...(legacy ? { legacy: { read: legacy } } : {})
+      ...(legacy ? { legacy: { read: legacy } } : {}),
+      migration: {
+        isDone: async () => marker.done,
+        markDone: async () => {
+          marker.done = true
+          marker.marks += 1
+        }
+      }
     })
   try {
-    await run({ service: build(), filePath, reopen: build })
+    await run({ service: build(), filePath, reopen: build, marker })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -121,11 +135,12 @@ test('删除一家不影响其他家', async () => {
 test('首次启动把旧单行 provider.json 迁进来，之后不再重复迁移', async () => {
   let legacyReads = 0
   await withService(
-    async ({ service }) => {
+    async ({ service, marker }) => {
       const first = await service.list()
       assert.equal(first.length, 1)
       assert.equal(first[0].id, 'deepseek')
       assert.equal(first[0].apiKey, 'sk-legacy')
+      assert.equal(marker.marks, 1, '迁移成功后写下哨兵')
       await service.list()
       assert.equal(legacyReads, 1, '只迁移一次')
     },
@@ -140,6 +155,43 @@ test('首次启动把旧单行 provider.json 迁进来，之后不再重复迁�
       }
     }
   )
+})
+
+test('清空账户后重启不会被旧 provider.json 复活（迁移哨兵）', async () => {
+  let legacyReads = 0
+  const legacy = async (): Promise<ProviderSettings> => {
+    legacyReads += 1
+    return {
+      id: 'deepseek',
+      apiKey: 'sk-old',
+      baseUrl: 'https://api.deepseek.com',
+      model: 'deepseek-chat',
+      updatedAt: '2025-12-31T00:00:00.000Z'
+    }
+  }
+  await withService(async ({ service, reopen }) => {
+    assert.equal((await service.list()).length, 1)
+    await service.clear('deepseek')
+    assert.deepEqual(await service.list(), [])
+    // 重启：新实例、账户文件内容为 []，但哨兵已写，不该再迁移
+    const afterRestart = await reopen().list()
+    assert.deepEqual(afterRestart, [])
+    assert.equal(legacyReads, 1)
+  }, legacy)
+})
+
+test('并发首读共享同一次初始化，不会有人拿到空数组', async () => {
+  await withService(async ({ service }) => {
+    const [a, b] = await Promise.all([service.list(), service.listMasked()])
+    assert.equal(a.length, 1)
+    assert.equal(b.length, 1)
+  }, async () => ({
+    id: 'deepseek',
+    apiKey: 'sk-once',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-chat',
+    updatedAt: '2025-12-31T00:00:00.000Z'
+  }))
 })
 
 test('落盘是明文供运行时使用，但对外列表不含明文', async () => {

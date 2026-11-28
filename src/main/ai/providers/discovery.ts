@@ -88,7 +88,8 @@ export async function fetchProviderModels(
       ...(account.apiKey.trim() === ''
         ? {}
         : { authorization: `Bearer ${account.apiKey}` })
-    }
+    },
+    signal: AbortSignal.timeout(10_000)
   })
   if (!response.ok) {
     throw new Error(`E_HTTP_${response.status}`)
@@ -115,7 +116,8 @@ export async function fetchProviderUsage(
       headers: {
         accept: 'application/json',
         authorization: `Bearer ${account.apiKey}`
-      }
+      },
+      signal: AbortSignal.timeout(10_000)
     })
     if (!response.ok) {
       throw new Error(`E_HTTP_${response.status}`)
@@ -153,7 +155,8 @@ export async function fetchProviderUsage(
         accept: 'application/json',
         authorization: `Bearer ${account.apiKey}`,
         'user-agent': 'PointStudio/0.1'
-      }
+      },
+      signal: AbortSignal.timeout(10_000)
     })
     if (!response.ok) {
       throw new Error(`E_HTTP_${response.status}`)

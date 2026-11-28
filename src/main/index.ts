@@ -1,6 +1,6 @@
 import { app, BrowserWindow, Menu } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import { DeepSeekProvider } from './ai/providers/deepseek.ts'
@@ -157,7 +157,21 @@ function buildServices(): Services {
     {
       now: () => new Date().toISOString(),
       // 首次启动时把旧的单行凭据迁进多账号库，Key 不用重填。
-      legacy: { read: () => settings.read() }
+      legacy: { read: () => settings.read() },
+      // 迁移哨兵：用户清空账户后重启，不会被旧 provider.json 复活。
+      migration: {
+        isDone: async () => {
+          try {
+            await access(paths.providerAccounts + '.migrated')
+            return true
+          } catch {
+            return false
+          }
+        },
+        markDone: async () => {
+          await writeFile(paths.providerAccounts + '.migrated', new Date().toISOString(), 'utf8')
+        }
+      }
     }
   )
 

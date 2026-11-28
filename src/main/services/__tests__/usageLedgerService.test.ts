@@ -92,3 +92,25 @@ test('超过上限时丢最旧的记录', async () => {
     3
   )
 })
+
+test('并发记账不互相覆盖（写队列）', async () => {
+  await withService(async ({ service }) => {
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        service.record({
+          providerId: index % 2 === 0 ? 'deepseek' : 'opencode-go',
+          modelId: 'm',
+          assistantId: null,
+          conversationId: `c${index}`,
+          promptTokens: 1,
+          completionTokens: 1,
+          cacheHitTokens: 0,
+          totalTokens: 2
+        })
+      )
+    )
+    const all = await service.readAll()
+    assert.equal(all.length, 8, '8 条并发记录都必须落盘')
+    assert.equal(new Set(all.map((item) => item.conversationId)).size, 8)
+  })
+})

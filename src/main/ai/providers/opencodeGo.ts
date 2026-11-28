@@ -164,7 +164,7 @@ export async function* parseAnthropicSseStream(
     }
   }
 
-  if (onUsage) {
+  if (onUsage && inputTokens + outputTokens > 0) {
     onUsage({
       promptTokens: inputTokens,
       completionTokens: outputTokens,

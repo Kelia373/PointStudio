@@ -24,13 +24,24 @@ export const DEFAULT_MAX_RECORDS = 5_000
 export class UsageLedgerService {
   private readonly store: JsonFileStore<UsageLedgerRecord>
   private readonly deps: UsageLedgerServiceDeps
+  /** 写队列：多个 Agent 同时收尾时按顺序写，避免 read-modify-write 互相覆盖。 */
+  private queue: Promise<unknown> = Promise.resolve()
 
   constructor(store: JsonFileStore<UsageLedgerRecord>, deps: UsageLedgerServiceDeps) {
     this.store = store
     this.deps = deps
   }
 
-  async record(input: UsageRecordInput): Promise<UsageLedgerRecord> {
+  record(input: UsageRecordInput): Promise<UsageLedgerRecord> {
+    const task = this.queue.then(() => this.write(input))
+    this.queue = task.then(
+      () => undefined,
+      () => undefined
+    )
+    return task
+  }
+
+  private async write(input: UsageRecordInput): Promise<UsageLedgerRecord> {
     const record: UsageLedgerRecord = {
       ...input,
       id: this.deps.newId(),
