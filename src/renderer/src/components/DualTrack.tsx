@@ -1,7 +1,16 @@
 // 双轨回答：同一块地方，结论与推理过程二选一，点一下就换镜头。
+//
+// 只在模型自己写了「结论：」这类标记时才折叠。没有标记的长答案整篇照常渲染——
+// 以前拿末段当结论，会把一整篇答案切成「91 步原始 Markdown + 一小截结论」，
+// 用户反而看不到全文。
 import { useState } from 'react'
 
-import { shouldCollapse, splitProcessAndConclusion, type LensMode } from '../lib/timelineLens'
+import {
+  hasConclusionMark,
+  shouldCollapse,
+  splitProcessAndConclusion,
+  type LensMode
+} from '../lib/timelineLens'
 import MarkdownBody from './MarkdownBody'
 
 export interface DualTrackProps {
@@ -13,8 +22,9 @@ export interface DualTrackProps {
 export default function DualTrack({ content, streaming = false }: DualTrackProps) {
   const [mode, setMode] = useState<LensMode>('conclusion')
   const split = splitProcessAndConclusion(content)
+  const lensable = hasConclusionMark(content) && shouldCollapse(split, content)
 
-  if (streaming || !shouldCollapse(split, content)) {
+  if (streaming || !lensable) {
     return (
       <div className="msg__body">
         <MarkdownBody content={content} />
@@ -49,7 +59,9 @@ export default function DualTrack({ content, streaming = false }: DualTrackProps
       ) : (
         <ol className="dual-track__steps">
           {split.process.map((step, index) => (
-            <li key={`${index}-${step.slice(0, 8)}`}>{step}</li>
+            <li key={`${index}-${step.slice(0, 8)}`}>
+              <MarkdownBody content={step} />
+            </li>
           ))}
         </ol>
       )}

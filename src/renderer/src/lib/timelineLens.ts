@@ -61,6 +61,22 @@ export function shouldCollapse(split: TrackSplit, text: string): boolean {
   return split.process.length > 0 && text.trim().length > COLLAPSE_MIN_CHARS
 }
 
+/**
+ * 有没有显式的「结论：」段落。
+ *
+ * 双轨只在模型自己标了结论时成立。没有标记时 splitProcessAndConclusion 会把
+ * 末段当结论兜底——那只是个猜测，拿去渲染就会把一整篇答案切成「91 步过程 +
+ * 一小截结论」，用户反而读不到全文，所以 UI 必须先问这一句。
+ */
+export function hasConclusionMark(text: string): boolean {
+  const normalized = (text ?? '').replace(/\r\n/g, '\n')
+  const match = CONCLUSION_MARK.exec(normalized)
+  if (match === null || match.index <= 0) {
+    return false
+  }
+  return normalized.slice(match.index + match[0].length).trim() !== ''
+}
+
 export interface TimelineGroup {
   day: string
   items: TimelineEntry[]

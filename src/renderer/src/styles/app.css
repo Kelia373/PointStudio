@@ -578,7 +578,10 @@ select:focus {
   position: relative;
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  /* 纵向可滚，横向永不滚：内容只许在列内换行，不许把整列推出视口。 */
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--sp-5) 0 var(--sp-4);
 }
 
@@ -586,6 +589,7 @@ select:focus {
   position: relative;
   width: 100%;
   max-width: var(--content-w, 720px);
+  min-width: 0;
   min-height: 100%;
   margin: 0 auto;
   padding: 0 var(--sp-5);
@@ -601,6 +605,8 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
+  min-width: 0;
+  max-width: 100%;
   animation: rise var(--dur-3) var(--ease-out);
   animation-delay: calc(var(--stagger) * var(--i, 0));
 }
@@ -624,10 +630,12 @@ select:focus {
 
 .msg__body {
   max-width: 88%;
+  min-width: 0;
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--rad-card);
   white-space: pre-wrap;
   word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .msg--user .msg__body {
@@ -641,6 +649,9 @@ select:focus {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-bottom-left-radius: var(--rad-ctl);
+  /* 助手正文是 Markdown：占满列宽，别缩到 88% 再被窄卡片挤成一坨。 */
+  max-width: 100%;
+  white-space: normal;
 }
 
 .msg--failed .msg__body {
@@ -734,9 +745,9 @@ select:focus {
 .stream__resize {
   position: absolute;
   top: 0;
-  right: -8px;
+  right: 0;
   bottom: 0;
-  width: 12px;
+  width: 10px;
   cursor: col-resize;
   touch-action: none;
 }
@@ -746,7 +757,7 @@ select:focus {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 5px;
+  left: 4px;
   width: 1px;
   background: transparent;
   transition: background var(--dur-2);
@@ -2242,11 +2253,11 @@ select:focus {
 }
 
 .spark-panel {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
+  /* 跟着「钉入记忆」按钮走固定定位：下方放不下会被算到按钮上方。 */
+  position: fixed;
   z-index: 41;
   width: 280px;
+  max-width: calc(100vw - 24px);
   padding: var(--sp-2);
   background: var(--panel);
   border: 1px solid var(--line-strong);
@@ -2381,6 +2392,19 @@ select:focus {
   color: var(--fg-2);
   font-size: var(--fs-sm);
   line-height: 1.65;
+  /* 过程可能上百步：限高加内部滚动，别把整条会话顶成一面墙。 */
+  max-height: 46vh;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding-right: var(--sp-2);
+}
+
+.dual-track__steps li .md {
+  gap: 2px;
+}
+
+.dual-track__steps li .md__code {
+  margin-bottom: 0;
 }
 
 .dual-track__body {
@@ -2529,11 +2553,11 @@ select:focus {
 }
 
 .route-badge__pop {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
+  /* 固定定位 + 算出来的坐标：贴着消息头部，但会避开窗口底边。 */
+  position: fixed;
   z-index: 41;
   width: 260px;
+  max-width: calc(100vw - 24px);
   padding: var(--sp-2);
   background: var(--panel);
   border: 1px solid var(--line-strong);
@@ -5079,6 +5103,8 @@ select:focus {
   flex-direction: column;
   gap: var(--sp-2);
   min-width: 0;
+  /* 长链接/长标识符必须断行，否则整列被撑宽、逼出横向滚动条。 */
+  overflow-wrap: anywhere;
 }
 
 .md__heading {
@@ -5112,6 +5138,12 @@ select:focus {
 .md__table {
   border-collapse: collapse;
   font-size: var(--fs-sm);
+  overflow-wrap: normal;
+}
+
+.md__table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .md__table th,
@@ -5188,6 +5220,7 @@ select:focus {
   margin: 0;
   padding: var(--sp-2) var(--sp-3);
   overflow-x: auto;
+  overflow-wrap: normal;
   color: var(--fg-2);
   font-family: var(--mono);
   font-size: var(--fs-sm);

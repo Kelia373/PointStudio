@@ -257,6 +257,18 @@ export default function ChatPanel() {
   const runStartedAt = useRef<number | null>(null)
   const resizeStart = useRef<{ x: number; width: number } | null>(null)
 
+  /**
+   * 内容列最宽能拉到多少：不超过消息区实际宽度（减去两侧留白）。
+   * 以前硬编码 1400，窗口不够宽时把内容推出视口，逼出一条横向滚动条，
+   * 左侧的行号/序号还会被卷出去看不见。
+   */
+  function clampContentWidth(next: number, separator: HTMLElement): number {
+    const stream = separator.closest('.stream') as HTMLElement | null
+    const available = (stream?.clientWidth ?? window.innerWidth) - 2 * 24
+    const cap = Math.max(320, Math.min(1400, available))
+    return Math.round(Math.min(cap, Math.max(360, next)))
+  }
+
   /** 副画布的所有变更都从这里过：保持纯函数语义，内容没变就不造新对象。 */
   const updateSplit = useCallback(
     (
@@ -1543,7 +1555,7 @@ export default function ChatPanel() {
                     return
                   }
                   const next = start.width + (event.clientX - start.x) * 2
-                  setContentWidth(Math.min(1400, Math.max(480, next)))
+                  setContentWidth(clampContentWidth(next, event.currentTarget))
                 }}
                 onPointerUp={(event) => {
                   resizeStart.current = null
@@ -1587,7 +1599,7 @@ export default function ChatPanel() {
                   }
                   // 内容列是居中的：往右拖等于两侧同时变宽，所以按 2 倍位移换算。
                   const next = start.width + (event.clientX - start.x) * 2
-                  setContentWidth(Math.min(1400, Math.max(480, next)))
+                  setContentWidth(clampContentWidth(next, event.currentTarget))
                 }}
                 onPointerUp={(event) => {
                   resizeStart.current = null

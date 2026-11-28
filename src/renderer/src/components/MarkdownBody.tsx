@@ -150,28 +150,30 @@ export default function MarkdownBody({
         }
         if (block.type === 'table') {
           return (
-            <table key={index} className="md__table">
-              <thead>
-                <tr>
-                  {block.headers.map((header, headerIndex) => (
-                    <th key={headerIndex}>
-                      <Inline tokens={parseInlineTokens(header)} />
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {block.rows.map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    {row.map((cell, cellIndex) => (
-                      <td key={cellIndex}>
-                        <Inline tokens={parseInlineTokens(cell)} />
-                      </td>
+            <div key={index} className="md__table-wrap">
+              <table className="md__table">
+                <thead>
+                  <tr>
+                    {block.headers.map((header, headerIndex) => (
+                      <th key={headerIndex}>
+                        <Inline tokens={parseInlineTokens(header)} />
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      {row.map((cell, cellIndex) => (
+                        <td key={cellIndex}>
+                          <Inline tokens={parseInlineTokens(cell)} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )
         }
         return <hr key={index} className="md__hr" />

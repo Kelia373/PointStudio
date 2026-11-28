@@ -2,10 +2,13 @@
 import { useState } from 'react'
 
 import { formatRouteTick, type DifficultyCategory, type DifficultyLevel } from '../lib/pandaRouter'
+import type { AnchorRect } from '../lib/floatingPlacement'
 import type { RouteDecisionDto } from '../../../shared/types/ipc.ts'
+import FloatingMenu from './FloatingMenu'
 
 export default function RouteBadge({ decision }: { decision: RouteDecisionDto | null }) {
   const [open, setOpen] = useState(false)
+  const [anchor, setAnchor] = useState<AnchorRect | null>(null)
 
   if (!decision) {
     return null
@@ -25,7 +28,20 @@ export default function RouteBadge({ decision }: { decision: RouteDecisionDto | 
         type="button"
         aria-expanded={open}
         title="查看本次路由决策"
-        onClick={() => setOpen((value) => !value)}
+        onClick={(event) => {
+          if (!open) {
+            const rect = event.currentTarget.getBoundingClientRect()
+            setAnchor({
+              top: rect.top,
+              bottom: rect.bottom,
+              left: rect.left,
+              right: rect.right,
+              width: rect.width,
+              height: rect.height
+            })
+          }
+          setOpen((value) => !value)
+        }}
       >
         {tick}
       </button>
@@ -33,7 +49,13 @@ export default function RouteBadge({ decision }: { decision: RouteDecisionDto | 
       {open ? (
         <>
           <span className="route-badge__mask" role="presentation" onClick={() => setOpen(false)} />
-          <div className="route-badge__pop" role="dialog" aria-label="路由决策">
+          <FloatingMenu
+            anchor={anchor}
+            className="route-badge__pop"
+            role="dialog"
+            ariaLabel="路由决策"
+            align="end"
+          >
             <div className="route-badge__row">
               <span>决定者</span>
               <b>{decision.decidedBy}</b>
@@ -61,7 +83,7 @@ export default function RouteBadge({ decision }: { decision: RouteDecisionDto | 
                 ))}
               </ol>
             ) : null}
-          </div>
+          </FloatingMenu>
         </>
       ) : null}
     </span>
