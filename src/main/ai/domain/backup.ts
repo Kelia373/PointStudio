@@ -63,6 +63,17 @@ function isMessage(value: unknown): value is Message {
           (item) =>
             isObject(item) && typeof item.chunkId === 'string' && typeof item.source === 'string'
         ))) &&
+    // 带图会话要能导出再恢复：images 必须是合法元数据数组
+    (value.images === undefined ||
+      (Array.isArray(value.images) &&
+        value.images.every(
+          (item) =>
+            isObject(item) &&
+            typeof item.id === 'string' &&
+            typeof item.mimeType === 'string' &&
+            typeof item.name === 'string' &&
+            typeof item.sizeBytes === 'number'
+        ))) &&
     typeof value.createdAt === 'string' &&
     typeof value.updatedAt === 'string'
   )

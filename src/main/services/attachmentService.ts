@@ -13,7 +13,7 @@ import {
   type MessageImageDto,
   type SaveAttachmentRequest
 } from '../../shared/types/ipc.ts'
-import { isUuid } from '../ipc/validators.ts'
+import { isUuid } from '../utils/uuid.ts'
 
 export type ServiceResult<T> = { ok: true; value: T } | { ok: false; errors: string[] }
 

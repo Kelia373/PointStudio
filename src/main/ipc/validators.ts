@@ -24,12 +24,11 @@ import {
 
 export { isProviderAccountId } from '../ai/domain/providerAccounts.ts'
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_TEXT_LENGTH = 8_000
 
-export function isUuid(value: unknown): value is string {
-  return typeof value === 'string' && UUID_PATTERN.test(value)
-}
+/** 边界层沿用原有 import 路径；实现已下沉到 utils（服务层也要用）。 */
+export { isUuid } from '../utils/uuid.ts'
+import { isUuid } from '../utils/uuid.ts'
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -46,12 +45,50 @@ export function isChatSendRequest(value: unknown): value is ChatSendRequest {
   ) {
     return false
   }
+  if (value.images !== undefined && !isMessageImages(value.images)) {
+    return false
+  }
   return (
     isUuid(value.id) &&
     isUuid(value.conversationId) &&
     typeof value.text === 'string' &&
-    value.text.length <= MAX_TEXT_LENGTH
+    value.text.length <= MAX_TEXT_LENGTH &&
+    // 纯图消息允许没有文字，但必须真的带图。
+    (value.text.trim() !== '' ||
+      (Array.isArray(value.images) && value.images.length > 0))
   )
+}
+
+const MAX_IMAGES_PER_MESSAGE = 6
+const IMAGE_MIMES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+
+/** 附图元数据的运行时形状：数量、UUID、MIME 白名单、sizeBytes 合法性。 */
+export function isMessageImages(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_IMAGES_PER_MESSAGE) {
+    return false
+  }
+  for (const item of value) {
+    if (!isObject(item)) {
+      return false
+    }
+    if (!isUuid(item.id)) {
+      return false
+    }
+    if (typeof item.mimeType !== 'string' || !IMAGE_MIMES.includes(item.mimeType)) {
+      return false
+    }
+    if (typeof item.name !== 'string' || item.name.length > 200) {
+      return false
+    }
+    if (
+      typeof item.sizeBytes !== 'number' ||
+      !Number.isFinite(item.sizeBytes) ||
+      item.sizeBytes <= 0
+    ) {
+      return false
+    }
+  }
+  return true
 }
 
 export function isCreateConversationRequest(

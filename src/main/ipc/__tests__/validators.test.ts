@@ -11,6 +11,7 @@ import {
   isChatSendRequest,
   isConversationModelPatch,
   isCreateConversationRequest,
+  isMessageImages,
   isProviderSettingsDraft,
   isSaveProviderAccountRequest,
   isUsageRange,
@@ -176,4 +177,29 @@ test('isCreateConversationRequest：isHome 必须与 assistantId 成对且不是
     false
   )
   assert.equal(isCreateConversationRequest({ isHome: 'yes', assistantId: 'a1' }), false)
+})
+test('isMessageImages：数量 / UUID / MIME 白名单 / sizeBytes 逐项拦', () => {
+  const ok = { id: '11111111-1111-4111-8111-111111111111', mimeType: 'image/png', name: 'a.png', sizeBytes: 12 }
+  assert.equal(isMessageImages([ok]), true)
+  assert.equal(isMessageImages([]), false, '空数组不算合法 images')
+  assert.equal(isMessageImages([{ ...ok, mimeType: 'image/svg+xml' }]), false)
+  assert.equal(isMessageImages([{ ...ok, id: '../../x' }]), false)
+  assert.equal(isMessageImages([{ ...ok, sizeBytes: 0 }]), false)
+  assert.equal(
+    isMessageImages(Array.from({ length: 7 }, () => ok)),
+    false,
+    '单条最多 6 张'
+  )
+})
+
+test('isChatSendRequest：纯图消息允许无文字，纯文字无图也照旧', () => {
+  const images = [{ id: '11111111-1111-4111-8111-111111111111', mimeType: 'image/png', name: 'a.png', sizeBytes: 12 }]
+  const base = {
+    id: '22222222-2222-4222-8222-222222222222',
+    conversationId: '33333333-3333-4333-8333-333333333333'
+  }
+  assert.equal(isChatSendRequest({ ...base, text: 'hi' }), true)
+  assert.equal(isChatSendRequest({ ...base, text: '', images }), true)
+  assert.equal(isChatSendRequest({ ...base, text: '' }), false, '既没字也没图要拒')
+  assert.equal(isChatSendRequest({ ...base, text: 'hi', images: [{ ...images[0], mimeType: 'x' }] }), false)
 })
