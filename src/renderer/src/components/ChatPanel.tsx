@@ -1184,14 +1184,14 @@ export default function ChatPanel() {
   const referenceCount = messages.reduce((sum, message) => sum + (message.references?.length ?? 0), 0)
   // parse 按原始字符串缓存：这里每帧只做一次 getItem + 字符串比较，不会重复 JSON.parse
   const modelServicesView = readModelServices()
-  // chip 必须和身份栏同一条链：会话覆盖 → Agent 绑定 → 服务商默认。
-  // 少了 boundAssistant.modelId，给 Agent 单独配过模型时，chip 会报服务商默认、请求却走 Agent 的模型。
-  // 不再回退 slots.primaryModel：模型只由 Agent 决定（方式 1），那个槽位已标 pending。
+  // 这条链当前**不可达**：Composer 的 modelPolicy 恒为 locked-*，输入栏渲染的是 modelBadge
+  // （文字走 activeModelLabel），model / models 只服务于老 select 分支。
+  // 保留它只是清掉 slots.primaryModel 这个后门，并在将来 editable 复活时别踩「chip 报服务商默认」的坑。
+  // 三档全空时回退 Auto，别留空串。
   const defaultModelValue =
     activeConversation?.model ??
     boundAssistant?.modelId ??
     provider?.model ??
-    // 三档全空（未配模型的服务商 + 内置助手 modelId: null）时回退 Auto，别让 chip 留白。
     (AUTO_ROUTE_MODEL as string)
   // 只有主进程里真正配通（有 Key / 本地协议）的服务商模型才能选。
   const readyProviderIds = accounts
