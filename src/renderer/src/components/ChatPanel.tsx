@@ -509,12 +509,16 @@ export default function ChatPanel() {
     runStartedAt.current = Date.now()
     setError(null)
 
+    // 只认当前候选里的成员：成员被移出组后，残留的 id 不再参与路由。
+    const validMentionIds = mentionedIds.filter((id) =>
+      mentionCandidates.some((candidate) => candidate.id === id)
+    )
     const result = await window.pointstudio.chat.send({
       id: requestId,
       conversationId,
       text,
       // 群聊只 @ 了一个成员时，由该成员接管本轮；多 @/未 @ 仍由会话绑定的组长回答。
-      ...(mentionedIds.length === 1 ? { assistantId: mentionedIds[0] } : {})
+      ...(validMentionIds.length === 1 ? { assistantId: validMentionIds[0] } : {})
     })
     if (result.ok) {
       setMode(result.mode)
@@ -864,7 +868,8 @@ export default function ChatPanel() {
     assistants.find((item) => item.id === activeConversation?.assistantId) ?? null
   // 只有真正的小组会话（会话级 groupId）才锁模型；Agent 属于某个小组不影响
   // 它的一对一会话 —— agentGroups 只是侧栏分组，不是会话绑定。
-  const activeGroup = useMemo(() => {
+  // 每次都从 localStorage 解析：侧栏刚改完成员，已打开的群聊也能立刻刷新候选。
+  const activeGroup = (() => {
     const groupId = activeConversation?.groupId
     if (!groupId) {
       return null
@@ -874,15 +879,12 @@ export default function ChatPanel() {
         (group) => group.id === groupId
       ) ?? null
     )
-  }, [activeConversation?.groupId])
-  const mentionCandidates = useMemo(
-    () =>
-      (activeGroup?.memberIds ?? [])
-        .map((id) => assistants.find((agent) => agent.id === id))
-        .filter((agent): agent is NonNullable<typeof agent> => agent !== undefined)
-        .map((agent) => ({ id: agent.id, name: agent.name })),
-    [activeGroup, assistants]
-  )
+  })()
+  const mentionCandidates = (activeGroup?.memberIds ?? [])
+    .map((id) => assistants.find((agent) => agent.id === id))
+    .filter((agent): agent is NonNullable<typeof agent> => agent !== undefined)
+    .filter((agent) => agent.enabled !== false)
+    .map((agent) => ({ id: agent.id, name: agent.name }))
   useEffect(() => {
     setMentionedIds([])
   }, [activeId])
@@ -1604,7 +1606,7 @@ export default function ChatPanel() {
               void window.pointstudio.chat.cancel(inflightId)
             }
           },
-          onPlan: () => void runPlan(),
+          onPlan: (goal?: string) => void runPlan(goal),
           routePreview: draft.trim() === '' ? null : `预计 L${estimateDifficulty(draft).level} · ${estimateDifficulty(draft).category}`
           }}
         />

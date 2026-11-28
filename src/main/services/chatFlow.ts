@@ -69,9 +69,13 @@ async function resolveReplyOptions(
   // 优先级：会话级覆盖 > 助手设定 > 全局默认（引擎里再兜底）。
   // 模型是「这次执行用什么」，所以会话排在最前面。
   const boundAssistantId = deps.assistantOverride ?? conversation.assistantId
-  const assistant = boundAssistantId
-    ? await deps.assistants.get(boundAssistantId)
-    : null
+  let assistant = boundAssistantId ? await deps.assistants.get(boundAssistantId) : null
+  // 被 @ 的成员已停用（或不存在）时回落会话绑定的 Agent，不把活派给停用的人。
+  if (deps.assistantOverride && (assistant === null || assistant.enabled === false)) {
+    assistant = conversation.assistantId
+      ? await deps.assistants.get(conversation.assistantId)
+      : null
+  }
 
   const conversationParams = conversation.params ?? {}
   const assistantParams = assistant?.params ?? {}
@@ -81,7 +85,12 @@ async function resolveReplyOptions(
   // 服务商优先级与会话模型一致：会话覆盖 > 助手绑定 > 引擎默认。
   const providerId = conversation.providerId ?? assistant?.providerId ?? null
 
-  const options: ReplyOptions = { model, providerId, sessionId: conversationId }
+  const options: ReplyOptions = {
+    model,
+    providerId,
+    sessionId: conversationId,
+    resolvedAssistantId: assistant?.id ?? null
+  }
   if (assistant?.systemPrompt) {
     options.systemPrompt = assistant.systemPrompt
   }
@@ -151,14 +160,11 @@ export async function* streamAssistantReply(
   }
 
   const options: ReplyOptions = { ...bound, history: trimmed.messages, references, signal: deps.signal }
-  // 绑定关系在落用户消息前已经读到，这里用同一份 conversation 组装账本维度。
-  const conversationSnapshot = conversation
   options.onUsage = (sample) => {
     void deps.onUsageRecorded?.({
       providerId: sample.providerId,
       modelId: sample.model,
-      assistantId:
-        deps.assistantOverride ?? conversationSnapshot.assistantId ?? null,
+      assistantId: bound.resolvedAssistantId ?? null,
       conversationId,
       ...sample.usage
     })

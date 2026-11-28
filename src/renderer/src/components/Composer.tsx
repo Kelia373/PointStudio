@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
 import { EFFORT_LABEL, MODEL_LABEL, type Effort } from '../lib/modelOptions'
+import { parseSlashCommand } from '../lib/composerCommands'
 import type { ComposerModelPolicy } from '../lib/modelPicker'
 import { Slot } from '../runtime/SlotRenderer'
 import Icon from './Icon'
@@ -65,7 +66,7 @@ export default function Composer({
   onDraftChange: (value: string) => void
   onSend: () => void
   onStop: () => void
-  onPlan: () => void
+  onPlan: (goal?: string) => void
   /** 发送前的路由预判文案；null 表示不显示。 */
   routePreview?: string | null
   onModelChange: (model: string) => void
@@ -84,6 +85,7 @@ export default function Composer({
 }) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  const [hint, setHint] = useState<string | null>(null)
 
   const candidates = mentionCandidates ?? []
   const mentioned = mentionedIds ?? []
@@ -159,19 +161,52 @@ export default function Composer({
   function applyCommand(command: string): void {
     setMenu(null)
     if (command === '/plan') {
-      onPlan()
+      // 裸 /plan 不带目标时绝不发起规划，否则会把 "/plan" 当目标白烧一次调用。
+      setHint('在 /plan 后面写目标，例如：/plan 修复登录')
       return
     }
     if (command === '/stop') {
       onStop()
+      onDraftChange('')
       return
     }
     onDraftChange('')
   }
 
+  /** 提交时识别 /plan <目标>、/stop、/clear；返回 true 表示已当指令处理。 */
+  function runCommandFromDraft(value: string): boolean {
+    const command = parseSlashCommand(value)
+    if (command === null) {
+      return false
+    }
+    if (command.kind === 'plan-needs-goal') {
+      setHint('在 /plan 后面写目标，例如：/plan 修复登录')
+      return true
+    }
+    if (command.kind === 'plan') {
+      onPlan(command.goal)
+      onDraftChange('')
+      return true
+    }
+    if (command.kind === 'stop') {
+      onStop()
+      onDraftChange('')
+      return true
+    }
+    onDraftChange('')
+    return true
+  }
+
   function removeMention(candidate: MentionCandidate): void {
     onMentionedChange?.(mentioned.filter((id) => id !== candidate.id))
-    onDraftChange(draft.replace(`@${candidate.name}`, '').replace(/\s{2,}/g, ' ').trimStart())
+    const token = `@${candidate.name}`
+    const index = draft.indexOf(token)
+    if (index < 0) {
+      return
+    }
+    const end = index + token.length
+    // 只吃掉 @名字 后面那一个分隔空格，不动用户自己的排版。
+    onDraftChange(draft.slice(0, index) + draft.slice(draft[end] === ' ' ? end + 1 : end))
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
@@ -199,9 +234,13 @@ export default function Composer({
     }
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
-      if (!busy) {
-        onSend()
+      if (busy) {
+        return
       }
+      if (runCommandFromDraft(draft)) {
+        return
+      }
+      onSend()
     }
   }
 
@@ -210,9 +249,13 @@ export default function Composer({
       className="composer"
       onSubmit={(event) => {
         event.preventDefault()
-        if (!busy) {
-          onSend()
+        if (busy) {
+          return
         }
+        if (runCommandFromDraft(draft)) {
+          return
+        }
+        onSend()
       }}
     >
       <div className="composer__box">
@@ -238,6 +281,14 @@ export default function Composer({
               )
             })}
           </div>
+        ) : null}
+
+        {hint ? <p className="composer__hint">{hint}</p> : null}
+
+        {mentioned.length > 1 ? (
+          <p className="composer__hint">
+            已 @ 多个成员：本轮仍由组长回答（多 Agent 同室排后续）
+          </p>
         ) : null}
 
         {menu && menuItems > 0 ? (
@@ -285,6 +336,7 @@ export default function Composer({
           placeholder="输入消息，Enter 发送，Shift+Enter 换行；@ 成员，/ 指令"
           onChange={(event) => {
             const value = event.target.value
+            setHint(null)
             onDraftChange(value)
             refreshMenu(value, event.target.selectionStart)
             // 手动删掉 @名字 时，把对应 chip 一并撤掉，避免发送时路由到没提到的人。
@@ -358,7 +410,7 @@ export default function Composer({
           <button
             className="msg__act"
             type="button"
-            onClick={onPlan}
+            onClick={() => onPlan()}
             disabled={busy || draft.trim() === ''}
             title="把这句话交给 Agent 生成执行计划"
           >

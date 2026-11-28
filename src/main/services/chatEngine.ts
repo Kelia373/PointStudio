@@ -49,6 +49,8 @@ export interface ReplyOptions {
   references?: string
   /** 中断信号：用户点「停止」时由外壳触发。 */
   signal?: AbortSignal
+  /** 本轮实际接管的 Agent（群聊 @ 覆盖或会话绑定）；只用于记账。 */
+  resolvedAssistantId?: string | null
   /** 平台回传真实 token 用量时回调（用于本地账本）。 */
   onUsage?: (sample: { providerId: string; model: string; usage: TokenUsageSample }) => void
 }
